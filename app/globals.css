@@ -1,26 +1,194 @@
 @import "tailwindcss";
 
+/* Relative sources keep the build correct from any working directory. */
+@source "../app";
+@source "../components";
+@source "../lib";
+
+/**
+ * Design tokens — scope §7.1 foundations.
+ * Colour, typography, spacing, elevation, motion and RTL rules live here so no
+ * screen invents its own styling.
+ */
+@theme {
+  --color-ink-50: #f4f7f9;
+  --color-ink-100: #e6ecf0;
+  --color-ink-200: #c9d6de;
+  --color-ink-400: #7a94a6;
+  --color-ink-600: #3d5b70;
+  --color-ink-700: #2a4356;
+  --color-ink-800: #1b2f40;
+  --color-ink-900: #12212e;
+  --color-ink-950: #0b1620;
+
+  --color-brand-50: #eef7f7;
+  --color-brand-100: #d3ecec;
+  --color-brand-200: #a8d9da;
+  --color-brand-300: #6dbfc2;
+  --color-brand-400: #3ba0a5;
+  --color-brand-500: #1c8288;
+  --color-brand-600: #14676d;
+  --color-brand-700: #135358;
+  --color-brand-800: #134348;
+  --color-brand-900: #12383d;
+
+  --color-sand-50: #fdf8f1;
+  --color-sand-100: #f8ecdb;
+  --color-sand-200: #f0d9b7;
+  --color-sand-300: #e4bf87;
+  --color-sand-400: #d69f52;
+  --color-sand-500: #c58530;
+  --color-sand-600: #a76826;
+  --color-sand-700: #874e21;
+
+  --color-positive-50: #eefaf1;
+  --color-positive-100: #d2f2dc;
+  --color-positive-500: #1a8a4a;
+  --color-positive-700: #146237;
+
+  --color-caution-50: #fff8ea;
+  --color-caution-100: #ffedc9;
+  --color-caution-500: #b5730a;
+  --color-caution-700: #8a5606;
+
+  --color-critical-50: #fdf0ef;
+  --color-critical-100: #fbdbd8;
+  --color-critical-500: #c1382b;
+  --color-critical-700: #96271d;
+
+  --radius-card: 14px;
+
+  --shadow-card: 0 1px 2px rgb(11 22 32 / 0.06), 0 4px 16px -6px rgb(11 22 32 / 0.12);
+  --shadow-float: 0 10px 34px -10px rgb(11 22 32 / 0.32);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --surface: #ffffff;
+  --surface-muted: #f5f7f8;
+  --surface-sunken: #eaeef1;
+  --border: #dde3e8;
+  --border-strong: #bcc7cf;
+  --text: #12212e;
+  --text-muted: #55697a;
+  --focus: #14676d;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html[data-theme="dark"] {
+  --surface: #10202b;
+  --surface-muted: #0b1620;
+  --surface-sunken: #17303d;
+  --border: #244050;
+  --border-strong: #3a5b6d;
+  --text: #eaf2f5;
+  --text-muted: #a2b7c3;
+  --focus: #6dbfc2;
+  color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface-muted);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Visible focus everywhere — never removed (§12.1). */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Functional motion only, and honoured reduced-motion (§11.2). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* RTL mirroring: directional icons flip with the document (§11.1). */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+/**
+ * Brand text sits on the page surface, which inverts in dark mode. The 700 shade
+ * fails contrast there, so it lifts to a light tint (§12.1 minimum contrast).
+ * Brand text on the always-light badge tints keeps its own shade.
+ */
+html[data-theme="dark"] .text-brand-700 {
+  color: var(--color-brand-300);
+}
+
+.surface {
+  background: var(--surface);
+}
+.surface-muted {
+  background: var(--surface-muted);
+}
+.surface-sunken {
+  background: var(--surface-sunken);
+}
+.text-muted {
+  color: var(--text-muted);
+}
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
+.skip-link:focus {
+  inset-inline-start: 0.5rem;
+  top: 0.5rem;
+}
+
+/* Long translations must wrap rather than clip or truncate price/policy (E-25). */
+.wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+.shimmer {
+  animation: nz-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes nz-shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.scrollbar-slim::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
 }

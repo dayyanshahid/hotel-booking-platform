@@ -1,0 +1,93 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Alert, Badge, Card, Photo, SectionHeading, Stars } from "@/components/ui";
+import { COLLECTIONS, localized } from "@/lib/data/catalog";
+import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
+import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { href } from "@/lib/nav";
+import type { Locale } from "@/lib/types";
+
+export function generateStaticParams() {
+  return LOCALES.flatMap((locale) => COLLECTIONS.map((c) => ({ locale, slug: c.slug })));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}): Promise<Metadata> {
+  const { locale: raw, slug } = await params;
+  const locale = (isLocale(raw) ? raw : "en") as Locale;
+  const collection = COLLECTIONS.find((c) => c.slug === slug);
+  if (!collection) return { title: "Not found" };
+  return {
+    title: localized(collection.title, locale),
+    description: localized(collection.body, locale),
+    alternates: { canonical: `/${locale}/deals/${slug}` },
+  };
+}
+
+/** Campaign / collection landing page with promotion terms (§5.13). */
+export default async function CollectionPage({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>;
+}) {
+  const { locale: raw, slug } = await params;
+  const locale = (isLocale(raw) ? raw : "en") as Locale;
+  const collection = COLLECTIONS.find((c) => c.slug === slug);
+  if (!collection) notFound();
+  const t = createTranslator(locale);
+
+  const hotels = HOTEL_SEEDS.filter((h) => h.tags.includes(collection.tag)).map((seed) => {
+    const hotel = buildHotel(seed, locale);
+    return {
+      slug: hotel.slug,
+      name: hotel.name,
+      city: hotel.address.city,
+      neighborhood: hotel.address.neighborhood,
+      category: hotel.category,
+      image: hotel.images[0]?.url ?? "",
+    };
+  });
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold sm:text-3xl">{localized(collection.title, locale)}</h1>
+        <p className="text-muted mt-2 max-w-2xl text-sm">{localized(collection.body, locale)}</p>
+      </header>
+
+      {/* Promotion terms are always stated, never implied (§5.13). */}
+      <Alert tone="info" title={locale === "ar" ? "شروط العرض" : "Offer terms"}>
+        {locale === "ar"
+          ? "الأسعار المعروضة تعتمد على التوفر وقد تتغير حتى تأكيد الحجز. تُطبق الأهلية والحد الأدنى للإقامة وشروط الإلغاء الخاصة بكل سعر، وتُتحقق من جانب الخادم قبل الدفع."
+          : "Prices depend on availability and can change until a booking is confirmed. Eligibility, minimum stay and each rate's own cancellation terms apply, and are validated server-side before payment."}
+      </Alert>
+
+      <section>
+        <SectionHeading title={t("cms.curated")} />
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {hotels.map((hotel) => (
+            <li key={hotel.slug}>
+              <Link href={href(locale, `/hotel/${hotel.slug}`)}>
+                <Card className="hover:surface-sunken h-full overflow-hidden">
+                  <Photo src={hotel.image} alt={hotel.name} ratio="16/9" fallbackLabel={t("hotel.imageFallback")} />
+                  <div className="p-3">
+                    <Stars count={hotel.category} label={t("a11y.stars", { n: hotel.category })} />
+                    <p className="mt-1 font-semibold wrap-anywhere">{hotel.name}</p>
+                    <p className="text-muted text-xs">
+                      {hotel.neighborhood}, {hotel.city}
+                    </p>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {!hotels.length && <Badge tone="neutral">{t("results.empty")}</Badge>}
+      </section>
+    </div>
+  );
+}
