@@ -65,6 +65,8 @@ export default async function HotelPage({
         neighborhood: other.address.neighborhood,
         category: other.category,
         image: other.images[0]?.url ?? "",
+        imageSrcSet: other.images[0]?.srcSet,
+        imageFallback: other.images[0]?.fallbackUrl,
       };
     });
 

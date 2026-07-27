@@ -104,6 +104,10 @@ export interface Amenity {
 export interface HotelImage {
   id: string;
   url: string;
+  /** Width descriptors for the same frame, when the image host can resize (§12.2). */
+  srcSet?: string;
+  /** Drawn if `url` cannot load — never a supplier URL, always a local render. */
+  fallbackUrl?: string;
   alt: string;
   category: "exterior" | "room" | "dining" | "pool" | "lobby" | "view";
   caption?: string;
@@ -266,6 +270,8 @@ export interface HotelResultCard {
   category: number;
   propertyType: string;
   heroImage: string;
+  heroImageSrcSet?: string;
+  heroImageFallback?: string;
   heroAlt: string;
   locality: string;
   neighborhood: string;

@@ -52,7 +52,15 @@ export function HotelDetailView({
   locale: Locale;
   hotel: CanonicalHotel;
   initialIntent: SearchIntent | null;
-  similar: { slug: string; name: string; neighborhood: string; category: number; image: string }[];
+  similar: {
+    slug: string;
+    name: string;
+    neighborhood: string;
+    category: number;
+    image: string;
+    imageSrcSet?: string;
+    imageFallback?: string;
+  }[];
   strings: { heading: string };
 }) {
   const { t, currency, track, isSaved, toggleSaved, toast, announce } = useApp();
@@ -169,6 +177,9 @@ export function HotelDetailView({
             >
               <Photo
                 src={heroImages[0]?.url}
+                srcSet={heroImages[0]?.srcSet}
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                fallbackSrc={heroImages[0]?.fallbackUrl}
                 alt={heroImages[0]?.alt ?? hotel.name}
                 fill
                 priority
@@ -178,7 +189,16 @@ export function HotelDetailView({
             </button>
             {heroImages.slice(1, 5).map((image) => (
               <button key={image.id} type="button" onClick={() => setGalleryOpen(true)} className="hidden sm:block">
-                <Photo src={image.url} alt={image.alt} fill className="rounded-lg" fallbackLabel={t("hotel.imageFallback")} />
+                <Photo
+                  src={image.url}
+                  srcSet={image.srcSet}
+                  sizes="(min-width: 1024px) 25vw, 50vw"
+                  fallbackSrc={image.fallbackUrl}
+                  alt={image.alt}
+                  fill
+                  className="rounded-lg"
+                  fallbackLabel={t("hotel.imageFallback")}
+                />
               </button>
             ))}
           </div>
@@ -509,7 +529,15 @@ export function HotelDetailView({
             <li key={other.slug}>
               <Link href={hotelHref(locale, other.slug, intent)}>
                 <Card className="hover:surface-sunken h-full overflow-hidden">
-                  <Photo src={other.image} alt={other.name} ratio="16/9" fallbackLabel={t("hotel.imageFallback")} />
+                  <Photo
+                    src={other.image}
+                    srcSet={other.imageSrcSet}
+                    sizes="(min-width: 1024px) 33vw, 100vw"
+                    fallbackSrc={other.imageFallback}
+                    alt={other.name}
+                    ratio="16/9"
+                    fallbackLabel={t("hotel.imageFallback")}
+                  />
                   <div className="p-3">
                     <p className="text-sm font-semibold wrap-anywhere">{other.name}</p>
                     <p className="text-muted text-xs">{other.neighborhood}</p>
@@ -526,7 +554,16 @@ export function HotelDetailView({
         <ul className="grid gap-3 sm:grid-cols-2">
           {hotel.images.map((image) => (
             <li key={image.id}>
-              <Photo src={image.url} alt={image.alt} ratio="4/3" className="rounded-lg" fallbackLabel={t("hotel.imageFallback")} />
+              <Photo
+                src={image.url}
+                srcSet={image.srcSet}
+                sizes="(min-width: 640px) 33vw, 100vw"
+                fallbackSrc={image.fallbackUrl}
+                alt={image.alt}
+                ratio="4/3"
+                className="rounded-lg"
+                fallbackLabel={t("hotel.imageFallback")}
+              />
               <p className="text-muted mt-1 text-xs">
                 <Badge tone="neutral">{image.roomId ? t("hotel.roomImagesLabel") : t("hotel.propertyImagesLabel")}</Badge>{" "}
                 {image.caption} {image.credit ? `· ${image.credit}` : ""}

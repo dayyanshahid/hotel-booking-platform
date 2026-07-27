@@ -70,6 +70,9 @@ export function HotelCard({
         >
           <Photo
             src={card.heroImage}
+            srcSet={card.heroImageSrcSet}
+            sizes="(min-width: 640px) 260px, 100vw"
+            fallbackSrc={card.heroImageFallback}
             alt={card.heroAlt}
             fill
             priority={rank < 3}

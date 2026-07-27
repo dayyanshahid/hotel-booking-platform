@@ -659,6 +659,9 @@ export function Stars({ count, label }: { count: number; label: string }) {
  */
 export function Photo({
   src,
+  srcSet,
+  sizes,
+  fallbackSrc,
   alt,
   ratio = "4/3",
   className,
@@ -667,6 +670,15 @@ export function Photo({
   fill = false,
 }: {
   src?: string;
+  /** Width descriptors for the same photo, so the browser fetches one that fits (§12.2). */
+  srcSet?: string;
+  /** Rendered width of this slot, needed for `srcSet` to be useful. */
+  sizes?: string;
+  /**
+   * Drawn instead if `src` cannot load — the local SVG illustrator, so a blocked
+   * or offline image CDN degrades to artwork rather than to an empty box.
+   */
+  fallbackSrc?: string;
   alt: string;
   ratio?: string;
   className?: string;
@@ -675,7 +687,9 @@ export function Photo({
   /** Fills the parent box instead of reserving an aspect ratio of its own. */
   fill?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  // 0 = the photo, 1 = the illustrated fallback, 2 = nothing loadable.
+  const [stage, setStage] = useState(0);
+  const chosen = stage === 0 ? src : stage === 1 ? fallbackSrc : undefined;
   return (
     <div
       className={cx("surface-sunken relative overflow-hidden", fill && "size-full", className)}
@@ -683,14 +697,17 @@ export function Photo({
       // takes its size from the parent instead, so the two must not combine.
       style={fill ? undefined : { aspectRatio: ratio }}
     >
-      {src && !failed ? (
+      {chosen ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src}
+          key={stage}
+          src={chosen}
+          srcSet={stage === 0 ? srcSet : undefined}
+          sizes={stage === 0 ? sizes : undefined}
           alt={alt}
           loading={priority ? "eager" : "lazy"}
           decoding="async"
-          onError={() => setFailed(true)}
+          onError={() => setStage((s) => (s === 0 && fallbackSrc ? 1 : 2))}
           className="size-full object-cover"
         />
       ) : (

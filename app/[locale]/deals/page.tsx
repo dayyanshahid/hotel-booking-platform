@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Badge, Card, Photo, SectionHeading } from "@/components/ui";
+import { collectionPhoto } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
@@ -29,7 +30,10 @@ export default async function DealsPage({ params }: { params: Promise<{ locale: 
             <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
               <Card className="hover:surface-sunken h-full overflow-hidden">
                 <Photo
-                  src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+                  src={collectionPhoto(collection.slug, collection.tag).src}
+                  srcSet={collectionPhoto(collection.slug, collection.tag).srcSet}
+                  sizes="(min-width: 1024px) 25vw, 100vw"
+                  fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
                   alt=""
                   ratio="16/7"
                   fallbackLabel=""

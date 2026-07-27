@@ -25,48 +25,6 @@ const brand = "var(--color-brand-500, #1c8288)";
 const brandSoft = "var(--color-brand-200, #a8d9da)";
 const sand = "var(--color-sand-400, #d69f52)";
 
-/**
- * Decorative skyline for the hero band. Sits at the foot of the gradient so the
- * hero reads as a place rather than a colour field; drawn in white at low
- * opacity so it works over any brand tint.
- */
-export function HeroSkyline({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 1200 160"
-      className={className}
-      preserveAspectRatio="none"
-      fill="none"
-      aria-hidden
-      focusable="false"
-    >
-      <g fill="#fff" opacity="0.10">
-        <rect x="0" y="96" width="120" height="64" />
-        <rect x="130" y="66" width="86" height="94" />
-        <rect x="226" y="104" width="70" height="56" />
-        <rect x="306" y="44" width="96" height="116" rx="4" />
-        <rect x="412" y="86" width="64" height="74" />
-        <rect x="486" y="24" width="78" height="136" rx="4" />
-        <rect x="574" y="92" width="110" height="68" />
-        <rect x="694" y="58" width="72" height="102" />
-        <rect x="776" y="100" width="132" height="60" />
-        <rect x="918" y="70" width="80" height="90" />
-        <rect x="1008" y="110" width="80" height="50" />
-        <rect x="1098" y="80" width="102" height="80" />
-      </g>
-      <g fill="#fff" opacity="0.16">
-        {[
-          [42, 118], [66, 108], [150, 90], [176, 110], [330, 70], [356, 96], [380, 120],
-          [508, 50], [532, 78], [556, 106], [712, 84], [736, 112], [944, 96], [1128, 106],
-        ].map(([x, y], i) => (
-          <rect key={i} x={x} y={y} width="8" height="12" rx="1" />
-        ))}
-      </g>
-      <path d="M0 150h1200v10H0z" fill="#fff" opacity="0.14" />
-    </svg>
-  );
-}
-
 /** No results: a map with nothing pinned on it. */
 export function NoResultsArt({ className }: { className?: string }) {
   return (

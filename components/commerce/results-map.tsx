@@ -167,6 +167,9 @@ export function ResultsMap({
             <Card className="flex gap-3 overflow-hidden p-2">
               <Photo
                 src={selectedCard.heroImage}
+                srcSet={selectedCard.heroImageSrcSet}
+                sizes="96px"
+                fallbackSrc={selectedCard.heroImageFallback}
                 alt={selectedCard.heroAlt}
                 ratio="1/1"
                 className="w-24 shrink-0 rounded-md"

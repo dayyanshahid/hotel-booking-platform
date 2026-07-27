@@ -3,6 +3,7 @@ import { AMENITY_CATALOG, PROPERTY_TYPES, VIEW_CATALOG, BED_CATALOG, localized }
 import { DESTINATIONS, getDestination } from "./destinations";
 import { ROOM_TEMPLATES } from "./rooms";
 import { sceneUrl } from "../illustration/scenes";
+import { PHOTO_CREDIT, propertyPhoto } from "./photos";
 
 type L = Record<Locale, string>;
 
@@ -550,7 +551,21 @@ export function hotelsInDestination(destinationId: string): HotelSeed[] {
 
 /* ------------------------------------------------------------- builders */
 
-function img(slug: string, index: number, category: HotelImage["category"], locale: Locale, name: string, roomId?: string): HotelImage {
+/**
+ * One gallery frame for the demo catalogue.
+ *
+ * `key` scopes the photo choice and `index` walks it, so a hotel's own frames
+ * never repeat. The illustrated scene stays behind the photo as the fallback:
+ * if the image CDN is blocked or offline the card still renders artwork.
+ */
+function img(
+  key: string,
+  index: number,
+  category: HotelImage["category"],
+  locale: Locale,
+  name: string,
+  options: { destination?: string; roomId?: string } = {},
+): HotelImage {
   const captions: Record<HotelImage["category"], Record<Locale, string>> = {
     exterior: { en: "Property exterior", ar: "واجهة العقار" },
     room: { en: "Guest room", ar: "غرفة النزلاء" },
@@ -559,14 +574,18 @@ function img(slug: string, index: number, category: HotelImage["category"], loca
     lobby: { en: "Lobby", ar: "الردهة" },
     view: { en: "View from the property", ar: "الإطلالة من العقار" },
   };
+  const photo = propertyPhoto(key, category, index, { destination: options.destination });
   return {
-    id: `${slug}-${index}`,
-    url: sceneUrl(`${slug}-${index}`, category),
+    id: `${key}-${category}-${index}`,
+    url: photo.src,
+    srcSet: photo.srcSet,
+    fallbackUrl: sceneUrl(`${key}-${index}`, category),
     alt: `${captions[category][locale]} — ${name}`,
     category,
     caption: captions[category][locale],
-    credit: "Property-supplied content",
-    roomId,
+    // The demo catalogue is stock, and saying so is a scope requirement (§8.3).
+    credit: PHOTO_CREDIT[locale],
+    roomId: options.roomId,
   };
 }
 
@@ -593,8 +612,12 @@ export function buildRooms(seed: HotelSeed, locale: Locale): CanonicalRoom[] {
         scope: "room" as const,
       })),
       images: [
-        img(`${seed.slug}-${t.key}`, idx * 2 + 1, "room", locale, localized(t.name, locale), `${seed.slug}::${t.key}`),
-        img(`${seed.slug}-${t.key}`, idx * 2 + 2, "room", locale, localized(t.name, locale), `${seed.slug}::${t.key}`),
+        img(seed.slug, idx * 2 + 1, "room", locale, localized(t.name, locale), {
+          roomId: `${seed.slug}::${t.key}`,
+        }),
+        img(seed.slug, idx * 2 + 2, "room", locale, localized(t.name, locale), {
+          roomId: `${seed.slug}::${t.key}`,
+        }),
       ],
     };
   });
@@ -610,15 +633,17 @@ export function buildHotel(seed: HotelSeed, locale: Locale): CanonicalHotel {
   const propertyType = localized(PROPERTY_TYPES[seed.propertyType], locale);
 
   const rooms = buildRooms(seed, locale);
+  // Room ordinals 1…8 belong to the per-room galleries below, so the
+  // hotel-level room frame sits outside that band and cannot repeat one.
   const images: HotelImage[] = [
-    img(seed.slug, 1, "exterior", locale, name),
-    img(seed.slug, 2, "lobby", locale, name),
-    img(seed.slug, 3, "room", locale, name),
-    img(seed.slug, 4, "dining", locale, name),
+    img(seed.slug, 0, "exterior", locale, name),
+    img(seed.slug, 0, "lobby", locale, name),
+    img(seed.slug, 20, "room", locale, name),
+    img(seed.slug, 0, "dining", locale, name),
     ...(seed.amenities.includes("pool") || seed.amenities.includes("indoorPool")
-      ? [img(seed.slug, 5, "pool", locale, name)]
+      ? [img(seed.slug, 0, "pool", locale, name)]
       : []),
-    img(seed.slug, 6, "view", locale, name),
+    img(seed.slug, 0, "view", locale, name, { destination: dest.slug }),
     ...rooms.flatMap((r) => r.images),
   ];
 

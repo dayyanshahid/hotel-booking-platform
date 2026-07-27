@@ -6,7 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { Badge, Button, Card, Input, Photo, SectionHeading, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
-import { HeroSkyline } from "@/components/ui/illustrations";
+import { collectionPhoto, destinationPhoto, heroPhoto } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
 import { href, searchHref } from "@/lib/nav";
@@ -36,8 +36,29 @@ export function HomeView({
   return (
     <div className="space-y-10">
       <section className="relative overflow-hidden rounded-[var(--radius-card)] border">
-        <div className="from-brand-800 to-brand-600 absolute inset-0 bg-gradient-to-br" aria-hidden />
-        <HeroSkyline className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full sm:h-32" />
+        {/*
+          A photograph sets the place; the brand wash over it is what keeps the
+          heading and the search bar legible whatever the frame happens to be.
+          If the image host is unreachable the drawn skyline shows through the
+          same wash, so the hero never collapses to flat colour.
+        */}
+        <div className="from-brand-800 to-brand-600 absolute inset-0 bg-gradient-to-br" aria-hidden>
+          <Photo
+            src={heroPhoto().src}
+            srcSet={heroPhoto().srcSet}
+            sizes="100vw"
+            fallbackSrc={sceneUrl("home-hero", "landmark", "dubai")}
+            alt=""
+            fill
+            priority
+            fallbackLabel=""
+          />
+          {/*
+            Heaviest where the heading sits and thinning across the frame, so the
+            copy clears contrast without flattening the photograph behind it.
+          */}
+          <div className="from-brand-900/90 via-brand-900/55 to-brand-800/20 absolute inset-0 bg-gradient-to-br" />
+        </div>
         <div className="relative px-4 py-10 sm:px-8 sm:py-14">
           <h1 className="max-w-2xl text-2xl font-bold text-white sm:text-4xl">{t("home.heroTitle")}</h1>
           <p className="text-brand-50 mt-3 max-w-2xl text-sm sm:text-base">{t("home.heroSubtitle")}</p>
@@ -117,7 +138,10 @@ export function HomeView({
               <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
                 <Card className="hover:surface-sunken h-full overflow-hidden">
                   <Photo
-                    src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+                    src={collectionPhoto(collection.slug, collection.tag).src}
+                    srcSet={collectionPhoto(collection.slug, collection.tag).srcSet}
+                    sizes="(min-width: 1024px) 25vw, 100vw"
+                    fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
                     alt=""
                     ratio="16/7"
                     fallbackLabel=""
@@ -165,7 +189,10 @@ export function HomeView({
             <li key={destination.id}>
               <Card className="h-full overflow-hidden">
                 <Photo
-                  src={sceneUrl(destination.slug, "landmark", destination.slug)}
+                  src={destinationPhoto(destination.slug, 0, 960).src}
+                  srcSet={destinationPhoto(destination.slug, 0, 960).srcSet}
+                  sizes="(min-width: 1024px) 33vw, 100vw"
+                  fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
                   alt={destination.name}
                   ratio="16/9"
                   fallbackLabel={t("hotel.imageFallback")}

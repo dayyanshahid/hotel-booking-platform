@@ -220,6 +220,9 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
                   <Card className="overflow-hidden p-0">
                     <Photo
                       src={entry.hotel.images[0]?.url}
+                      srcSet={entry.hotel.images[0]?.srcSet}
+                      sizes="280px"
+                      fallbackSrc={entry.hotel.images[0]?.fallbackUrl}
                       alt={entry.hotel.name}
                       ratio="16/9"
                       fallbackLabel={t("hotel.imageFallback")}

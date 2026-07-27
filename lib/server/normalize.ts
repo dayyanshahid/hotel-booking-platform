@@ -418,6 +418,8 @@ export function buildResultCard(n: NormalizedHotel, intent: SearchIntent, locale
     category: n.hotel.category,
     propertyType: n.hotel.propertyType,
     heroImage: hero?.url ?? "",
+    heroImageSrcSet: hero?.srcSet,
+    heroImageFallback: hero?.fallbackUrl,
     heroAlt: hero?.alt ?? n.hotel.name,
     locality: n.hotel.address.city,
     neighborhood: n.hotel.address.neighborhood,

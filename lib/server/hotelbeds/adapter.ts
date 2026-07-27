@@ -13,6 +13,7 @@ import type {
   SearchIntent,
 } from "@/lib/types";
 import { addDays, convertCurrency, isSupportedCurrency, nightsBetween } from "@/lib/format";
+import { sceneUrl } from "@/lib/illustration/scenes";
 import { applyMarkup } from "../markup";
 import { timezoneForCountry } from "../timezones";
 import { getHotelContent, getTypes, slugify, type TypeDictionaries } from "./content";
@@ -327,6 +328,9 @@ export function buildCanonicalHotelFromContent(
     .map((image, index) => ({
       id: `${code}-${index}`,
       url: hbImageUrl(image.path) ?? "",
+      // Supplier photography is the real thing, so it is never replaced — but a
+      // dead CDN path should still render as artwork rather than a grey box.
+      fallbackUrl: sceneUrl(`${code}-${index}`, imageCategory(image.imageTypeCode)),
       alt: `${name} — ${image.imageTypeCode ?? "photo"}`,
       category: imageCategory(image.imageTypeCode),
       caption: image.imageTypeCode,

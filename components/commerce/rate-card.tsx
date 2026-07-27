@@ -38,6 +38,9 @@ export function RoomBlock({
           <button type="button" onClick={() => setGalleryOpen(true)} className="block w-full text-start">
             <Photo
               src={room.images[0]?.url}
+              srcSet={room.images[0]?.srcSet}
+              sizes="(min-width: 1024px) 260px, 100vw"
+              fallbackSrc={room.images[0]?.fallbackUrl}
               alt={room.images[0]?.alt ?? room.name}
               ratio="4/3"
               className="rounded-lg"
@@ -100,7 +103,16 @@ export function RoomBlock({
         <ul className="grid gap-3 sm:grid-cols-2">
           {room.images.map((image) => (
             <li key={image.id}>
-              <Photo src={image.url} alt={image.alt} ratio="4/3" className="rounded-lg" fallbackLabel={t("hotel.imageFallback")} />
+              <Photo
+                src={image.url}
+                srcSet={image.srcSet}
+                sizes="(min-width: 640px) 33vw, 100vw"
+                fallbackSrc={image.fallbackUrl}
+                alt={image.alt}
+                ratio="4/3"
+                className="rounded-lg"
+                fallbackLabel={t("hotel.imageFallback")}
+              />
               <p className="text-muted mt-1 text-xs">
                 {t("hotel.roomImagesLabel")} · {image.caption}
                 {image.credit ? ` · ${image.credit}` : ""}

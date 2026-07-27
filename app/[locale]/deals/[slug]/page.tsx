@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Badge, Card, Photo, SectionHeading, Stars } from "@/components/ui";
+import { collectionPhoto } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
@@ -50,6 +51,8 @@ export default async function CollectionPage({
       neighborhood: hotel.address.neighborhood,
       category: hotel.category,
       image: hotel.images[0]?.url ?? "",
+      imageSrcSet: hotel.images[0]?.srcSet,
+      imageFallback: hotel.images[0]?.fallbackUrl,
     };
   });
 
@@ -57,7 +60,10 @@ export default async function CollectionPage({
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-[var(--radius-card)] border">
         <Photo
-          src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+          src={collectionPhoto(collection.slug, collection.tag, 1920).src}
+          srcSet={collectionPhoto(collection.slug, collection.tag, 1920).srcSet}
+          sizes="100vw"
+          fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
           alt=""
           ratio="21/6"
           priority
@@ -84,7 +90,15 @@ export default async function CollectionPage({
             <li key={hotel.slug}>
               <Link href={href(locale, `/hotel/${hotel.slug}`)}>
                 <Card className="hover:surface-sunken h-full overflow-hidden">
-                  <Photo src={hotel.image} alt={hotel.name} ratio="16/9" fallbackLabel={t("hotel.imageFallback")} />
+                  <Photo
+                    src={hotel.image}
+                    srcSet={hotel.imageSrcSet}
+                    sizes="(min-width: 1024px) 33vw, 100vw"
+                    fallbackSrc={hotel.imageFallback}
+                    alt={hotel.name}
+                    ratio="16/9"
+                    fallbackLabel={t("hotel.imageFallback")}
+                  />
                   <div className="p-3">
                     <Stars count={hotel.category} label={t("a11y.stars", { n: hotel.category })} />
                     <p className="mt-1 font-semibold wrap-anywhere">{hotel.name}</p>
