@@ -3,7 +3,7 @@ import { AMENITY_CATALOG, PROPERTY_TYPES, VIEW_CATALOG, BED_CATALOG, localized }
 import { DESTINATIONS, getDestination } from "./destinations";
 import { ROOM_TEMPLATES } from "./rooms";
 import { sceneUrl } from "../illustration/scenes";
-import { PHOTO_CREDIT, propertyPhoto } from "./photos";
+import { PHOTO_CREDIT, PHOTO_SHAPE, propertyPhoto } from "./photos";
 
 type L = Record<Locale, string>;
 
@@ -574,7 +574,13 @@ function img(
     lobby: { en: "Lobby", ar: "الردهة" },
     view: { en: "View from the property", ar: "الإطلالة من العقار" },
   };
-  const photo = propertyPhoto(key, category, index, { destination: options.destination });
+  // One URL serves every slot a gallery frame appears in, so it is cropped to
+  // the middle shape of those: wide slots trim the top and bottom, square ones
+  // trim the sides, and neither ends up with a sliver of the original.
+  const photo = propertyPhoto(key, category, index, {
+    destination: options.destination,
+    shape: PHOTO_SHAPE.frame,
+  });
   return {
     id: `${key}-${category}-${index}`,
     url: photo.src,

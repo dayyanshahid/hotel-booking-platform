@@ -6,7 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { Badge, Button, Card, Input, Photo, SectionHeading, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
-import { collectionPhoto, destinationPhoto, heroPhoto } from "@/lib/data/photos";
+import { collectionPhoto, destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
 import { href, searchHref } from "@/lib/nav";
@@ -57,7 +57,7 @@ export function HomeView({
             Heaviest where the heading sits and thinning across the frame, so the
             copy clears contrast without flattening the photograph behind it.
           */}
-          <div className="from-brand-900/90 via-brand-900/55 to-brand-800/20 absolute inset-0 bg-gradient-to-br" />
+          <div className="from-brand-900/95 via-brand-900/70 to-brand-800/45 absolute inset-0 bg-gradient-to-br" />
         </div>
         <div className="relative px-4 py-10 sm:px-8 sm:py-14">
           <h1 className="max-w-2xl text-2xl font-bold text-white sm:text-4xl">{t("home.heroTitle")}</h1>
@@ -138,8 +138,8 @@ export function HomeView({
               <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
                 <Card className="hover:surface-sunken h-full overflow-hidden">
                   <Photo
-                    src={collectionPhoto(collection.slug, collection.tag).src}
-                    srcSet={collectionPhoto(collection.slug, collection.tag).srcSet}
+                    src={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).src}
+                    srcSet={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).srcSet}
                     sizes="(min-width: 1024px) 25vw, 100vw"
                     fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
                     alt=""
@@ -188,9 +188,10 @@ export function HomeView({
           {destinations.slice(0, 3).map((destination) => (
             <li key={destination.id}>
               <Card className="h-full overflow-hidden">
+                {/* Ordinal 1, not 0: index 0 is the frame the hero above already uses. */}
                 <Photo
-                  src={destinationPhoto(destination.slug, 0, 960).src}
-                  srcSet={destinationPhoto(destination.slug, 0, 960).srcSet}
+                  src={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).src}
+                  srcSet={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).srcSet}
                   sizes="(min-width: 1024px) 33vw, 100vw"
                   fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
                   alt={destination.name}

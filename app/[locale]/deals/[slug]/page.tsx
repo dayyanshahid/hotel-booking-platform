@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Badge, Card, Photo, SectionHeading, Stars } from "@/components/ui";
-import { collectionPhoto } from "@/lib/data/photos";
+import { collectionPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
@@ -60,8 +60,8 @@ export default async function CollectionPage({
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-[var(--radius-card)] border">
         <Photo
-          src={collectionPhoto(collection.slug, collection.tag, 1920).src}
-          srcSet={collectionPhoto(collection.slug, collection.tag, 1920).srcSet}
+          src={collectionPhoto(collection.slug, collection.tag, { width: 1920, shape: PHOTO_SHAPE.banner }).src}
+          srcSet={collectionPhoto(collection.slug, collection.tag, { width: 1920, shape: PHOTO_SHAPE.banner }).srcSet}
           sizes="100vw"
           fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
           alt=""

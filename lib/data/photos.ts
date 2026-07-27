@@ -44,13 +44,14 @@ const DEFAULT_WIDTH = 960;
  * into these, so adding to the end does not reshuffle existing pages.
  */
 const PROPERTY_SETS: Record<Exclude<PhotoCategory, "view">, readonly string[]> = {
+  // Frames carrying a legible hotel brand or a globally recognisable property
+  // are deliberately excluded: attaching one to a made-up hotel name would be a
+  // misrepresentation the credit line cannot undo.
   exterior: [
     "1468824357306-a439d58ccb1c",
     "1711743266323-5badf42d4797",
     "1668480441891-3744c25337a3",
     "1607320895054-c5c543e9a069",
-    "1692153142886-9881d0457b82",
-    "1570206986634-afd7cccb68d3",
     "1472510771109-39b92752a6b9",
     "1661016630713-67e36bfc2285",
     "1693146842813-be42935ecdbd",
@@ -146,16 +147,21 @@ const DESTINATION_SETS: Record<string, readonly string[]> = {
   ],
 };
 
-/** Collection tags reuse the property set that best represents them. */
-const COLLECTION_CATEGORY: Record<string, PhotoCategory> = {
-  family: "room",
-  accessible: "room",
-  business: "lobby",
-  luxury: "lobby",
-  beach: "pool",
-  city: "exterior",
-  value: "room",
-  lastminute: "view",
+/**
+ * Collections get a named photo rather than a hashed one. There are only eight
+ * of them and they sit side by side on one grid, where a repeat is obvious —
+ * and several share a category, which is exactly when the hash collides.
+ */
+const COLLECTION_PHOTO: Record<string, string> = {
+  family: "1611892440504-42a792e24d32",
+  accessible: "1568495248636-6432b97bd949",
+  business: "1590447158019-883d8d5f8bc7",
+  luxury: "1660557989725-f511e9fa6267",
+  beach: "1563493653502-9e270be23596",
+  city: "1668480441891-3744c25337a3",
+  value: "1631049307264-da0ec9d70304",
+  // Not the hero's frame: the two sit on the home page together.
+  lastminute: "1758798219572-512a03a60ce0",
 };
 
 /* ------------------------------------------------------------ the picker */
@@ -189,8 +195,26 @@ function pick(key: string, category: PhotoCategory, ordinal: number, destination
   return set[(hash(`${key}:${category}`) + ordinal) % set.length];
 }
 
-function cdn(id: string, width: number): string {
-  return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&q=72&w=${width}`;
+/**
+ * Named slot shapes. The CDN crops to the shape the layout actually renders, so
+ * a portrait source lands as a usable landscape instead of a centred sliver —
+ * and the browser stops downloading pixels that `object-cover` would discard.
+ */
+export const PHOTO_SHAPE = {
+  banner: 21 / 6,
+  strip: 16 / 7,
+  card: 16 / 9,
+  frame: 4 / 3,
+  square: 1,
+} as const;
+
+export type PhotoShape = (typeof PHOTO_SHAPE)[keyof typeof PHOTO_SHAPE];
+
+function cdn(id: string, width: number, shape?: number): string {
+  const size = shape ? `w=${width}&h=${Math.round(width / shape)}` : `w=${width}`;
+  // `crop=entropy` picks the busiest region rather than the geometric centre,
+  // which is what keeps a building in frame when a tall photo is cut down.
+  return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&crop=entropy&q=72&${size}`;
 }
 
 export interface PhotoRef {
@@ -198,10 +222,17 @@ export interface PhotoRef {
   srcSet: string;
 }
 
-function refFor(id: string, width: number): PhotoRef {
+interface PhotoOptions {
+  width?: number;
+  /** Aspect ratio of the slot this photo renders into — see {@link PHOTO_SHAPE}. */
+  shape?: number;
+}
+
+function refFor(id: string, options: PhotoOptions): PhotoRef {
+  const width = options.width ?? DEFAULT_WIDTH;
   return {
-    src: cdn(id, width),
-    srcSet: WIDTHS.map((w) => `${cdn(id, w)} ${w}w`).join(", "),
+    src: cdn(id, width, options.shape),
+    srcSet: WIDTHS.map((w) => `${cdn(id, w, options.shape)} ${w}w`).join(", "),
   };
 }
 
@@ -210,30 +241,32 @@ export function propertyPhoto(
   key: string,
   category: PhotoCategory,
   ordinal = 0,
-  options: { destination?: string; width?: number } = {},
+  options: PhotoOptions & { destination?: string } = {},
 ): PhotoRef {
-  return refFor(pick(key, category, ordinal, options.destination), options.width ?? DEFAULT_WIDTH);
+  return refFor(pick(key, category, ordinal, options.destination), options);
 }
 
 /** A destination hero. */
-export function destinationPhoto(slug: string, ordinal = 0, width = 1920): PhotoRef {
+export function destinationPhoto(slug: string, ordinal = 0, options: PhotoOptions = {}): PhotoRef {
   const set = DESTINATION_SETS[slug];
-  if (!set) return propertyPhoto(slug, "exterior", ordinal, { width });
-  return refFor(set[ordinal % set.length], width);
+  if (!set) return propertyPhoto(slug, "exterior", ordinal, options);
+  return refFor(set[ordinal % set.length], options);
 }
 
 /**
  * The home hero. Fixed rather than hashed: it is the first thing a visitor
- * sees, so it should not change between deploys for no reason.
+ * sees, so it should not change between deploys for no reason. Left uncropped,
+ * because the band is a wide letterbox on a desktop and nearly a portrait on a
+ * phone — one server-side crop cannot serve both.
  */
 export function heroPhoto(width = 1920): PhotoRef {
-  // Chosen for a tall crop: an open sky occupies the upper half, which is where
-  // the heading sits, and the subject stays readable under the brand wash.
-  return refFor("1546412414-e1885259563a", width);
+  // A night skyline: wide enough to survive the hero's crop on a desktop band
+  // and dark enough that white type clears contrast at every viewport.
+  return refFor(DESTINATION_SETS.riyadh[0], { width });
 }
 
 /** A collection card. */
-export function collectionPhoto(slug: string, tag: string, width = 960): PhotoRef {
-  const category = COLLECTION_CATEGORY[tag] ?? "exterior";
-  return propertyPhoto(`collection-${slug}`, category, 0, { width });
+export function collectionPhoto(slug: string, tag: string, options: PhotoOptions = {}): PhotoRef {
+  const id = COLLECTION_PHOTO[tag];
+  return id ? refFor(id, options) : propertyPhoto(`collection-${slug}`, "exterior", 0, options);
 }

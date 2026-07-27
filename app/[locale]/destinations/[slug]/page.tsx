@@ -6,7 +6,7 @@ import { DestinationSearchCta } from "@/components/pages/destination-cta";
 import { DESTINATIONS, getDestination } from "@/lib/data/destinations";
 import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
 import { localized } from "@/lib/data/catalog";
-import { destinationPhoto } from "@/lib/data/photos";
+import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneUrl } from "@/lib/illustration/scenes";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
@@ -99,8 +99,8 @@ export default async function DestinationPage({
       <header>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border">
           <Photo
-            src={destinationPhoto(destination.slug).src}
-            srcSet={destinationPhoto(destination.slug).srcSet}
+            src={destinationPhoto(destination.slug, 0, { shape: PHOTO_SHAPE.banner }).src}
+            srcSet={destinationPhoto(destination.slug, 0, { shape: PHOTO_SHAPE.banner }).srcSet}
             sizes="100vw"
             fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
             alt=""
