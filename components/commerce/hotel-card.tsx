@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Badge, Button, Card, Modal, Photo, Rating, Stars, cx } from "@/components/ui";
+import { Badge, Button, Card, Modal, Photo, Rating, Stars, cx, scoreBand } from "@/components/ui";
 import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { PriceBlock } from "./price";
 import { distanceLabel, formatDeadline } from "@/lib/format";
@@ -61,17 +61,23 @@ export function HotelCard({
   const href = hotelHref(locale, card.slug, intent);
 
   return (
-    <Card as="li" className="card-interactive overflow-hidden" ref={cardRef}>
-      <div className="grid sm:grid-cols-[minmax(0,260px)_1fr]">
+    /*
+      Three columns: photograph, the property, then the score and the price.
+      Everything a shopper compares down a results list — score, total, whether
+      it can be cancelled — sits in the right-hand column at the same vertical
+      position on every row, so the eye scans one column instead of hunting.
+    */
+    <Card as="li" className="overflow-hidden p-2" ref={cardRef}>
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,240px)_1fr]">
         <Link
           href={href}
-          className="block aspect-[4/3] sm:aspect-auto sm:h-full sm:min-h-[190px]"
+          className="block aspect-[4/3] overflow-hidden rounded-[6px] sm:aspect-auto sm:h-full sm:min-h-[190px]"
           onClick={() => track("hotel_card_clicked", { hotel: card.slug, rank, total: card.price.total, refundable: card.offerSummary.refundable })}
         >
           <Photo
             src={card.heroImage}
             srcSet={card.heroImageSrcSet}
-            sizes="(min-width: 640px) 260px, 100vw"
+            sizes="(min-width: 640px) 240px, 100vw"
             fallbackSrc={card.heroImageFallback}
             alt={card.heroAlt}
             fill
@@ -80,7 +86,13 @@ export function HotelCard({
           />
         </Link>
 
-        <div className="flex flex-col gap-3 p-4 sm:p-5">
+        {/*
+          Two grid children, not four. The title, badges and amenities are one
+          column: left as siblings of the price rail they were laid out as
+          separate cells, which is what left a void down the middle of the row.
+        */}
+        <div className="grid items-start gap-3 py-1 pe-1 lg:grid-cols-[1fr_minmax(0,210px)]">
+          <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -95,13 +107,13 @@ export function HotelCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.015em] wrap-anywhere">
+              <h3 className="text-brand-500 mt-0.5 text-[18px] font-bold tracking-[-0.015em] wrap-anywhere">
                 <Link href={href} className="hover:underline">
                   {card.name}
                 </Link>
               </h3>
-              <p className="text-muted text-sm wrap-anywhere">
-                {card.neighborhood}, {card.locality}
+              <p className="text-muted mt-0.5 text-xs wrap-anywhere">
+                <span className="text-brand-500 underline">{card.neighborhood}</span>, {card.locality}
                 {card.landmarkDistance && (
                   <>
                     {" · "}
@@ -110,13 +122,18 @@ export function HotelCard({
                   </>
                 )}
               </p>
+            </div>
+
+            <div className="flex shrink-0 items-start gap-1">
               {card.review && (
-                <div className="mt-2">
+                <div className="hidden sm:block">
                   <Rating
                     score={card.review.score}
                     scale={card.review.scale}
+                    word={t(scoreBand(card.review.score, card.review.scale))}
                     count={card.review.count}
                     source={card.review.source}
+                    compact
                     label={t("a11y.ratingLabel", {
                       score: card.review.score,
                       scale: card.review.scale,
@@ -125,9 +142,6 @@ export function HotelCard({
                   />
                 </div>
               )}
-            </div>
-
-            <div className="flex gap-1">
               <Button
                 variant="ghost"
                 size="sm"
@@ -189,14 +203,15 @@ export function HotelCard({
               </span>
             ))}
           </div>
+          </div>
 
-          <div className="hairline mt-auto flex flex-wrap items-end justify-between gap-3 border-t pt-4">
-            <div className="min-w-0 text-sm">
-              <p className="font-medium wrap-anywhere">{card.offerSummary.roomSummary}</p>
-              <p className="text-muted">{card.offerSummary.boardSummary}</p>
+          <div className="flex flex-col justify-end gap-3 lg:items-end lg:text-end">
+            <div className="lg:text-end">
+              <p className="text-muted text-xs wrap-anywhere">{card.offerSummary.roomSummary}</p>
+              <p className="text-muted text-xs">{card.offerSummary.boardSummary}</p>
               <p
                 className={cx(
-                  "mt-1 font-medium wrap-anywhere",
+                  "mt-1 text-xs font-bold wrap-anywhere",
                   card.offerSummary.refundable ? "text-positive-700" : "text-critical-700",
                 )}
               >
@@ -209,8 +224,22 @@ export function HotelCard({
                     : t("rate.refundable")
                   : t("rate.nonRefundable")}
               </p>
-              {card.remainingLabel && <p className="text-caution-700 text-xs">{card.remainingLabel}</p>}
-              <div className="mt-2 flex flex-wrap gap-2">
+              {card.remainingLabel && (
+                <p className="text-critical-700 mt-0.5 text-xs font-bold">{card.remainingLabel}</p>
+              )}
+
+              <div className="mt-2">
+                <PriceBlock price={card.price} size="sm" />
+              </div>
+
+              {/* The one yellow control on the row. */}
+              <Link href={href} className="mt-2 block">
+                <Button variant="action" size="md" className="w-full">
+                  {t("results.showPrices")}
+                </Button>
+              </Link>
+
+              <div className="mt-2 flex flex-wrap gap-2 lg:justify-end">
                 <Button
                   size="sm"
                   variant={inCompare ? "primary" : "secondary"}
@@ -228,15 +257,6 @@ export function HotelCard({
                   </Button>
                 )}
               </div>
-            </div>
-
-            <div className="flex flex-col items-start gap-2 sm:items-end">
-              <PriceBlock price={card.price} />
-              <Link href={href} className="w-full sm:w-auto">
-                <Button size="md" className="w-full">
-                  {t("common.viewDetails")}
-                </Button>
-              </Link>
             </div>
           </div>
         </div>

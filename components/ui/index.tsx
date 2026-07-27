@@ -24,31 +24,37 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 
 /* ------------------------------------------------------------- Button */
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "quiet";
+type ButtonVariant = "primary" | "action" | "secondary" | "chrome" | "ghost" | "danger" | "quiet";
 type ButtonSize = "sm" | "md" | "lg";
 
 // The press is a 1% scale rather than a colour flip: it registers on touch,
 // where there is no hover state to fall back on.
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold " +
-  "transition-[background-color,border-color,box-shadow,transform,color] duration-200 ease-[var(--ease-out)] " +
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-bold " +
+  "transition-[background-color,border-color,box-shadow,transform,color] duration-150 ease-[var(--ease-out)] " +
   "active:scale-[0.985] disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary:
-    "bg-brand-600 text-white shadow-[0_1px_2px_rgb(11_22_32/0.12),0_4px_10px_-4px_rgb(19_83_88/0.5)] " +
-    "hover:bg-brand-700 hover:shadow-[0_2px_4px_rgb(11_22_32/0.14),0_8px_18px_-6px_rgb(19_83_88/0.55)]",
-  secondary: "surface border border-[var(--border-strong)] hover:surface-sunken hover:border-brand-300",
-  ghost: "hover:surface-sunken",
-  danger:
-    "bg-critical-500 text-white shadow-[0_1px_2px_rgb(11_22_32/0.12),0_4px_10px_-4px_rgb(150_39_29/0.45)] hover:bg-critical-700",
-  quiet: "text-brand-700 hover:underline underline-offset-4 decoration-2",
+  /** The everyday blue: search, submit, confirm. */
+  primary: "bg-brand-500 text-white hover:bg-brand-600",
+  /**
+   * Reserved for the one control that moves a booking forward on a given
+   * screen — "Show prices", "Reserve". It appears once per card and once per
+   * page, which is the only reason a colour this loud stays useful.
+   */
+  action: "bg-action-400 text-[var(--color-action-ink)] hover:bg-action-500",
+  secondary: "surface border border-brand-500 text-brand-500 hover:bg-brand-50",
+  /** For controls sitting on the navy chrome band, where blue-on-navy vanishes. */
+  chrome: "border border-white/40 text-white hover:bg-white/15",
+  ghost: "hover:surface-sunken font-semibold",
+  danger: "bg-critical-500 text-white hover:bg-critical-700",
+  quiet: "text-brand-500 hover:underline underline-offset-2 decoration-2 font-semibold",
 };
 
 // 44×44 minimum touch target on interactive controls (§11.1).
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3.5 text-sm",
-  md: "min-h-11 px-5 text-sm",
+  sm: "min-h-9 px-3 text-sm",
+  md: "min-h-10 px-4 text-sm",
   lg: "min-h-12 px-6 text-base w-full sm:w-auto",
 };
 
@@ -106,10 +112,7 @@ export function Card({
       // The polymorphic `as` prop makes the element type dynamic; the ref is
       // always attached to the rendered element regardless of which tag it is.
       ref={ref as never}
-      className={cx(
-        "surface hairline rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]",
-        className,
-      )}
+      className={cx("surface rounded-[var(--radius-card)] border", className)}
     >
       {children}
     </As>
@@ -184,7 +187,7 @@ export function Badge({
     <span
       title={title}
       className={cx(
-        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] border px-2.5 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-[var(--radius-control)] border px-2 py-0.5 text-xs font-medium",
         BADGE_TONE[tone],
         className,
       )}
@@ -219,7 +222,7 @@ export function Alert({
   return (
     <div
       role={tone === "critical" ? "alert" : "status"}
-      className={cx("rounded-[var(--radius-card)] border p-4 text-sm shadow-[var(--shadow-card)]", tones[tone])}
+      className={cx("rounded-[var(--radius-card)] border p-4 text-sm", tones[tone])}
     >
       {title && <p className="font-semibold">{title}</p>}
       {children && <div className={cx("wrap-anywhere", title && "mt-1")}>{children}</div>}
@@ -321,7 +324,7 @@ export function Field({
 }
 
 const CONTROL =
-  "surface min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 py-2 text-sm outline-none " +
+  "surface min-h-10 w-full rounded-[var(--radius-control)] border-2 px-3 py-2 text-sm outline-none " +
   "transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] " +
   "placeholder:text-[var(--text-muted)] focus:border-brand-500 focus:shadow-[0_0_0_4px_var(--ring)]";
 
@@ -668,29 +671,70 @@ export function Tabs({
 
 /* ------------------------------------------------------------- Ratings */
 
+/**
+ * A qualitative word for a score out of ten.
+ *
+ * "7.9" is hard to place — out of what, and is that good? The word does the
+ * placing, and it is also what a screen reader announces first. Bands are
+ * conservative: nothing below 7 gets a compliment.
+ */
+export type ScoreBand =
+  | "score.exceptional"
+  | "score.excellent"
+  | "score.veryGood"
+  | "score.good"
+  | "score.pleasant"
+  | "score.rated";
+
+export function scoreBand(score: number, scale: number): ScoreBand {
+  const pct = (score / scale) * 10;
+  if (pct >= 9) return "score.exceptional";
+  if (pct >= 8.5) return "score.excellent";
+  if (pct >= 8) return "score.veryGood";
+  if (pct >= 7) return "score.good";
+  if (pct >= 6) return "score.pleasant";
+  return "score.rated";
+}
+
 export function Rating({
   score,
   scale,
   count,
   source,
   label,
+  word,
+  compact = false,
 }: {
   score: number;
   scale: number;
   count: number;
   source: string;
   label: string;
+  /** Localized qualitative band — pass `t(scoreBand(score, scale))`. */
+  word?: string;
+  /** Badge and word only — for dense rows where the source line does not fit. */
+  compact?: boolean;
 }) {
+  const band = word ?? scoreBand(score, scale);
   return (
     <div className="flex items-center gap-2">
-      <span className="bg-brand-700 tabular rounded-[10px] px-2 py-1 text-sm font-bold text-white">
+      {/*
+        Score first in the DOM but visually last on wide rows is a trick that
+        breaks reading order, so the badge simply sits first in both.
+      */}
+      <span className="score-badge grid min-h-8 min-w-8 place-items-center rounded-[var(--radius-control)] rounded-bs-none px-1.5 text-sm font-bold">
         {score.toFixed(1)}
       </span>
-      <span className="text-muted text-xs">
+      <span className="text-xs leading-tight">
         <span className="sr-only">{label}</span>
-        <span aria-hidden>
-          / {scale} · {count.toLocaleString()} · {source}
+        <span aria-hidden className="block font-bold">
+          {band}
         </span>
+        {!compact && (
+          <span aria-hidden className="text-muted block">
+            {count.toLocaleString()} · {source}
+          </span>
+        )}
       </span>
     </div>
   );

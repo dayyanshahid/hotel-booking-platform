@@ -235,7 +235,7 @@ function RateRow({
 
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <PriceBlock price={offer.price} size="md" />
-          <Button onClick={() => onSelect(offer)} loading={busy} className="w-full sm:w-auto">
+          <Button variant="action" onClick={() => onSelect(offer)} loading={busy} className="w-full sm:w-auto">
             {t("room.selectRate")}
           </Button>
         </div>

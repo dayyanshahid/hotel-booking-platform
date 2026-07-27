@@ -6,7 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { Accordion, Badge, Button, Card, Photo, SectionHeading, Stars, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
-import { collectionPhoto, destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
+import { collectionPhoto, destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
 import { href, searchHref } from "@/lib/nav";
@@ -71,55 +71,47 @@ export function HomeView({
 
   return (
     <div className="space-y-10">
-      <section className="relative overflow-hidden rounded-[var(--radius-sheet)]">
-        {/*
-          A photograph sets the place; the brand wash over it is what keeps the
-          heading and the search bar legible whatever the frame happens to be.
-          If the image host is unreachable the drawn skyline shows through the
-          same wash, so the hero never collapses to flat colour.
-        */}
-        <div className="from-brand-800 to-brand-600 absolute inset-0 bg-gradient-to-br" aria-hidden>
-          <Photo
-            src={heroPhoto().src}
-            srcSet={heroPhoto().srcSet}
-            sizes="100vw"
-            fallbackSrc={sceneUrl("home-hero", "landmark", "dubai")}
-            alt=""
-            fill
-            priority
-            fallbackLabel=""
-          />
-          {/*
-            Heaviest where the heading sits and thinning across the frame, so the
-            copy clears contrast without flattening the photograph behind it.
-          */}
-          <div className="from-brand-900/95 via-brand-900/70 to-brand-800/45 absolute inset-0 bg-gradient-to-br" />
-        </div>
-        <div className="relative px-5 py-12 sm:px-10 sm:py-16">
-          <h1 className="max-w-2xl text-[28px] font-bold leading-[1.1] text-white sm:text-[44px]">
+      {/*
+        A flat navy band, not a photograph under a wash. The search form is the
+        only thing on this screen that matters, and a photograph behind it is
+        competition for the one control the page exists to present.
+      */}
+      <section className="chrome full-bleed -mt-6 pb-16 pt-10 sm:-mt-8 sm:pb-20 sm:pt-14">
+        <div className="mx-auto max-w-7xl px-4">
+          <h1 className="max-w-3xl text-[30px] font-bold leading-[1.1] sm:text-[44px]">
             {t("home.heroTitle")}
           </h1>
-          <p className="text-brand-50/90 mt-4 max-w-xl text-sm leading-relaxed sm:text-base">{t("home.heroSubtitle")}</p>
-          <div className="mt-6">
-            <SearchBar variant="hero" />
-          </div>
-          <AiPrompt />
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base">
+            {t("home.heroSubtitle")}
+          </p>
 
           {/*
             Three claims the rest of the page then has to back up. They sit in
-            the hero because they are the reason to use the search above them,
+            the hero because they are the reason to use the search below them,
             not a footnote to it.
           */}
-          <ul className="text-brand-50/85 mt-7 flex flex-wrap gap-x-6 gap-y-2 text-xs sm:text-sm">
+          <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs text-white/85 sm:text-sm">
             {[t("home.trustTotal"), t("home.trustCancel"), t("home.trustLocal")].map((claim) => (
               <li key={claim} className="inline-flex items-center gap-2">
-                <Icon name="check" size={15} className="text-brand-200" />
+                <Icon name="check" size={15} className="text-action-400" />
                 {claim}
               </li>
             ))}
           </ul>
         </div>
       </section>
+
+      {/*
+        The search form straddles the band's lower edge. The yellow outline is
+        doing real work: it is the only element on the page with that colour, so
+        the eye lands on the form before it reads a word.
+      */}
+      <div className="relative z-10 -mt-12 sm:-mt-14">
+        <div className="rounded-[var(--radius-card)] border-[3px] border-action-400">
+          <SearchBar variant="hero" />
+        </div>
+        <AiPrompt />
+      </div>
 
       {/*
         The hero makes a claim; this is the claim opened up. One real stay from
@@ -499,8 +491,8 @@ function AiPrompt() {
   }
 
   return (
-    <div className="mt-5 max-w-3xl">
-      <label htmlFor="ai-prompt" className="text-brand-50 inline-flex items-center gap-1.5 text-sm font-medium">
+    <div className="mt-6 max-w-3xl">
+      <label htmlFor="ai-prompt" className="inline-flex items-center gap-1.5 text-sm font-semibold">
         <Icon name="sparkle" size={15} />
         {t("home.aiPrompt")}
       </label>
@@ -508,7 +500,7 @@ function AiPrompt() {
         Field and action are one pill rather than two floating controls: over a
         photograph, separate elements read as debris instead of a control.
       */}
-      <div className="surface hairline mt-2 flex flex-col gap-2 rounded-[var(--radius-pill)] border p-1.5 shadow-[var(--shadow-card)] sm:flex-row sm:items-center">
+      <div className="surface mt-2 flex flex-col gap-2 rounded-[var(--radius-card)] border p-1.5 sm:flex-row sm:items-center">
         <input
           id="ai-prompt"
           value={prompt}
@@ -520,7 +512,7 @@ function AiPrompt() {
           type="button"
           onClick={interpret}
           disabled={!prompt.trim()}
-          className="shrink-0 rounded-[var(--radius-pill)]"
+          className="shrink-0"
         >
           {t("home.aiInterpret")}
         </Button>

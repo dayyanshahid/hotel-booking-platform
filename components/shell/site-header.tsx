@@ -38,23 +38,25 @@ export function SiteHeader() {
   }
 
   return (
-    // Translucent so page content tints the bar as it scrolls beneath, which
-    // reads as one continuous surface instead of a lid sitting on top.
-    <header className="surface-blur hairline sticky top-0 z-40 border-b">
+    /*
+      A navy chrome band rather than a translucent white one. Two reasons it
+      earns the weight: the search results below it are a wall of white cards
+      and photographs that need a hard top edge to sit under, and the currency,
+      language and account controls are the only things a traveller needs to
+      find without reading — a coloured band makes them one target.
+    */
+    <header className="chrome sticky top-0 z-40">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
         <Link href={href(locale, "/")} className="flex items-center gap-2 font-bold">
           {/* Wordmark: the Arabic initial of the brand, drawn as a monogram. */}
-          <span
-            aria-hidden
-            className="from-brand-500 to-brand-700 grid size-9 place-items-center rounded-[11px] bg-gradient-to-br text-white shadow-[0_2px_6px_-1px_rgb(19_83_88/0.5)]"
-          >
+          <span aria-hidden className="grid size-8 place-items-center rounded-[var(--radius-control)] bg-white/15">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M5 8v5a5 5 0 0 0 10 0V8" />
               <circle cx="10" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
               <path d="M18 8v11" opacity="0.55" />
             </svg>
           </span>
-          <span className="text-[17px] tracking-[-0.02em]">{t("brand.name")}</span>
+          <span className="text-[20px] font-bold tracking-[-0.02em]">{t("brand.name")}</span>
         </Link>
 
         <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">
@@ -66,9 +68,9 @@ export function SiteHeader() {
                 key={link.href}
                 href={target}
                 className={cx(
-                  "inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-pill)] px-3.5 text-sm font-medium",
-                  "transition-colors duration-200 ease-[var(--ease-out)]",
-                  active ? "surface-sunken text-[var(--text)]" : "text-muted hover:surface-sunken hover:text-[var(--text)]",
+                  "inline-flex min-h-9 items-center gap-2 rounded-[var(--radius-pill)] px-3.5 text-sm font-medium",
+                  "transition-colors duration-150 ease-[var(--ease-out)]",
+                  active ? "bg-white/20" : "hover:bg-white/10",
                 )}
               >
                 {link.label}
@@ -81,14 +83,14 @@ export function SiteHeader() {
         <div className="ms-auto flex items-center gap-1.5">
           {compare.length > 1 && (
             <Link href={href(locale, "/compare")} className="hidden sm:block">
-              <Button variant="secondary" size="sm">
+              <Button variant="chrome" size="sm">
                 {t("nav.compare")} ({compare.length})
               </Button>
             </Link>
           )}
 
           <Button
-            variant="ghost"
+            variant="chrome"
             size="sm"
             onClick={() => setAssistantOpen(true)}
             aria-label={t("nav.assistant")}
@@ -98,7 +100,7 @@ export function SiteHeader() {
           </Button>
 
           <Link href={href(locale, "/notifications")} className="relative hidden sm:block">
-            <Button variant="ghost" size="sm" aria-label={t("nav.notifications")}>
+            <Button variant="chrome" size="sm" aria-label={t("nav.notifications")}>
               <Icon name="bell" />
             </Button>
             {unread > 0 && (
@@ -115,7 +117,7 @@ export function SiteHeader() {
             id="header-currency"
             value={currency}
             onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-            className="hidden !min-h-9 !w-auto !py-1 sm:block"
+            className="hidden !min-h-9 !w-auto !border-white/30 !bg-transparent !py-1 !text-white sm:block [&>option]:text-[var(--text)]"
           >
             {/* The majors, not all 68 — a currency switcher is a shortcut, not a
                 reference table. */}
@@ -134,8 +136,8 @@ export function SiteHeader() {
                 onClick={() => switchLocale(code)}
                 aria-current={code === locale ? "true" : undefined}
                 className={cx(
-                  "min-h-9 rounded-md px-2 text-sm font-medium",
-                  code === locale ? "surface-sunken" : "text-muted hover:surface-sunken",
+                  "min-h-9 rounded-[var(--radius-control)] px-2 text-sm font-medium",
+                  code === locale ? "bg-white/20" : "hover:bg-white/10",
                 )}
               >
                 {LOCALE_META[code].label}
@@ -143,26 +145,26 @@ export function SiteHeader() {
             ))}
           </div>
 
-          <Button variant="ghost" size="sm" onClick={toggleTheme} aria-label="Toggle theme">
+          <Button variant="chrome" size="sm" onClick={toggleTheme} aria-label="Toggle theme">
             <Icon name={theme === "light" ? "moon" : "sun"} />
           </Button>
 
           {account ? (
             <Link href={href(locale, "/account")} className="hidden lg:block">
-              <Button variant="secondary" size="sm">
+              <Button variant="chrome" size="sm">
                 {account.email.split("@")[0]}
               </Button>
             </Link>
           ) : (
             <Link href={href(locale, "/signin")} className="hidden lg:block">
-              <Button variant="secondary" size="sm">
+              <Button variant="chrome" size="sm">
                 {t("nav.signIn")}
               </Button>
             </Link>
           )}
 
           <Button
-            variant="ghost"
+            variant="chrome"
             size="sm"
             className="lg:hidden"
             onClick={() => setMenuOpen(true)}

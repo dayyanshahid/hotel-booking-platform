@@ -85,17 +85,15 @@ export function SearchBar({
     <form
       onSubmit={submit}
       className={cx(
-        "surface hairline rounded-[var(--radius-sheet)] border p-3",
-        // The hero bar floats over a photograph, so it needs a real drop
-        // shadow; the compact bar sits in the page flow and takes the card one.
-        variant === "hero"
-          ? "shadow-[var(--shadow-float)] sm:p-4"
-          : "p-2 shadow-[var(--shadow-card)] sm:p-3",
+        // The hero form is framed by the yellow outline its parent draws, so it
+        // carries no border of its own — two edges 3px apart reads as a mistake.
+        "surface rounded-[6px]",
+        variant === "hero" ? "p-1.5" : "border p-2",
       )}
       role="search"
       aria-label={t("common.searchHotels")}
     >
-      <div className={cx("grid gap-3", variant === "hero" ? "lg:grid-cols-[2fr_1.6fr_1.2fr_auto]" : "lg:grid-cols-[2fr_1.6fr_1.2fr_auto]")}>
+      <div className={cx("grid gap-1.5", "lg:grid-cols-[2fr_1.6fr_1.2fr_auto]")}>
         <DestinationAutocomplete
           value={destination}
           onSelect={(next) => setDestination(next)}
@@ -118,7 +116,12 @@ export function SearchBar({
           compact={variant === "compact"}
         />
         <div className="flex items-end">
-          <Button type="submit" size={variant === "hero" ? "lg" : "md"} className="w-full lg:w-auto">
+          <Button
+            type="submit"
+            variant={variant === "hero" ? "primary" : "primary"}
+            size={variant === "hero" ? "lg" : "md"}
+            className="h-full w-full lg:w-auto lg:px-8"
+          >
             {t("common.search")}
           </Button>
         </div>

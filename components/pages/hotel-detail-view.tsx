@@ -21,6 +21,7 @@ import {
   Skeleton,
   Stars,
   Tabs,
+  scoreBand,
 } from "@/components/ui";
 import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { addDays, distanceLabel, formatDate, formatMoney, guestCount, todayIso } from "@/lib/format";
@@ -230,6 +231,7 @@ export function HotelDetailView({
               <Rating
                 score={hotel.review.score}
                 scale={hotel.review.scale}
+                word={t(scoreBand(hotel.review.score, hotel.review.scale))}
                 count={hotel.review.count}
                 source={hotel.review.source}
                 label={t("a11y.ratingLabel", {
@@ -261,7 +263,7 @@ export function HotelDetailView({
           )}
           <div className="mt-3 flex flex-col gap-2">
             <a href="#rooms">
-              <Button className="w-full">{t("hotel.seeRooms")}</Button>
+              <Button variant="action" className="w-full">{t("hotel.seeRooms")}</Button>
             </a>
             <Button
               variant="secondary"

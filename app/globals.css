@@ -45,27 +45,58 @@
  * screen invents its own styling.
  */
 @theme {
-  --color-ink-50: #f4f7f9;
-  --color-ink-100: #e6ecf0;
-  --color-ink-200: #c9d6de;
-  --color-ink-400: #7a94a6;
-  --color-ink-600: #3d5b70;
-  --color-ink-700: #2a4356;
-  --color-ink-800: #1b2f40;
-  --color-ink-900: #12212e;
-  --color-ink-950: #0b1620;
+  /*
+   * An OTA palette: navy chrome, a bright blue for anything clickable, and a
+   * yellow reserved for the single action that moves a booking forward.
+   *
+   * The convention exists because it works — travel shoppers scan a results
+   * page for two things, the score and the button, and giving the button a
+   * colour that appears nowhere else makes it findable without reading. It is a
+   * category convention, not one brand's property; the wordmark, the copy and
+   * the product are Nazil's own.
+   */
+  --color-navy-50: #eaf0f8;
+  --color-navy-100: #ccdcef;
+  --color-navy-200: #9db9dd;
+  --color-navy-500: #16468f;
+  --color-navy-700: #0b3a75;
+  --color-navy-800: #08306b;
+  --color-navy-900: #062554;
 
-  --color-brand-50: #eef7f7;
-  --color-brand-100: #d3ecec;
-  --color-brand-200: #a8d9da;
-  --color-brand-300: #6dbfc2;
-  --color-brand-400: #3ba0a5;
-  --color-brand-500: #1c8288;
-  --color-brand-600: #14676d;
-  --color-brand-700: #135358;
-  --color-brand-800: #134348;
-  --color-brand-900: #12383d;
+  /* Links, selected states, and the "we are working on it" blue. */
+  --color-brand-50: #ebf3fc;
+  --color-brand-100: #d3e5f8;
+  --color-brand-200: #a8cbf1;
+  --color-brand-300: #6ba9e6;
+  --color-brand-400: #3387d6;
+  --color-brand-500: #0f6fc4;
+  --color-brand-600: #0a5cab;
+  --color-brand-700: #084b8c;
+  --color-brand-800: #063d73;
+  --color-brand-900: #05305c;
 
+  /*
+   * The action colour. Yellow on near-black is the only pairing here that
+   * clears AA at button size, so the token carries its own text colour rather
+   * than leaving each caller to guess.
+   */
+  --color-action-300: #ffd43b;
+  --color-action-400: #febb02;
+  --color-action-500: #f0a500;
+  --color-action-600: #d18f00;
+  --color-action-ink: #1a1a1a;
+
+  --color-ink-50: #f5f5f5;
+  --color-ink-100: #ebebeb;
+  --color-ink-200: #d9d9d9;
+  --color-ink-400: #8c8c8c;
+  --color-ink-600: #595959;
+  --color-ink-700: #404040;
+  --color-ink-800: #262626;
+  --color-ink-900: #1a1a1a;
+  --color-ink-950: #0d0d0d;
+
+  /* Kept for the sand-toned promotional badge; no longer a brand colour. */
   --color-sand-50: #fdf8f1;
   --color-sand-100: #f8ecdb;
   --color-sand-200: #f0d9b7;
@@ -75,34 +106,39 @@
   --color-sand-600: #a76826;
   --color-sand-700: #874e21;
 
-  --color-positive-50: #eefaf1;
-  --color-positive-100: #d2f2dc;
-  --color-positive-500: #1a8a4a;
-  --color-positive-700: #146237;
+  --color-positive-50: #e9f8ee;
+  --color-positive-100: #cdeed8;
+  --color-positive-500: #008009;
+  --color-positive-700: #006508;
 
   --color-caution-50: #fff8ea;
   --color-caution-100: #ffedc9;
   --color-caution-500: #b5730a;
   --color-caution-700: #8a5606;
 
-  --color-critical-50: #fdf0ef;
-  --color-critical-100: #fbdbd8;
-  --color-critical-500: #c1382b;
-  --color-critical-700: #96271d;
+  --color-critical-50: #fdeceb;
+  --color-critical-100: #fbd5d2;
+  --color-critical-500: #cc0000;
+  --color-critical-700: #a30000;
 
-  /* One radius ramp. Nothing in the UI invents a corner outside it. */
-  --radius-control: 12px;
-  --radius-card: 18px;
-  --radius-sheet: 24px;
+  /*
+   * Tight corners. Soft 18px cards read as a consumer app; a results page is a
+   * dense table of comparable things, and square-ish edges let rows sit closer
+   * together without the eye reading them as one blob.
+   */
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-sheet: 12px;
   --radius-pill: 999px;
 
   /*
-   * Elevation is carried by light, layered shadows rather than by hard borders:
-   * a close contact shadow to seat the element, a wide ambient one for depth.
+   * Separation comes from hairlines, not from lift. Fifteen floating cards on
+   * one screen is noise; a border is quieter and cheaper, and it keeps the
+   * price column aligned across rows.
    */
-  --shadow-card: 0 1px 2px rgb(11 22 32 / 0.04), 0 4px 12px -4px rgb(11 22 32 / 0.08);
-  --shadow-raised: 0 2px 4px rgb(11 22 32 / 0.05), 0 12px 28px -10px rgb(11 22 32 / 0.16);
-  --shadow-float: 0 8px 16px -6px rgb(11 22 32 / 0.12), 0 24px 56px -16px rgb(11 22 32 / 0.28);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-raised: 0 2px 8px rgb(0 0 0 / 0.12);
+  --shadow-float: 0 4px 16px rgb(0 0 0 / 0.16), 0 12px 40px -12px rgb(0 0 0 / 0.24);
 
   /* Decelerating, never bouncy — this is a checkout, not a toy. */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -111,33 +147,39 @@
 
 :root {
   --surface: #ffffff;
-  /* The page sits a shade below its cards, so a card reads as lifted without a
-     heavy outline. */
-  --surface-muted: #f6f8f9;
-  --surface-sunken: #edf1f3;
-  --border: #e4e9ed;
-  --border-strong: #c4ced6;
-  --text: #0e1c27;
-  --text-muted: #5b6f80;
-  --focus: #14676d;
-  --ring: rgb(28 130 136 / 0.22);
-  --scrim: rgb(11 22 32 / 0.45);
+  /* Neutral grey rather than a brand tint: the page is a backdrop for a
+     hundred photographs and should not colour-cast any of them. */
+  --surface-muted: #f5f5f5;
+  --surface-sunken: #ebebeb;
+  --border: #e0e0e0;
+  --border-strong: #bdbdbd;
+  --text: #1a1a1a;
+  --text-muted: #595959;
+  --focus: #0f6fc4;
+  --ring: rgb(15 111 196 / 0.28);
+  --scrim: rgb(0 0 0 / 0.5);
+  /* The chrome band. Named separately so the header and footer stay navy
+     while the page beneath them inverts with the theme. */
+  --chrome: #08306b;
+  --chrome-ink: #ffffff;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
   /* Raised surfaces get lighter as they come forward — the opposite of light
      mode, because shadows cannot separate anything on a dark page. */
-  --surface: #14252f;
-  --surface-muted: #0c1a23;
-  --surface-sunken: #1b323e;
-  --border: #26404e;
-  --border-strong: #3d5f71;
-  --text: #ecf3f6;
-  --text-muted: #9db2bf;
-  --focus: #6dbfc2;
-  --ring: rgb(109 191 194 / 0.28);
-  --scrim: rgb(3 10 16 / 0.62);
+  --surface: #1f1f1f;
+  --surface-muted: #141414;
+  --surface-sunken: #2b2b2b;
+  --border: #383838;
+  --border-strong: #575757;
+  --text: #f0f0f0;
+  --text-muted: #a6a6a6;
+  --focus: #6ba9e6;
+  --ring: rgb(107 169 230 / 0.32);
+  --scrim: rgb(0 0 0 / 0.66);
+  --chrome: #05224d;
+  --chrome-ink: #ffffff;
   color-scheme: dark;
 }
 
@@ -423,4 +465,47 @@ html[data-theme="dark"] .bg-sand-50 {
   .scrim {
     backdrop-filter: blur(2px);
   }
+}
+
+/* ------------------------------------------------------------ OTA chrome */
+
+/** The navy band behind the header and footer, in both themes. */
+.chrome {
+  background: var(--chrome);
+  color: var(--chrome-ink);
+}
+.chrome a,
+.chrome button {
+  color: inherit;
+}
+
+/**
+ * The review score badge. A number alone is hard to place — 7.9 out of what,
+ * and is that good? — so the badge always ships with a word beside it.
+ */
+.score-badge {
+  background: var(--color-brand-800);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * The score badge's block corner. Square on the side nearest the card edge so
+ * it reads as a tab attached to the row rather than a floating chip — and it
+ * flips with the document, so RTL squares the mirrored corner.
+ */
+.rounded-bs-none {
+  border-start-start-radius: 0;
+}
+
+/**
+ * Break out of the centred container to the viewport edge, and pad back in so
+ * the content still lines up with everything above and below it.
+ *
+ * `50% - 50vw` rather than `100vw` positioning: it stays correct inside a
+ * scrolled container and does not add a horizontal scrollbar of its own.
+ */
+.full-bleed {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
 }
