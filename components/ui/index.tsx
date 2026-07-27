@@ -244,6 +244,7 @@ export function EmptyState({
   actions,
   icon,
   art,
+  standalone = false,
 }: {
   title: string;
   body?: string;
@@ -251,10 +252,20 @@ export function EmptyState({
   icon?: ReactNode;
   /** Spot illustration — decorative; the heading carries the meaning. */
   art?: ReactNode;
+  /**
+   * True when this *is* the page — a signed-out account, an empty saved list.
+   * It then centres in the space the page would otherwise leave blank, instead
+   * of sitting at the top with a void beneath it.
+   *
+   * Leave false when the empty state sits inside a populated page (an empty
+   * section of a list, a room list with no availability): reserving half a
+   * viewport there would push the content that follows off the screen.
+   */
+  standalone?: boolean;
 }) {
-  return (
-    // Constrained rather than full-bleed: centred text stranded across a wide
-    // card reads as a layout failure, not as a designed empty state.
+  // Constrained rather than full-bleed: centred text stranded across a wide
+  // card reads as a layout failure, not as a designed empty state.
+  const card = (
     <Card className="mx-auto w-full max-w-xl px-6 py-12 text-center">
       {art && <div className="mb-5 flex justify-center">{art}</div>}
       {icon && <div className="mb-4 flex justify-center">{icon}</div>}
@@ -263,6 +274,9 @@ export function EmptyState({
       {actions && <div className="mt-6 flex flex-wrap justify-center gap-2">{actions}</div>}
     </Card>
   );
+
+  if (!standalone) return card;
+  return <div className="flex min-h-[52vh] items-center justify-center py-4">{card}</div>;
 }
 
 /* ------------------------------------------------------------- Fields */

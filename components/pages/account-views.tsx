@@ -42,6 +42,7 @@ export function SignInView({ locale }: { locale: Locale }) {
   if (account) {
     return (
       <EmptyState
+        standalone
         title={account.email}
         body={t("account.title")}
         actions={
@@ -155,6 +156,7 @@ export function AccountView({ locale }: { locale: Locale }) {
   if (!account) {
     return (
       <EmptyState
+        standalone
         title={t("account.signInTitle")}
         body={t("account.signInBody")}
         actions={
@@ -345,6 +347,7 @@ export function SavedView({ locale }: { locale: Locale }) {
   if (!saved.length) {
     return (
       <EmptyState
+        standalone
         art={<EmptySavedArt />}
         title={t("saved.title")}
         body={t("saved.empty")}

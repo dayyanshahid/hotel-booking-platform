@@ -62,6 +62,7 @@ export function BookingOutcomeView({
   if (error) {
     return (
       <EmptyState
+        standalone
         art={<NotFoundArt />}
         title={t("error.notFound")}
         body={error.message}

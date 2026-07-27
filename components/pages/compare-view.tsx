@@ -55,6 +55,7 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
   if (!intent) {
     return (
       <EmptyState
+        standalone
         title={t("compare.title")}
         body={t("compare.empty")}
         actions={
@@ -71,6 +72,7 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
   if (entries.length < 2) {
     return (
       <EmptyState
+        standalone
         title={t("compare.title")}
         body={t("compare.empty")}
         actions={

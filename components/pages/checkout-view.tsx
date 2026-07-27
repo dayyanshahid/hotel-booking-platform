@@ -295,6 +295,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
   if (loadError) {
     return (
       <EmptyState
+        standalone
         title={t("checkout.expired")}
         body={loadError.message}
         actions={

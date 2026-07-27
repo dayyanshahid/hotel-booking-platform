@@ -57,6 +57,7 @@ export function TripsView({ locale }: { locale: Locale }) {
     return (
       <div className="space-y-4">
         <EmptyState
+          standalone
           art={<EmptyTripsArt />}
           title={t("trips.title")}
           body={t("account.signInBody")}
@@ -291,6 +292,7 @@ export function BookingDetailView({
   if (error) {
     return (
       <EmptyState
+        standalone
         art={<NotFoundArt />}
         title={t(`error.${error.category}`)}
         body={error.message}

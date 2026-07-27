@@ -248,6 +248,7 @@ export function NotificationsView({ locale }: { locale: Locale }) {
   if (!account) {
     return (
       <EmptyState
+        standalone
         art={<EmptyTripsArt />}
         title={t("notifications.title")}
         body={t("account.signInBody")}
