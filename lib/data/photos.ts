@@ -18,8 +18,6 @@
  * illustrator in `lib/illustration/scenes.ts`, so no card ever renders empty.
  */
 
-import { getCity } from "./geo/cities";
-import { getCountry } from "./geo/countries";
 import type { HotelImage, Locale } from "@/lib/types";
 
 export type PhotoCategory = HotelImage["category"];
@@ -150,19 +148,25 @@ const DESTINATION_SETS: Record<string, readonly string[]> = {
 };
 
 /**
- * Region fallbacks, assembled from frames already reviewed for the curated
- * cities. Grouped so each region gets something recognisably of that part of
- * the world rather than a single global default.
+ * Fallback frames for the ~180 cities with no photography of their own.
+ *
+ * Deliberately *not* built from the curated destination sets. Those are full of
+ * identifiable landmarks, and the first version of this showed Doha's Katara
+ * Towers on every city in Asia — Tokyo, Osaka, Kyoto and Sapporo all captioned
+ * with a building in Qatar. A generic skyline is vague; a specific landmark in
+ * the wrong country is a lie.
+ *
+ * These are unbranded architecture and streetscapes, so the worst case is a
+ * frame that tells you nothing rather than one that tells you something false.
  */
-const REGION_SETS: Record<string, readonly string[]> = {
-  middleEast: DESTINATION_SETS.dubai,
-  africa: DESTINATION_SETS.makkah,
-  asia: DESTINATION_SETS.doha,
-  europe: DESTINATION_SETS.istanbul,
-  northAmerica: DESTINATION_SETS.dubai,
-  southAmerica: DESTINATION_SETS.jeddah,
-  oceania: DESTINATION_SETS.jeddah,
-};
+const GENERIC_PLACE: readonly string[] = [
+  "1472510771109-39b92752a6b9",
+  "1661016630713-67e36bfc2285",
+  "1693146842813-be42935ecdbd",
+  "1607320895054-c5c543e9a069",
+  "1468824357306-a439d58ccb1c",
+  "1668480441891-3744c25337a3",
+];
 
 /**
  * Collections get a named photo rather than a hashed one. There are only eight
@@ -264,27 +268,28 @@ export function propertyPhoto(
 }
 
 /**
- * The photo set for a destination.
- *
- * Six cities have their own photographs. The other ~180 fall back to a set
- * chosen by region rather than to whichever city happened to be written first —
- * a Lima page showing a Riyadh skyline is worse than one showing an unnamed
- * Latin American city, because only the first is actively wrong.
- *
- * Nothing here claims to be the city in question: the credit line says
- * "illustrative", and the region fallback is chosen so the frame is at least
- * plausible for where the guest is looking.
+ * The photo set for a destination: its own frames if it has any, otherwise the
+ * unbranded fallback. Nothing here claims to be the city in question — the
+ * credit line says "illustrative" wherever these appear.
  */
 function destinationSet(slug?: string): readonly string[] {
   if (slug && DESTINATION_SETS[slug]) return DESTINATION_SETS[slug];
-  const region = slug ? getCity(slug) && getCountry(getCity(slug)!.countryCode)?.region : undefined;
-  return REGION_SETS[region ?? "middleEast"] ?? REGION_SETS.middleEast;
+  return GENERIC_PLACE;
+}
+
+/** True when the slug has photography of its own rather than the fallback. */
+function isCurated(slug?: string): boolean {
+  return Boolean(slug && DESTINATION_SETS[slug]);
 }
 
 /** A destination hero. */
 export function destinationPhoto(slug: string, ordinal = 0, options: PhotoOptions = {}): PhotoRef {
   const set = destinationSet(slug);
-  return refFor(set[ordinal % set.length], options);
+  // Curated cities index directly, so ordinal 1 is reliably a different frame
+  // from ordinal 0. Everything else hashes on the slug first, or a country page
+  // renders the same photograph on every city in it.
+  const index = isCurated(slug) ? ordinal : hash(slug) + ordinal;
+  return refFor(set[index % set.length], options);
 }
 
 /**
