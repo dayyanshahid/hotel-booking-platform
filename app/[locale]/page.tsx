@@ -1,12 +1,13 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { HomeView } from "@/components/pages/home-view";
-import { DESTINATIONS } from "@/lib/data/destinations";
+import { HomeView, type FeaturedStay, type PriceProof } from "@/components/pages/home-view";
+import { DESTINATIONS, getDestination } from "@/lib/data/destinations";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
-import { HOTEL_SEEDS } from "@/lib/data/hotels";
+import { HOTEL_SEEDS, buildHotel, getHotelSeed } from "@/lib/data/hotels";
+import { destinationFromPrice, hotelFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
+import { computePrice } from "@/lib/server/pricing";
+import { addDays, todayIso } from "@/lib/format";
 import { createTranslator, isLocale } from "@/lib/i18n";
-import { href } from "@/lib/nav";
-import type { Locale } from "@/lib/types";
+import type { CurrencyCode, Locale } from "@/lib/types";
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
@@ -15,11 +16,72 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 }
 
 /**
+ * The currency the server renders browse prices in. A visitor can switch the
+ * display currency on the client, but the server cannot know that preference
+ * before first paint, so indicative prices are computed in the home market's
+ * currency and labelled as indicative.
+ */
+const BROWSE_CURRENCY: CurrencyCode = "SAR";
+
+/** "Stays to start with" — spread across markets and star ratings on purpose. */
+const FEATURED_SLUGS = [
+  "corniche-pearl-jeddah",
+  "olaya-grand-riyadh",
+  "sultanahmet-old-city-hotel",
+  "marina-walk-hotel",
+] as const;
+
+/** The stay the price-transparency example is worked through. */
+const PROOF_SLUG = "olaya-grand-riyadh";
+
+/** The five home-page questions. The accordion and the JSON-LD both read this. */
+const FAQ_KEYS = [1, 2, 3, 4, 5] as const;
+
+/**
+ * Builds the worked price example from the same model the search path uses, so
+ * the figures on the home page and the figures on a results card come out of one
+ * calculation. Three nights, two adults, breakfast — a realistic stay rather
+ * than a flattering one.
+ */
+function buildProof(locale: Locale): PriceProof {
+  const seed = getHotelSeed(PROOF_SLUG)!;
+  const destination = getDestination(seed.destinationId)!;
+  const checkIn = addDays(todayIso(), 21);
+  const price = computePrice({
+    seed,
+    roomKey: seed.rooms[0],
+    board: "BB",
+    rateClass: "flex",
+    checkIn,
+    checkOut: addDays(checkIn, 3),
+    rooms: [{ adults: 2, childrenAges: [] }],
+    currency: BROWSE_CURRENCY,
+    countryCode: destination.countryCode,
+    sourceCode: "S1",
+    locale,
+  });
+  return {
+    hotelName: localized(seed.name, locale),
+    hotelSlug: seed.slug,
+    destinationId: seed.destinationId,
+    currency: price.currency,
+    base: price.base,
+    included: price.includedCharges
+      .filter((line) => line.amount > 0)
+      .map((line) => ({ label: line.label, amount: line.amount })),
+    total: price.total,
+    payAtProperty: price.payAtProperty
+      .filter((line) => line.amount > 0)
+      .map((line) => ({ label: line.label, amount: line.amount })),
+  };
+}
+
+/**
  * F-010 — home / explore.
  *
- * Server-rendered content (collections, destinations, value propositions) so the
- * page is indexable without live rates (§12.4); the interactive search context
- * hydrates on the client.
+ * Everything a visitor reads before searching renders on the server, indicative
+ * prices included: they come from the pricing model rather than from live
+ * availability, so the page is indexable and never waits on a supplier (§12.4).
  */
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
@@ -33,6 +95,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     country: localized(d.country, locale),
     blurb: localized(d.blurb, locale),
     propertyCount: HOTEL_SEEDS.filter((h) => h.destinationId === d.id).length,
+    fromPrice: destinationFromPrice(d.id, BROWSE_CURRENCY, locale),
   }));
 
   const collections = COLLECTIONS.map((c) => ({
@@ -43,33 +106,51 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     count: HOTEL_SEEDS.filter((h) => h.tags.includes(c.tag)).length,
   }));
 
+  const featured: FeaturedStay[] = FEATURED_SLUGS.flatMap((slug) => {
+    const seed = getHotelSeed(slug);
+    if (!seed) return [];
+    const hotel = buildHotel(seed, locale);
+    const hero = hotel.images.find((i) => i.category === "exterior") ?? hotel.images[0];
+    return [
+      {
+        slug: hotel.slug,
+        name: hotel.name,
+        city: hotel.address.city,
+        neighborhood: hotel.address.neighborhood,
+        category: hotel.category,
+        score: hotel.review?.score,
+        image: hero?.url ?? "",
+        imageSrcSet: hero?.srcSet,
+        imageFallback: hero?.fallbackUrl,
+        fromPrice: hotelFromPrice(seed, BROWSE_CURRENCY, locale),
+      },
+    ];
+  });
+
+  // The accordion renders these same five answers, so the structured data can
+  // never describe content the page does not show.
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_KEYS.map((n) => ({
+      "@type": "Question",
+      name: t(`home.faqQ${n}` as never),
+      acceptedAnswer: { "@type": "Answer", text: t(`home.faqA${n}` as never) },
+    })),
+  };
+
   return (
     <>
-      <HomeView locale={locale} destinations={destinations} collections={collections} />
-
-      {/* Indexable destination links, rendered on the server. */}
-      <section className="mt-12" aria-labelledby="destinations-heading">
-        <h2 id="destinations-heading" className="text-lg font-semibold sm:text-xl">
-          {t("home.destinations")}
-        </h2>
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {destinations.map((destination) => (
-            <li key={destination.id}>
-              <Link
-                href={href(locale, `/destinations/${destination.slug}`)}
-                className="surface hover:surface-sunken block h-full rounded-[var(--radius-card)] border p-4"
-              >
-                <p className="font-semibold">{destination.name}</p>
-                <p className="text-muted text-xs">{destination.country}</p>
-                <p className="text-muted mt-2 line-clamp-2 text-sm">{destination.blurb}</p>
-                <p className="text-brand-700 mt-2 text-xs font-medium">
-                  {destination.propertyCount} {t("results.count")}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }} />
+      <HomeView
+        locale={locale}
+        destinations={destinations}
+        collections={collections}
+        featured={featured}
+        proof={buildProof(locale)}
+        fromPriceBasis={FROM_PRICE_BASIS[locale]}
+        totalProperties={HOTEL_SEEDS.length}
+      />
     </>
   );
 }

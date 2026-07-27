@@ -4,7 +4,8 @@ import { computePrice } from "@/lib/server/pricing";
 import { buildCancellation, normalizeHotel, buildResultCard } from "@/lib/server/normalize";
 import { fetchFromSources } from "@/lib/server/suppliers";
 import { runSearch, suggest } from "@/lib/server/search";
-import { getHotelSeed } from "@/lib/data/hotels";
+import { HOTEL_SEEDS, getHotelSeed } from "@/lib/data/hotels";
+import { destinationFromPrice, hotelFromPrice } from "@/lib/server/from-price";
 import { formatMoney, nightsBetween } from "@/lib/format";
 import { intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import type { SearchIntent } from "@/lib/types";
@@ -270,5 +271,43 @@ describe("presentation", () => {
   it("formats currency per locale without losing the code", () => {
     expect(formatMoney(1234, "SAR", "en")).toMatch(/1,234/);
     expect(formatMoney(1234, "SAR", "ar")).toMatch(/[٠-٩\d]/);
+  });
+});
+
+/* ------------------------------------------------ §8.2 indicative prices */
+
+describe("browse 'from' prices", () => {
+  it("never quotes above what the property can actually be booked for", async () => {
+    // A "from" price that a real search cannot match is the one direction that
+    // misleads. It may be lower than a given search — dates and occupancy move
+    // it — but never higher than the cheapest room's own nightly rate.
+    for (const seed of HOTEL_SEEDS.slice(0, 6)) {
+      const from = hotelFromPrice(seed, "SAR", "en");
+      const response = await runSearch(
+        {
+          ...intent,
+          destinationId: seed.destinationId,
+          rooms: [{ adults: 2, childrenAges: [] }],
+        },
+        { scenario: "normal", locale: "en" },
+      );
+      const card = response.results.find((c) => c.slug === seed.slug);
+      if (!card) continue;
+      expect(from.amount).toBeLessThanOrEqual(card.price.nightlyAverage);
+    }
+  });
+
+  it("a destination quotes the cheapest of its properties", () => {
+    const destinationId = "dest-riyadh";
+    const cheapest = Math.min(
+      ...HOTEL_SEEDS.filter((h) => h.destinationId === destinationId).map(
+        (seed) => hotelFromPrice(seed, "SAR", "en").amount,
+      ),
+    );
+    expect(destinationFromPrice(destinationId, "SAR", "en")?.amount).toBe(cheapest);
+  });
+
+  it("has no price for a destination with no properties", () => {
+    expect(destinationFromPrice("dest-nowhere", "SAR", "en")).toBeNull();
   });
 });
