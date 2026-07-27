@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
-import { Badge, Button, Card, Input, Photo, SectionHeading, cx } from "@/components/ui";
+import { Badge, Button, Card, Photo, SectionHeading, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { collectionPhoto, destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
@@ -35,7 +35,7 @@ export function HomeView({
 
   return (
     <div className="space-y-10">
-      <section className="relative overflow-hidden rounded-[var(--radius-card)] border">
+      <section className="relative overflow-hidden rounded-[var(--radius-sheet)]">
         {/*
           A photograph sets the place; the brand wash over it is what keeps the
           heading and the search bar legible whatever the frame happens to be.
@@ -59,9 +59,11 @@ export function HomeView({
           */}
           <div className="from-brand-900/95 via-brand-900/70 to-brand-800/45 absolute inset-0 bg-gradient-to-br" />
         </div>
-        <div className="relative px-4 py-10 sm:px-8 sm:py-14">
-          <h1 className="max-w-2xl text-2xl font-bold text-white sm:text-4xl">{t("home.heroTitle")}</h1>
-          <p className="text-brand-50 mt-3 max-w-2xl text-sm sm:text-base">{t("home.heroSubtitle")}</p>
+        <div className="relative px-5 py-12 sm:px-10 sm:py-16">
+          <h1 className="max-w-2xl text-[28px] font-bold leading-[1.1] text-white sm:text-[44px]">
+            {t("home.heroTitle")}
+          </h1>
+          <p className="text-brand-50/90 mt-4 max-w-xl text-sm leading-relaxed sm:text-base">{t("home.heroSubtitle")}</p>
           <div className="mt-6">
             <SearchBar variant="hero" />
           </div>
@@ -76,7 +78,7 @@ export function HomeView({
             {recent.map((entry) => (
               <li key={entry.id} className="min-w-[240px]">
                 <Link href={searchHref(locale, entry.intent)}>
-                  <Card className="hover:surface-sunken h-full p-4">
+                  <Card className="card-interactive h-full p-4">
                     <p className="font-medium">{entry.intent.destinationDisplay}</p>
                     <p className="text-muted mt-1 text-xs">
                       {entry.intent.checkIn} → {entry.intent.checkOut}
@@ -136,7 +138,7 @@ export function HomeView({
           {collections.map((collection) => (
             <li key={collection.slug}>
               <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
-                <Card className="hover:surface-sunken h-full overflow-hidden">
+                <Card className="card-interactive h-full overflow-hidden">
                   <Photo
                     src={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).src}
                     srcSet={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).srcSet}
@@ -171,7 +173,7 @@ export function HomeView({
           ].map((item) => (
             <li key={item.title}>
               <Card className="h-full p-4">
-                <span className="bg-brand-50 text-brand-700 grid size-10 place-items-center rounded-lg">
+                <span className="bg-brand-50 text-brand-700 grid size-11 place-items-center rounded-[14px]">
                   <Icon name={item.icon} size={22} />
                 </span>
                 <p className="mt-3 font-semibold">{item.title}</p>
@@ -252,23 +254,34 @@ function AiPrompt() {
   }
 
   return (
-    <div className="mt-4 max-w-3xl">
-      <label htmlFor="ai-prompt" className="text-brand-50 text-sm font-medium">
+    <div className="mt-5 max-w-3xl">
+      <label htmlFor="ai-prompt" className="text-brand-50 inline-flex items-center gap-1.5 text-sm font-medium">
+        <Icon name="sparkle" size={15} />
         {t("home.aiPrompt")}
       </label>
-      <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
-        <Input
+      {/*
+        Field and action are one pill rather than two floating controls: over a
+        photograph, separate elements read as debris instead of a control.
+      */}
+      <div className="surface hairline mt-2 flex flex-col gap-2 rounded-[var(--radius-pill)] border p-1.5 shadow-[var(--shadow-card)] sm:flex-row sm:items-center">
+        <input
           id="ai-prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={t("home.aiPlaceholder")}
+          className="min-h-10 w-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-[var(--text-muted)]"
         />
-        <Button type="button" variant="secondary" onClick={interpret} disabled={!prompt.trim()}>
+        <Button
+          type="button"
+          onClick={interpret}
+          disabled={!prompt.trim()}
+          className="shrink-0 rounded-[var(--radius-pill)]"
+        >
           {t("home.aiInterpret")}
         </Button>
       </div>
       {parsed && (
-        <Card className="mt-2 p-3 text-sm">
+        <Card className="rise mt-3 p-4 text-sm">
           <p className="font-medium">{t("home.aiInterpreted")}</p>
           <ul className="text-muted mt-1 space-y-0.5 text-xs">
             <li>

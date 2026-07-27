@@ -137,26 +137,38 @@ export function SearchResultsView({
               track("sort_changed", { sort: next });
             }}
           />
-          <div className="flex rounded-lg border" role="group" aria-label={`${t("common.list")} / ${t("common.map")}`}>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              aria-pressed={view === "list"}
-              className={cx("min-h-10 rounded-s-lg px-3 text-sm", view === "list" && "surface-sunken font-semibold")}
-            >
-              {t("common.list")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setView("map");
-                track("map_opened", { count: cards.length });
-              }}
-              aria-pressed={view === "map"}
-              className={cx("min-h-10 rounded-e-lg px-3 text-sm", view === "map" && "surface-sunken font-semibold")}
-            >
-              {t("common.map")}
-            </button>
+          {/* Same segmented shape as Tabs, so every "pick one of these" control
+              in the product looks like the same control. */}
+          <div
+            className="surface-sunken inline-flex gap-1 rounded-[var(--radius-pill)] p-1"
+            role="group"
+            aria-label={`${t("common.list")} / ${t("common.map")}`}
+          >
+            {(
+              [
+                { id: "list" as const, label: t("common.list") },
+                { id: "map" as const, label: t("common.map") },
+              ]
+            ).map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  setView(option.id);
+                  if (option.id === "map") track("map_opened", { count: cards.length });
+                }}
+                aria-pressed={view === option.id}
+                className={cx(
+                  "min-h-9 rounded-[var(--radius-pill)] px-4 text-sm font-medium",
+                  "transition-[background-color,color,box-shadow] duration-200 ease-[var(--ease-out)]",
+                  view === option.id
+                    ? "surface text-[var(--text)] shadow-[var(--shadow-card)]"
+                    : "text-muted hover:text-[var(--text)]",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>

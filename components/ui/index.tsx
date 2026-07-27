@@ -27,21 +27,28 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "quiet";
 type ButtonSize = "sm" | "md" | "lg";
 
+// The press is a 1% scale rather than a colour flip: it registers on touch,
+// where there is no hover state to fall back on.
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold " +
+  "transition-[background-color,border-color,box-shadow,transform,color] duration-200 ease-[var(--ease-out)] " +
+  "active:scale-[0.985] disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700",
-  secondary: "border border-[var(--border-strong)] surface hover:surface-sunken",
+  primary:
+    "bg-brand-600 text-white shadow-[0_1px_2px_rgb(11_22_32/0.12),0_4px_10px_-4px_rgb(19_83_88/0.5)] " +
+    "hover:bg-brand-700 hover:shadow-[0_2px_4px_rgb(11_22_32/0.14),0_8px_18px_-6px_rgb(19_83_88/0.55)]",
+  secondary: "surface border border-[var(--border-strong)] hover:surface-sunken hover:border-brand-300",
   ghost: "hover:surface-sunken",
-  danger: "bg-critical-500 text-white hover:bg-critical-700",
-  quiet: "text-brand-700 hover:underline underline-offset-4",
+  danger:
+    "bg-critical-500 text-white shadow-[0_1px_2px_rgb(11_22_32/0.12),0_4px_10px_-4px_rgb(150_39_29/0.45)] hover:bg-critical-700",
+  quiet: "text-brand-700 hover:underline underline-offset-4 decoration-2",
 };
 
 // 44×44 minimum touch target on interactive controls (§11.1).
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3 text-sm",
-  md: "min-h-11 px-4 text-sm",
+  sm: "min-h-9 px-3.5 text-sm",
+  md: "min-h-11 px-5 text-sm",
   lg: "min-h-12 px-6 text-base w-full sm:w-auto",
 };
 
@@ -99,7 +106,10 @@ export function Card({
       // The polymorphic `as` prop makes the element type dynamic; the ref is
       // always attached to the rendered element regardless of which tag it is.
       ref={ref as never}
-      className={cx("surface rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]", className)}
+      className={cx(
+        "surface hairline rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]",
+        className,
+      )}
     >
       {children}
     </As>
@@ -118,9 +128,9 @@ export function SectionHeading({
   id?: string;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h2 id={id} className="text-lg font-semibold sm:text-xl">
+        <h2 id={id} className="text-xl font-semibold sm:text-[26px]">
           {title}
         </h2>
         {description && <p className="text-muted mt-1 max-w-2xl text-sm">{description}</p>}
@@ -161,7 +171,7 @@ export function Badge({
     <span
       title={title}
       className={cx(
-        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-[var(--radius-pill)] border px-2.5 py-0.5 text-xs font-medium",
         BADGE_TONE[tone],
         className,
       )}
@@ -196,7 +206,7 @@ export function Alert({
   return (
     <div
       role={tone === "critical" ? "alert" : "status"}
-      className={cx("rounded-[var(--radius-card)] border p-4 text-sm", tones[tone])}
+      className={cx("rounded-[var(--radius-card)] border p-4 text-sm shadow-[var(--shadow-card)]", tones[tone])}
     >
       {title && <p className="font-semibold">{title}</p>}
       {children && <div className={cx("wrap-anywhere", title && "mt-1")}>{children}</div>}
@@ -212,7 +222,7 @@ export function Alert({
 
 /** Skeletons match the final geometry so nothing shifts on load (§11.2). */
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cx("surface-sunken shimmer rounded-md", className)} />;
+  return <div aria-hidden className={cx("surface-sunken shimmer rounded-[10px]", className)} />;
 }
 
 export function EmptyState({
@@ -282,7 +292,9 @@ export function Field({
 }
 
 const CONTROL =
-  "surface min-h-11 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-brand-500";
+  "surface min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 py-2 text-sm outline-none " +
+  "transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] " +
+  "placeholder:text-[var(--text-muted)] focus:border-brand-500 focus:shadow-[0_0_0_4px_var(--ring)]";
 
 export function Input({
   error,
@@ -592,7 +604,13 @@ export function Tabs({
   label: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="scrollbar-slim flex gap-1 overflow-x-auto border-b">
+    // A segmented control rather than an underline: the selected tab is a solid
+    // shape, which survives being scrolled half out of view on a narrow screen.
+    <div
+      role="tablist"
+      aria-label={label}
+      className="surface-sunken scrollbar-slim inline-flex max-w-full gap-1 overflow-x-auto rounded-[var(--radius-pill)] p-1"
+    >
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -601,8 +619,13 @@ export function Tabs({
           aria-selected={active === tab.id}
           onClick={() => onChange(tab.id)}
           className={cx(
-            "min-h-11 whitespace-nowrap border-b-2 px-3 text-sm font-medium",
-            active === tab.id ? "border-brand-600 text-brand-800" : "text-muted border-transparent",
+            "min-h-9 whitespace-nowrap rounded-[var(--radius-pill)] px-4 text-sm font-medium",
+            "transition-[background-color,color,box-shadow] duration-200 ease-[var(--ease-out)]",
+            // The raised pill carries the emphasis, so the label just takes the
+            // normal text colour — correct in both themes without an override.
+            active === tab.id
+              ? "surface text-[var(--text)] shadow-[var(--shadow-card)]"
+              : "text-muted hover:text-[var(--text)]",
           )}
         >
           {tab.label}
@@ -629,7 +652,7 @@ export function Rating({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="bg-brand-700 rounded-md px-2 py-1 text-sm font-bold text-white">
+      <span className="bg-brand-700 tabular rounded-[10px] px-2 py-1 text-sm font-bold text-white">
         {score.toFixed(1)}
       </span>
       <span className="text-muted text-xs">

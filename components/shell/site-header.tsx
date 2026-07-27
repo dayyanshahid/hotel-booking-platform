@@ -37,18 +37,23 @@ export function SiteHeader() {
   }
 
   return (
-    <header className="surface sticky top-0 z-40 border-b">
+    // Translucent so page content tints the bar as it scrolls beneath, which
+    // reads as one continuous surface instead of a lid sitting on top.
+    <header className="surface-blur hairline sticky top-0 z-40 border-b">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
         <Link href={href(locale, "/")} className="flex items-center gap-2 font-bold">
           {/* Wordmark: the Arabic initial of the brand, drawn as a monogram. */}
-          <span aria-hidden className="bg-brand-600 grid size-8 place-items-center rounded-lg text-white">
+          <span
+            aria-hidden
+            className="from-brand-500 to-brand-700 grid size-9 place-items-center rounded-[11px] bg-gradient-to-br text-white shadow-[0_2px_6px_-1px_rgb(19_83_88/0.5)]"
+          >
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M5 8v5a5 5 0 0 0 10 0V8" />
               <circle cx="10" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
               <path d="M18 8v11" opacity="0.55" />
             </svg>
           </span>
-          <span className="text-base">{t("brand.name")}</span>
+          <span className="text-[17px] tracking-[-0.02em]">{t("brand.name")}</span>
         </Link>
 
         <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">
@@ -60,8 +65,9 @@ export function SiteHeader() {
                 key={link.href}
                 href={target}
                 className={cx(
-                  "inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium",
-                  active ? "surface-sunken" : "hover:surface-sunken",
+                  "inline-flex min-h-10 items-center gap-2 rounded-[var(--radius-pill)] px-3.5 text-sm font-medium",
+                  "transition-colors duration-200 ease-[var(--ease-out)]",
+                  active ? "surface-sunken text-[var(--text)]" : "text-muted hover:surface-sunken hover:text-[var(--text)]",
                 )}
               >
                 {link.label}

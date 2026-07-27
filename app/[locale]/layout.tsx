@@ -15,12 +15,19 @@ import { LOCALES, LOCALE_META, createTranslator, isLocale } from "@/lib/i18n";
 import type { Locale } from "@/lib/types";
 
 /**
- * System font stacks per script. Arabic gets a stack that renders Kufi/Naskh
- * faces correctly on the target platforms without a network font dependency.
+ * Font stacks per script, each led by a self-hosted variable face declared in
+ * `globals.css`. The system stack behind it is what renders during `swap` and
+ * if the file fails, so it stays script-appropriate rather than generic.
  */
 const FONT_STACK: Record<Locale, string> = {
-  en: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  ar: '"SF Arabic", "Geeza Pro", "Noto Kufi Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif',
+  en: '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  ar: '"Noto Sans Arabic Variable", "SF Arabic", "Geeza Pro", "Noto Kufi Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, system-ui, sans-serif',
+};
+
+/** The face needed for first paint, fetched in parallel with the stylesheet. */
+const PRELOAD_FONT: Record<Locale, string> = {
+  en: "/fonts/inter-latin.woff2",
+  ar: "/fonts/noto-sans-arabic.woff2",
 };
 
 export function generateStaticParams() {
@@ -64,13 +71,22 @@ export default async function LocaleLayout({
 
   return (
     <html lang={meta.htmlLang} dir={meta.dir} data-theme="light" suppressHydrationWarning>
+      <head>
+        <link
+          rel="preload"
+          href={PRELOAD_FONT[typed]}
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-dvh antialiased" style={{ fontFamily: FONT_STACK[typed] }}>
         <AppProvider locale={typed}>
           <a href="#main" className="skip-link">
             {t("nav.skipToContent")}
           </a>
           <SiteHeader />
-          <main id="main" className="mx-auto min-h-[60vh] w-full max-w-7xl px-4 pb-8 pt-4">
+          <main id="main" className="mx-auto min-h-[60vh] w-full max-w-7xl px-4 pb-10 pt-6 sm:pt-8">
             {children}
           </main>
           <SiteFooter />

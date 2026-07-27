@@ -61,8 +61,8 @@ export function HotelCard({
   const href = hotelHref(locale, card.slug, intent);
 
   return (
-    <Card as="li" className="overflow-hidden" ref={cardRef}>
-      <div className="grid sm:grid-cols-[minmax(0,240px)_1fr]">
+    <Card as="li" className="card-interactive overflow-hidden" ref={cardRef}>
+      <div className="grid sm:grid-cols-[minmax(0,260px)_1fr]">
         <Link
           href={href}
           className="block aspect-[4/3] sm:aspect-auto sm:h-full sm:min-h-[190px]"
@@ -80,7 +80,7 @@ export function HotelCard({
           />
         </Link>
 
-        <div className="flex flex-col gap-3 p-4">
+        <div className="flex flex-col gap-3 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -95,7 +95,7 @@ export function HotelCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="mt-0.5 text-base font-semibold wrap-anywhere">
+              <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.015em] wrap-anywhere">
                 <Link href={href} className="hover:underline">
                   {card.name}
                 </Link>
@@ -190,7 +190,7 @@ export function HotelCard({
             ))}
           </div>
 
-          <div className="mt-auto flex flex-wrap items-end justify-between gap-3 border-t pt-3">
+          <div className="hairline mt-auto flex flex-wrap items-end justify-between gap-3 border-t pt-4">
             <div className="min-w-0 text-sm">
               <p className="font-medium wrap-anywhere">{card.offerSummary.roomSummary}</p>
               <p className="text-muted">{card.offerSummary.boardSummary}</p>
@@ -251,7 +251,7 @@ export function HotelCard({
         <ul className="mt-3 list-disc space-y-1 ps-5 text-sm">
           {recommendationCriteria?.map((criterion) => <li key={criterion}>{criterion}</li>)}
         </ul>
-        <div className="surface-sunken mt-4 rounded-lg p-3 text-sm">
+        <div className="surface-sunken mt-4 rounded-[var(--radius-control)] p-3 text-sm">
           <p className="font-medium">{card.name}</p>
           <ul className="text-muted mt-1 space-y-0.5 text-xs">
             <li>

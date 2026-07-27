@@ -26,7 +26,7 @@ export function PriceBlock({
   const [open, setOpen] = useState(false);
   const payAtProperty = price.payAtProperty.reduce((s, c) => s + c.amount, 0);
 
-  const totalClass = { sm: "text-base", md: "text-xl", lg: "text-2xl" }[size];
+  const totalClass = { sm: "text-base", md: "text-[22px]", lg: "text-3xl" }[size];
 
   return (
     <div className={cx("flex flex-col", align === "end" ? "sm:items-end sm:text-end" : "items-start")}>
@@ -36,7 +36,8 @@ export function PriceBlock({
           {price.discountLabel && <Badge tone="sand">{price.discountLabel}</Badge>}
         </span>
       )}
-      <p className={cx("font-bold wrap-anywhere", totalClass)}>
+      {/* Tabular so totals line up down a results list and inside the breakdown. */}
+      <p className={cx("tabular font-bold tracking-[-0.02em] wrap-anywhere", totalClass)}>
         <span className="sr-only">{t("a11y.priceLabel")}: </span>
         {formatMoney(price.total, price.currency, locale)}
       </p>

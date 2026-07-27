@@ -85,8 +85,12 @@ export function SearchBar({
     <form
       onSubmit={submit}
       className={cx(
-        "surface rounded-[var(--radius-card)] border p-3 shadow-[var(--shadow-card)]",
-        variant === "hero" ? "sm:p-4" : "p-2 sm:p-3",
+        "surface hairline rounded-[var(--radius-sheet)] border p-3",
+        // The hero bar floats over a photograph, so it needs a real drop
+        // shadow; the compact bar sits in the page flow and takes the card one.
+        variant === "hero"
+          ? "shadow-[var(--shadow-float)] sm:p-4"
+          : "p-2 shadow-[var(--shadow-card)] sm:p-3",
       )}
       role="search"
       aria-label={t("common.searchHotels")}
