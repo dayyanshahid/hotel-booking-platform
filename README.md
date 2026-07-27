@@ -268,6 +268,12 @@ These are scope decisions, not oversights:
   flags only, per §4.3 and §9.2 — they need underwriting and contractual wording first.
 - **Professional translation and legal review** are separate effort (§16.3). Arabic content
   here is written, not machine-translated, but has not been through legal review.
+- **The deployed demo does not persist bookings across server instances.** The store is
+  process-local by design (§16.3 puts the backend outside this build), and serverless runs
+  many instances, so a booking may not be visible to a later request. Search, hotel pages,
+  checkout, recheck, payment and confirmation all work; retrieving a booking minutes later
+  may not. A production BFF owns a database here. Locally, `.data/bookings.json` makes the
+  whole post-booking journey durable.
 - **The twelve discovery decisions (D-01…D-12)** are open. The build assumes B2C, guest
   checkout allowed, SAR default with multi-currency display, and merchant-of-record
   behaviour at checkout; all are isolated behind the BFF and the pricing module.

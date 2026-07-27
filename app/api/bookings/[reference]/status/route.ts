@@ -1,3 +1,4 @@
+import { notFoundOrDemoState } from "@/lib/server/api";
 import { fail, localeFrom, ok } from "@/lib/server/api";
 import {
   getBooking,
@@ -19,7 +20,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
   const { reference } = await ctx.params;
   const locale = localeFrom(req);
   const booking = await getBooking(reference);
-  if (!booking) return fail("validation", "error.notFound", locale, { status: 404 });
+  if (!booking) return notFoundOrDemoState(locale);
 
   if (booking.status === "pending" && booking.reconciliation) {
     const attempts = booking.reconciliation.attempts + 1;

@@ -478,6 +478,7 @@ const en: Dict = {
   "error.policyRestriction": "This action is not permitted for this booking.",
   "error.correlation": "Reference for support",
   "error.notFound": "We could not find that page.",
+  "error.demoStateLost": "This demonstration environment keeps bookings in memory on a single server instance, so a booking made a few minutes ago may not be visible here. A production deployment stores bookings in a database. Make a new booking to continue the walkthrough.",
   "error.notFoundBody": "The link may be old or the property may no longer be listed.",
   "error.generic": "Something did not work as expected.",
 
@@ -980,6 +981,7 @@ const ar: Dict = {
   "error.policyRestriction": "هذا الإجراء غير مسموح لهذا الحجز.",
   "error.correlation": "مرجع للدعم",
   "error.notFound": "تعذّر العثور على الصفحة.",
+  "error.demoStateLost": "تحتفظ بيئة العرض هذه بالحجوزات في ذاكرة خادم واحد، لذا قد لا يظهر هنا حجز أُنشئ قبل قليل. أما النشر الفعلي فيخزّن الحجوزات في قاعدة بيانات. أنشئ حجزًا جديدًا لمتابعة التجربة.",
   "error.notFoundBody": "قد يكون الرابط قديمًا أو لم يعد العقار مدرجًا.",
   "error.generic": "حدث خطأ غير متوقع.",
 

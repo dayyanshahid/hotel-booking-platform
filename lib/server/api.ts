@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ApiError, ErrorCategory, Locale } from "../types";
 import { createTranslator, isLocale } from "../i18n";
+import { isServerless } from "./runtime";
 
 /**
  * Platform-standard envelope (§9.4): every endpoint returns an error category,
@@ -61,6 +62,18 @@ export function fail(
     fields: options.fields,
   };
   return NextResponse.json({ ok: false, error }, { status: options.status ?? 400 });
+}
+
+/**
+ * A booking that cannot be found.
+ *
+ * On a serverless deployment the demo store is process-local, so a booking made
+ * on another instance genuinely is not visible here. Saying that plainly beats a
+ * bare "not found", which would read as data loss (§11.3: explain uncertainty).
+ */
+export function notFoundOrDemoState(locale: Locale) {
+  const key = isServerless ? "error.demoStateLost" : "error.notFound";
+  return fail("validation", key, locale, { status: 404, action: "editInput" });
 }
 
 export async function readJson<T>(req: Request): Promise<T | null> {

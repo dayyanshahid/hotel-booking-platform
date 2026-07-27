@@ -1,4 +1,4 @@
-import { fail, localeFrom, ok } from "@/lib/server/api";
+import { fail, localeFrom, notFoundOrDemoState, ok } from "@/lib/server/api";
 import { getBooking } from "@/lib/server/store";
 
 /**
@@ -15,7 +15,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
   const email = (url.searchParams.get("email") ?? req.headers.get("x-account-email") ?? "").trim().toLowerCase();
 
   const booking = await getBooking(reference);
-  if (!booking) return fail("validation", "error.notFound", locale, { status: 404 });
+  if (!booking) return notFoundOrDemoState(locale);
 
   if (!email || booking.contact.email !== email) {
     return fail("accountSecurity", "error.accountSecurity", locale, {

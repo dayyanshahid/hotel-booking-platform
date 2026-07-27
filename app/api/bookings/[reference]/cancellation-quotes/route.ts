@@ -1,3 +1,4 @@
+import { notFoundOrDemoState } from "@/lib/server/api";
 import { fail, localeFrom, ok } from "@/lib/server/api";
 import { getBooking, getSupplierReference, saveQuote } from "@/lib/server/store";
 import { scenarioFromRequest } from "@/lib/server/scenarios";
@@ -18,7 +19,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
   const locale = localeFrom(req);
   const scenario = scenarioFromRequest(req);
   const booking = await getBooking(reference);
-  if (!booking) return fail("validation", "error.notFound", locale, { status: 404 });
+  if (!booking) return notFoundOrDemoState(locale);
 
   if (!booking.capabilities.cancelAllowed || booking.status === "cancelled") {
     return fail("policyRestriction", "error.policyRestriction", locale, { status: 409, action: "contactSupport" });
