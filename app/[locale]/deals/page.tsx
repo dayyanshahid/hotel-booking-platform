@@ -5,7 +5,7 @@ import { collectionPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
-import { createTranslator, isLocale } from "@/lib/i18n";
+import { countLabel, createTranslator, isLocale } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
@@ -25,7 +25,11 @@ export default async function DealsPage({ params }: { params: Promise<{ locale: 
     <div className="space-y-6">
       <h1 className="text-2xl font-bold sm:text-3xl">{t("home.collections")}</h1>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {COLLECTIONS.map((collection) => (
+        {COLLECTIONS.map((collection) => {
+          const collectionCount = HOTEL_SEEDS.filter((h) =>
+            h.tags.includes(collection.tag),
+          ).length;
+          return (
           <li key={collection.slug}>
             <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
               <Card className="hover:surface-sunken h-full overflow-hidden">
@@ -42,13 +46,14 @@ export default async function DealsPage({ params }: { params: Promise<{ locale: 
                   <p className="font-semibold">{localized(collection.title, locale)}</p>
                   <p className="text-muted mt-1 text-sm">{localized(collection.body, locale)}</p>
                   <Badge tone="brand" className="mt-3">
-                    {HOTEL_SEEDS.filter((h) => h.tags.includes(collection.tag)).length} {t("results.count")}
+                    {collectionCount} {countLabel(t, collectionCount)}
                   </Badge>
                 </div>
               </Card>
             </Link>
           </li>
-        ))}
+          );
+        })}
       </ul>
       <SectionHeading title={t("cms.legal")} description={t("value.total.body")} />
     </div>

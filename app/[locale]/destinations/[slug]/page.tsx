@@ -8,7 +8,7 @@ import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
 import { localized } from "@/lib/data/catalog";
 import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
@@ -124,13 +124,20 @@ export default async function DestinationPage({
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {destination.neighborhoods.map((hood) => (
             <li key={hood.key}>
+              {(() => {
+                const hoodCount = hotels.filter(
+                  (h) => h.neighborhood === localized(hood.name, locale),
+                ).length;
+                return (
               <Card className="h-full p-4">
                 <p className="font-semibold">{localized(hood.name, locale)}</p>
                 <p className="text-muted mt-1 text-sm">{localized(hood.blurb, locale)}</p>
                 <p className="text-brand-700 mt-2 text-xs">
-                  {hotels.filter((h) => h.neighborhood === localized(hood.name, locale)).length} {t("results.count")}
+                  {hoodCount} {countLabel(t, hoodCount)}
                 </p>
               </Card>
+                );
+              })()}
             </li>
           ))}
         </ul>

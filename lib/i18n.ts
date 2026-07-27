@@ -105,6 +105,9 @@ const en: Dict = {
   "region.southAmerica": "South America",
   "region.africa": "Africa",
   "region.oceania": "Oceania",
+  "home.browseByType": "Browse by property type",
+  "home.exploreWorld": "Explore the world",
+  "home.regionStats": "{cities} cities · {countries} countries",
   "home.browseAll": "Browse every destination",
   "home.destinations": "Popular destinations",
   "home.aiPrompt": "Describe your trip",
@@ -204,6 +207,7 @@ const en: Dict = {
   "results.whyRecommended": "Why is this recommended?",
   "results.activeFilters": "Active filters",
   "results.count": "properties",
+  "results.countOne": "property",
   "results.loadMore": "Show more hotels",
   "results.newOptions": "new options arrived",
   "results.merge": "Add to list",
@@ -694,6 +698,9 @@ const ar: Dict = {
   "region.southAmerica": "أمريكا الجنوبية",
   "region.africa": "أفريقيا",
   "region.oceania": "أوقيانوسيا",
+  "home.browseByType": "تصفّح حسب نوع العقار",
+  "home.exploreWorld": "استكشف العالم",
+  "home.regionStats": "{cities} مدينة · {countries} دولة",
   "home.browseAll": "تصفّح كل الوجهات",
   "home.destinations": "وجهات مميزة",
   "home.aiPrompt": "صف رحلتك",
@@ -762,7 +769,8 @@ const ar: Dict = {
   "results.sortBestValue": "أفضل قيمة",
   "results.whyRecommended": "لماذا هذا موصى به؟",
   "results.activeFilters": "عوامل التصفية النشطة",
-  "results.count": "عقار",
+  "results.count": "عقارات",
+  "results.countOne": "عقار",
   "results.loadMore": "عرض فنادق أخرى",
   "results.newOptions": "خيارات جديدة وصلت",
   "results.merge": "أضف إلى القائمة",
@@ -1147,4 +1155,13 @@ export function createTranslator(locale: Locale): TranslateFn {
 
 export function isLocale(value: string | undefined): value is Locale {
   return value === "en" || value === "ar";
+}
+
+/**
+ * "1 properties" is not a sentence, and the count is rendered in nine places.
+ * Arabic needs its own singular too, so this picks the form rather than each
+ * call site remembering to.
+ */
+export function countLabel(t: (key: never) => string, n: number): string {
+  return n === 1 ? t("results.countOne" as never) : t("results.count" as never);
 }

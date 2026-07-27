@@ -73,6 +73,36 @@ export function searchHref(locale: Locale, intent: SearchIntent): string {
   return `${href(locale, "/search")}?${searchParamsFromIntent(intent).toString()}`;
 }
 
+/**
+ * The one filter that is addressable in the URL.
+ *
+ * Property type is how people arrive from a "browse by type" tile, so a link
+ * that says "Hostels" has to actually produce hostels. The rest of the filter
+ * state stays client-side; making all of it addressable is worth doing, but a
+ * link that silently does nothing is worse than no link, and this is the one
+ * that gets linked.
+ */
+export const PROPERTY_TYPE_PARAM = "propertyType";
+
+export function typedSearchHref(
+  locale: Locale,
+  intent: SearchIntent,
+  propertyType: string,
+): string {
+  const params = searchParamsFromIntent(intent);
+  params.set(PROPERTY_TYPE_PARAM, propertyType);
+  return `${href(locale, "/search")}?${params.toString()}`;
+}
+
+/** Reads the addressable property-type filter back out of a query. */
+export function propertyTypeFromSearchParams(
+  query: Record<string, string | string[] | undefined>,
+): string | undefined {
+  const raw = query[PROPERTY_TYPE_PARAM];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value?.trim() || undefined;
+}
+
 export function hotelHref(locale: Locale, slug: string, intent?: SearchIntent | null): string {
   const base = href(locale, `/hotel/${slug}`);
   return intent ? `${base}?${searchParamsFromIntent(intent).toString()}` : base;

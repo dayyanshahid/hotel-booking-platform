@@ -10,7 +10,7 @@ import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { destinationFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
 import { formatMoney } from "@/lib/format";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
@@ -156,7 +156,7 @@ export default async function CountryPage({
                       <p className="font-semibold tracking-[-0.01em]">{localized(city.name, locale)}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge tone="neutral">
-                          {count} {t("results.count")}
+                          {count} {countLabel(t, count)}
                         </Badge>
                         {from && (
                           <span className="tabular text-xs font-semibold">

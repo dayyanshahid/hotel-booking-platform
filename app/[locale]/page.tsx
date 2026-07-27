@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import { HomeView, type FeaturedStay, type PriceProof } from "@/components/pages/home-view";
-import { featuredDestinations, getDestination } from "@/lib/data/destinations";
-import { COLLECTIONS, localized } from "@/lib/data/catalog";
-import { HOTEL_SEEDS, buildHotel, getHotelSeed } from "@/lib/data/hotels";
+import {
+  destinationsInRegion,
+  featuredDestinations,
+  getDestination,
+} from "@/lib/data/destinations";
+import { REGIONS } from "@/lib/data/geo/countries";
+import { COLLECTIONS, PROPERTY_TYPES, PROPERTY_TYPE_KEYS, localized } from "@/lib/data/catalog";
+import { HOTEL_SEEDS, buildHotel, getHotelSeed, hotelsInDestination } from "@/lib/data/hotels";
 import { destinationFromPrice, hotelFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
 import { computePrice } from "@/lib/server/pricing";
 import { addDays, todayIso } from "@/lib/format";
@@ -23,16 +28,8 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
  */
 const BROWSE_CURRENCY: CurrencyCode = "USD";
 
-/**
- * "Stays to start with" — four continents on purpose. The home page of a global
- * platform should not open with four hotels from one region.
- */
-const FEATURED_SLUGS = [
-  "sultanahmet-old-city-hotel",
-  "paris-grand",
-  "tokyo-boutique",
-  "corniche-pearl-jeddah",
-] as const;
+/** How many stays the "guests love" rail shows. */
+const LOVED_COUNT = 8;
 
 /** The stay the price-transparency example is worked through. */
 const PROOF_SLUG = "olaya-grand-riyadh";
@@ -112,26 +109,68 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     count: HOTEL_SEEDS.filter((h) => h.tags.includes(c.tag)).length,
   }));
 
-  const featured: FeaturedStay[] = FEATURED_SLUGS.flatMap((slug) => {
-    const seed = getHotelSeed(slug);
-    if (!seed) return [];
-    const hotel = buildHotel(seed, locale);
-    const hero = hotel.images.find((i) => i.category === "exterior") ?? hotel.images[0];
+  /*
+   * Browse by property type. A traveller looking for a hostel or a villa is
+   * looking for a different product, not a cheaper hotel, and the counts come
+   * from the catalogue rather than being written down — a type with nothing in
+   * it does not appear at all.
+   */
+  const typeCounts = new Map<string, number>();
+  for (const seed of HOTEL_SEEDS) {
+    typeCounts.set(seed.propertyType, (typeCounts.get(seed.propertyType) ?? 0) + 1);
+  }
+  const propertyTypes = PROPERTY_TYPE_KEYS.flatMap((key) => {
+    const count = typeCounts.get(key) ?? 0;
+    if (!count) return [];
+    return [{ key, label: localized(PROPERTY_TYPES[key], locale), count }];
+  }).sort((a, b) => b.count - a.count);
+
+  /* Every region that has something to book, with its own headline city. */
+  const regions = REGIONS.flatMap((region) => {
+    const inRegion = destinationsInRegion(region);
+    if (!inRegion.length) return [];
+    const lead = [...inRegion].sort((a, b) => a.tier - b.tier)[0];
+    const countries = new Set(inRegion.map((d) => d.countryCode));
     return [
       {
+        key: region,
+        label: t(`region.${region}` as never),
+        citySlug: lead.slug,
+        cities: inRegion.length,
+        countries: countries.size,
+      },
+    ];
+  });
+
+  /*
+   * Stays guests love — the best-reviewed property in each headline city, so
+   * the rail is real inventory a visitor can click rather than a hand-kept list
+   * that goes stale the moment the catalogue changes.
+   */
+  const loved: FeaturedStay[] = featuredDestinations(LOVED_COUNT)
+    .flatMap((destination) => {
+      const best = hotelsInDestination(destination.id)
+        .filter((seed) => seed.review)
+        .sort((a, b) => (b.review?.score ?? 0) - (a.review?.score ?? 0))[0];
+      return best ? [best] : [];
+    })
+    .map((seed) => {
+      const hotel = buildHotel(seed, locale);
+      const hero = hotel.images.find((i) => i.category === "exterior") ?? hotel.images[0];
+      return {
         slug: hotel.slug,
         name: hotel.name,
         city: hotel.address.city,
         neighborhood: hotel.address.neighborhood,
         category: hotel.category,
         score: hotel.review?.score,
+        scale: hotel.review?.scale ?? 10,
         image: hero?.url ?? "",
         imageSrcSet: hero?.srcSet,
         imageFallback: hero?.fallbackUrl,
         fromPrice: hotelFromPrice(seed, BROWSE_CURRENCY, locale),
-      },
-    ];
-  });
+      };
+    });
 
   // The accordion renders these same five answers, so the structured data can
   // never describe content the page does not show.
@@ -152,7 +191,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         locale={locale}
         destinations={destinations}
         collections={collections}
-        featured={featured}
+        featured={loved}
+        propertyTypes={propertyTypes}
+        regions={regions}
         proof={buildProof(locale)}
         fromPriceBasis={FROM_PRICE_BASIS[locale]}
         totalProperties={HOTEL_SEEDS.length}

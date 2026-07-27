@@ -10,6 +10,7 @@ import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/comme
 import { Alert, Badge, Button, Card, Drawer, EmptyState, SectionHeading, cx } from "@/components/ui";
 import { NoResultsArt } from "@/components/ui/illustrations";
 import { formatDate, formatMoney, guestCount } from "@/lib/format";
+import { countLabel } from "@/lib/i18n";
 import { href, searchHref } from "@/lib/nav";
 import type { ApiError, Locale, SearchFilters, SearchIntent, SearchResponse, SortKey } from "@/lib/types";
 
@@ -23,17 +24,24 @@ import type { ApiError, Locale, SearchFilters, SearchIntent, SearchResponse, Sor
 export function SearchResultsView({
   locale,
   initialIntent,
+  initialPropertyType,
   recommendationCriteria,
 }: {
   locale: Locale;
   initialIntent: SearchIntent;
+  /** Localized property-type label from the URL, when arriving from a type tile. */
+  initialPropertyType?: string;
   recommendationCriteria: string[];
 }) {
   const { t, currency, track, announce, compare, toast } = useApp();
   const api = useApi();
 
   const [intent, setIntent] = useState<SearchIntent>({ ...initialIntent, currency });
-  const [filters, setFilters] = useState<SearchFilters>({});
+  // Seeded from the URL so a "browse by type" link lands on real results
+  // rather than on an unfiltered list that ignores what was clicked.
+  const [filters, setFilters] = useState<SearchFilters>(
+    initialPropertyType ? { propertyTypes: [initialPropertyType] } : {},
+  );
   const [sort, setSort] = useState<SortKey>("recommended");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<SearchResponse | null>(null);
@@ -117,7 +125,7 @@ export function SearchResultsView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold sm:text-xl wrap-anywhere">
-            {data ? `${data.totalCount} ${t("results.count")}` : t("results.loading")}{" "}
+            {data ? `${data.totalCount} ${countLabel(t, data.totalCount)}` : t("results.loading")}{" "}
             {intent.destinationDisplay && `· ${intent.destinationDisplay}`}
           </h1>
           <p className="text-muted text-sm">
@@ -363,7 +371,7 @@ function ZeroResults({
                   <Card className="hover:surface-sunken p-3">
                     <p className="text-sm font-medium">{destination.label}</p>
                     <p className="text-muted text-xs">
-                      {destination.propertyCount} {t("results.count")}
+                      {destination.propertyCount} {countLabel(t, destination.propertyCount ?? 0)}
                     </p>
                   </Card>
                 </Link>

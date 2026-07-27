@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SearchResultsView } from "@/components/pages/search-results-view";
 import { createTranslator, isLocale } from "@/lib/i18n";
-import { intentFromSearchParams } from "@/lib/nav";
+import { intentFromSearchParams, propertyTypeFromSearchParams } from "@/lib/nav";
 import { RECOMMENDATION_CRITERIA } from "@/lib/server/search";
 import type { Locale } from "@/lib/types";
 
@@ -32,6 +32,7 @@ export default async function SearchPage({
 
   return (
     <SearchResultsView
+      initialPropertyType={propertyTypeFromSearchParams(query)}
       locale={locale}
       initialIntent={intent}
       recommendationCriteria={RECOMMENDATION_CRITERIA[locale]}

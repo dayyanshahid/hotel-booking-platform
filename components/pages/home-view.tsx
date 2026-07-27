@@ -9,7 +9,8 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { collectionPhoto, destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
-import { href, searchHref } from "@/lib/nav";
+import { countLabel } from "@/lib/i18n";
+import { href, searchHref, typedSearchHref } from "@/lib/nav";
 import type { CurrencyCode, Locale, SearchIntent } from "@/lib/types";
 
 interface DestinationSummary {
@@ -30,6 +31,7 @@ export interface FeaturedStay {
   neighborhood: string;
   category: number;
   score?: number;
+  scale?: number;
   image: string;
   imageSrcSet?: string;
   imageFallback?: string;
@@ -48,12 +50,59 @@ export interface PriceProof {
   payAtProperty: { label: string; amount: number }[];
 }
 
-/** F-010 — hero search, collections, personalised recall and value messaging. */
+export interface PropertyTypeTile {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface RegionTile {
+  key: string;
+  label: string;
+  /** A headline city in the region, used for the tile's photograph. */
+  citySlug: string;
+  cities: number;
+  countries: number;
+}
+
+/**
+ * Which curated frame stands in for each property type. Reuses the collection
+ * photographs, which were reviewed one by one, rather than adding unvetted
+ * imagery for ten new tiles.
+ */
+const TYPE_PHOTO_TAG: Record<string, string> = {
+  hotel: "city",
+  resort: "beach",
+  apartment: "family",
+  boutique: "luxury",
+  serviced: "business",
+  hostel: "value",
+  guesthouse: "value",
+  bnb: "family",
+  villa: "beach",
+  aparthotel: "family",
+};
+
+/**
+ * F-010 — the home page.
+ *
+ * Built as a way in to the catalogue, not as an argument for it. Somebody
+ * arriving here either knows where they are going, in which case the only thing
+ * that matters is the search form, or they do not, in which case they want to
+ * see places and stays — not read claims about pricing policy.
+ *
+ * So the order is: search, then real inventory (destinations, property types,
+ * regions, stays), and the price-transparency argument sits near the bottom
+ * where it belongs — it is what makes the product different, but it is not what
+ * makes someone book tonight.
+ */
 export function HomeView({
   locale,
   destinations,
   collections,
   featured,
+  propertyTypes,
+  regions,
   proof,
   fromPriceBasis,
   totalProperties,
@@ -62,12 +111,32 @@ export function HomeView({
   destinations: DestinationSummary[];
   collections: { slug: string; title: string; body: string; tag: string; count: number }[];
   featured: FeaturedStay[];
+  propertyTypes: PropertyTypeTile[];
+  regions: RegionTile[];
   proof: PriceProof;
   /** The disclosure that must accompany every indicative price on the page. */
   fromPriceBasis: string;
   totalProperties: number;
 }) {
   const { t, recent, saved, currency } = useApp();
+
+  /*
+   * A property-type tile needs somewhere to search. It uses the first headline
+   * destination — a type filter with no destination has nothing to run against,
+   * and sending someone to an empty results page is worse than sending them to
+   * a real one they can re-search from.
+   */
+  const typeIntent: SearchIntent = {
+    destinationId: destinations[0]?.id ?? "",
+    destinationDisplay: destinations[0]?.name ?? "",
+    destinationType: "city",
+    checkIn: "",
+    checkOut: "",
+    flexibility: "exact",
+    rooms: [{ adults: 2, childrenAges: [] }],
+    locale,
+    currency,
+  };
 
   return (
     <div className="space-y-10">
@@ -112,6 +181,292 @@ export function HomeView({
         </div>
         <AiPrompt />
       </div>
+
+      {recent.length > 0 && (
+        <section aria-labelledby="recent-heading">
+          <SectionHeading id="recent-heading" title={t("home.recent")} />
+          <ul className="scrollbar-slim flex gap-3 overflow-x-auto pb-2">
+            {recent.map((entry) => (
+              <li key={entry.id} className="min-w-[240px]">
+                <Link href={searchHref(locale, entry.intent)}>
+                  <Card className="card-interactive h-full p-4">
+                    <p className="font-medium">{entry.intent.destinationDisplay}</p>
+                    <p className="text-muted mt-1 text-xs">
+                      {entry.intent.checkIn} → {entry.intent.checkOut}
+                    </p>
+                    <p className="text-muted text-xs">
+                      {entry.intent.rooms.length} {t("common.rooms")} ·{" "}
+                      {entry.intent.rooms.reduce((s, r) => s + r.adults + r.childrenAges.length, 0)}{" "}
+                      {t("common.guests")}
+                    </p>
+                  </Card>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {saved.length > 0 && (
+        <section aria-labelledby="saved-heading">
+          <SectionHeading
+            id="saved-heading"
+            title={t("home.saved")}
+            action={
+              <Link href={href(locale, "/saved")}>
+                <Button variant="secondary" size="sm">
+                  {t("common.showMore")}
+                </Button>
+              </Link>
+            }
+          />
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {saved.slice(0, 4).map((hotel) => (
+              <li key={hotel.slug}>
+                <Link href={href(locale, `/hotel/${hotel.slug}`)}>
+                  <Card className="h-full overflow-hidden">
+                    <Photo src={hotel.image} alt={hotel.name} ratio="16/10" fallbackLabel={t("hotel.imageFallback")} />
+                    <div className="p-3">
+                      <p className="truncate text-sm font-semibold">{hotel.name}</p>
+                      <p className="text-muted text-xs">{hotel.city}</p>
+                      {hotel.total && (
+                        <p className="mt-1 text-sm font-bold">
+                          {formatMoney(hotel.total, hotel.currency ?? currency, locale)}
+                        </p>
+                      )}
+                    </div>
+                  </Card>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/*
+        Headline destinations, dealt across regions — the catalogue is far too
+        large to list here, and a home page that tried would be a directory. The
+        heading links through to the full index. The whole card is the link, so
+        the caption does not need a button competing with it.
+      */}
+      <section aria-labelledby="explore-heading">
+        <SectionHeading
+          id="explore-heading"
+          title={t("home.destinations")}
+          action={
+            <Link href={href(locale, "/destinations")}>
+              <Button variant="secondary" size="sm">
+                {t("home.browseAll")}
+              </Button>
+            </Link>
+          }
+        />
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {destinations.map((destination) => (
+            <li key={destination.id}>
+              <Link href={href(locale, `/destinations/${destination.slug}`)} className="block h-full">
+                <Card className="card-interactive relative h-full overflow-hidden">
+                  {/* Ordinal 1, not 0: index 0 is the frame the hero above already uses. */}
+                  <Photo
+                    src={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).src}
+                    srcSet={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).srcSet}
+                    sizes="(min-width: 1024px) 33vw, 100vw"
+                    fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
+                    alt=""
+                    ratio="16/9"
+                    fallbackLabel={t("hotel.imageFallback")}
+                  />
+                  <div className="p-4">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <p className="font-semibold tracking-[-0.01em]">{destination.name}</p>
+                      <p className="text-muted text-xs">{destination.country}</p>
+                    </div>
+                    <p className="text-muted mt-1 line-clamp-2 text-sm leading-relaxed">{destination.blurb}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Badge tone="neutral">
+                        {destination.propertyCount} {countLabel(t, destination.propertyCount)}
+                      </Badge>
+                      {destination.fromPrice && (
+                        <span className="tabular text-xs font-semibold">
+                          {t("home.fromPerNight", {
+                            amount: formatMoney(
+                              destination.fromPrice.amount,
+                              destination.fromPrice.currency,
+                              locale,
+                            ),
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/*
+        Browse by property type. Someone after a hostel in Lisbon or a villa in
+        Bali wants a different product, not a cheaper hotel. Counts come from
+        the catalogue, so a type with nothing in it never appears.
+      */}
+      <section aria-labelledby="types-heading">
+        <SectionHeading id="types-heading" title={t("home.browseByType")} />
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {propertyTypes.map((type) => (
+            <li key={type.key}>
+              <Link href={typedSearchHref(locale, typeIntent, type.label)}>
+                <Card className="card-interactive h-full overflow-hidden">
+                  <Photo
+                    src={collectionPhoto(type.key, TYPE_PHOTO_TAG[type.key] ?? "city", { shape: PHOTO_SHAPE.card }).src}
+                    srcSet={collectionPhoto(type.key, TYPE_PHOTO_TAG[type.key] ?? "city", { shape: PHOTO_SHAPE.card }).srcSet}
+                    sizes="(min-width: 1024px) 20vw, 50vw"
+                    alt=""
+                    ratio="4/3"
+                    fallbackLabel=""
+                  />
+                  <div className="p-3">
+                    <p className="text-sm font-bold">{type.label}</p>
+                    <p className="text-muted text-xs">
+                      {type.count} {countLabel(t, type.count)}
+                    </p>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="featured-heading">
+        <SectionHeading
+          id="featured-heading"
+          title={t("home.featuredTitle")}
+          description={`${t("home.featuredBody")} ${t("home.catalogueSize", { count: totalProperties })}`}
+          action={
+            // Deals is a collections page, not a property list, so the label
+            // promises what it actually opens.
+            <Link href={href(locale, "/deals")}>
+              <Button variant="secondary" size="sm">
+                {t("home.collections")}
+              </Button>
+            </Link>
+          }
+        />
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {featured.map((stay) => (
+            <li key={stay.slug}>
+              <Link href={href(locale, `/hotel/${stay.slug}`)} className="block h-full">
+                <Card className="card-interactive flex h-full flex-col overflow-hidden">
+                  <Photo
+                    src={stay.image}
+                    srcSet={stay.imageSrcSet}
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                    fallbackSrc={stay.imageFallback}
+                    alt={stay.name}
+                    ratio="4/3"
+                    fallbackLabel={t("hotel.imageFallback")}
+                  />
+                  <div className="flex flex-1 flex-col p-4">
+                    <div className="flex items-center gap-2">
+                      <Stars count={stay.category} label={t("a11y.stars", { n: stay.category })} />
+                      {stay.score && (
+                        <span className="text-muted tabular text-xs">{stay.score.toFixed(1)} / 10</span>
+                      )}
+                    </div>
+                    <p className="mt-1 font-semibold tracking-[-0.01em] wrap-anywhere">{stay.name}</p>
+                    <p className="text-muted text-xs wrap-anywhere">
+                      {stay.neighborhood}, {stay.city}
+                    </p>
+                    <p className="tabular mt-auto pt-3 text-sm font-semibold">
+                      {t("home.fromPerNight", {
+                        amount: formatMoney(stay.fromPrice.amount, stay.fromPrice.currency, locale),
+                      })}
+                    </p>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        {/* Every indicative price on this page carries its basis (§8.2). */}
+        <p className="text-muted mt-3 text-xs">{fromPriceBasis}</p>
+      </section>
+
+      {/*
+        The catalogue is far larger than any home page can list, so the last
+        browse step is the whole world: pick a region, then a country, then a
+        city. Counts are real, which is also the honest way to say how big this
+        is without claiming a number nowhere backs up.
+      */}
+      <section aria-labelledby="regions-heading">
+        <SectionHeading
+          id="regions-heading"
+          title={t("home.exploreWorld")}
+          action={
+            <Link href={href(locale, "/destinations")}>
+              <Button variant="secondary" size="sm">
+                {t("home.browseAll")}
+              </Button>
+            </Link>
+          }
+        />
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {regions.map((region) => (
+            <li key={region.key}>
+              <Link href={href(locale, "/destinations")} className="block h-full">
+                <Card className="card-interactive relative h-full overflow-hidden">
+                  <Photo
+                    src={destinationPhoto(region.citySlug, 0, { shape: PHOTO_SHAPE.strip }).src}
+                    srcSet={destinationPhoto(region.citySlug, 0, { shape: PHOTO_SHAPE.strip }).srcSet}
+                    sizes="(min-width: 1024px) 25vw, 100vw"
+                    alt=""
+                    ratio="16/7"
+                    fallbackLabel=""
+                  />
+                  <div className="p-3">
+                    <p className="text-sm font-bold">{region.label}</p>
+                    <p className="text-muted text-xs">
+                      {t("home.regionStats", { cities: region.cities, countries: region.countries })}
+                    </p>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="collections-heading">
+        <SectionHeading id="collections-heading" title={t("home.collections")} />
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {collections.map((collection) => (
+            <li key={collection.slug}>
+              <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
+                <Card className="card-interactive h-full overflow-hidden">
+                  <Photo
+                    src={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).src}
+                    srcSet={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).srcSet}
+                    sizes="(min-width: 1024px) 25vw, 100vw"
+                    fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+                    alt=""
+                    ratio="16/7"
+                    fallbackLabel=""
+                  />
+                  <div className="p-4">
+                    <p className="font-semibold">{collection.title}</p>
+                    <p className="text-muted mt-1 text-sm">{collection.body}</p>
+                    <Badge tone="brand" className="mt-3">
+                      {collection.count} {countLabel(t, collection.count)}
+                    </Badge>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {/*
         The hero makes a claim; this is the claim opened up. One real stay from
@@ -198,152 +553,6 @@ export function HomeView({
         </div>
       </section>
 
-      <section aria-labelledby="featured-heading">
-        <SectionHeading
-          id="featured-heading"
-          title={t("home.featuredTitle")}
-          description={`${t("home.featuredBody")} ${t("home.catalogueSize", { count: totalProperties })}`}
-          action={
-            // Deals is a collections page, not a property list, so the label
-            // promises what it actually opens.
-            <Link href={href(locale, "/deals")}>
-              <Button variant="secondary" size="sm">
-                {t("home.collections")}
-              </Button>
-            </Link>
-          }
-        />
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {featured.map((stay) => (
-            <li key={stay.slug}>
-              <Link href={href(locale, `/hotel/${stay.slug}`)} className="block h-full">
-                <Card className="card-interactive flex h-full flex-col overflow-hidden">
-                  <Photo
-                    src={stay.image}
-                    srcSet={stay.imageSrcSet}
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    fallbackSrc={stay.imageFallback}
-                    alt={stay.name}
-                    ratio="4/3"
-                    fallbackLabel={t("hotel.imageFallback")}
-                  />
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="flex items-center gap-2">
-                      <Stars count={stay.category} label={t("a11y.stars", { n: stay.category })} />
-                      {stay.score && (
-                        <span className="text-muted tabular text-xs">{stay.score.toFixed(1)} / 10</span>
-                      )}
-                    </div>
-                    <p className="mt-1 font-semibold tracking-[-0.01em] wrap-anywhere">{stay.name}</p>
-                    <p className="text-muted text-xs wrap-anywhere">
-                      {stay.neighborhood}, {stay.city}
-                    </p>
-                    <p className="tabular mt-auto pt-3 text-sm font-semibold">
-                      {t("home.fromPerNight", {
-                        amount: formatMoney(stay.fromPrice.amount, stay.fromPrice.currency, locale),
-                      })}
-                    </p>
-                  </div>
-                </Card>
-              </Link>
-            </li>
-          ))}
-        </ul>
-        {/* Every indicative price on this page carries its basis (§8.2). */}
-        <p className="text-muted mt-3 text-xs">{fromPriceBasis}</p>
-      </section>
-
-      {recent.length > 0 && (
-        <section aria-labelledby="recent-heading">
-          <SectionHeading id="recent-heading" title={t("home.recent")} />
-          <ul className="scrollbar-slim flex gap-3 overflow-x-auto pb-2">
-            {recent.map((entry) => (
-              <li key={entry.id} className="min-w-[240px]">
-                <Link href={searchHref(locale, entry.intent)}>
-                  <Card className="card-interactive h-full p-4">
-                    <p className="font-medium">{entry.intent.destinationDisplay}</p>
-                    <p className="text-muted mt-1 text-xs">
-                      {entry.intent.checkIn} → {entry.intent.checkOut}
-                    </p>
-                    <p className="text-muted text-xs">
-                      {entry.intent.rooms.length} {t("common.rooms")} ·{" "}
-                      {entry.intent.rooms.reduce((s, r) => s + r.adults + r.childrenAges.length, 0)}{" "}
-                      {t("common.guests")}
-                    </p>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {saved.length > 0 && (
-        <section aria-labelledby="saved-heading">
-          <SectionHeading
-            id="saved-heading"
-            title={t("home.saved")}
-            action={
-              <Link href={href(locale, "/saved")}>
-                <Button variant="secondary" size="sm">
-                  {t("common.showMore")}
-                </Button>
-              </Link>
-            }
-          />
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {saved.slice(0, 4).map((hotel) => (
-              <li key={hotel.slug}>
-                <Link href={href(locale, `/hotel/${hotel.slug}`)}>
-                  <Card className="h-full overflow-hidden">
-                    <Photo src={hotel.image} alt={hotel.name} ratio="16/10" fallbackLabel={t("hotel.imageFallback")} />
-                    <div className="p-3">
-                      <p className="truncate text-sm font-semibold">{hotel.name}</p>
-                      <p className="text-muted text-xs">{hotel.city}</p>
-                      {hotel.total && (
-                        <p className="mt-1 text-sm font-bold">
-                          {formatMoney(hotel.total, hotel.currency ?? currency, locale)}
-                        </p>
-                      )}
-                    </div>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section aria-labelledby="collections-heading">
-        <SectionHeading id="collections-heading" title={t("home.collections")} />
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {collections.map((collection) => (
-            <li key={collection.slug}>
-              <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
-                <Card className="card-interactive h-full overflow-hidden">
-                  <Photo
-                    src={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).src}
-                    srcSet={collectionPhoto(collection.slug, collection.tag, { shape: PHOTO_SHAPE.strip }).srcSet}
-                    sizes="(min-width: 1024px) 25vw, 100vw"
-                    fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
-                    alt=""
-                    ratio="16/7"
-                    fallbackLabel=""
-                  />
-                  <div className="p-4">
-                    <p className="font-semibold">{collection.title}</p>
-                    <p className="text-muted mt-1 text-sm">{collection.body}</p>
-                    <Badge tone="brand" className="mt-3">
-                      {collection.count} {t("results.count")}
-                    </Badge>
-                  </div>
-                </Card>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
       <section aria-labelledby="value-heading">
         <SectionHeading id="value-heading" title={t("home.valueTitle")} />
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -361,69 +570,6 @@ export function HomeView({
                 <p className="mt-3 font-semibold">{item.title}</p>
                 <p className="text-muted mt-1 text-sm">{item.body}</p>
               </Card>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/*
-        Headline destinations, dealt across regions — the catalogue is far too
-        large to list here, and a home page that tried would be a directory. The
-        heading links through to the full index. The whole card is the link, so
-        the caption does not need a button competing with it.
-      */}
-      <section aria-labelledby="explore-heading">
-        <SectionHeading
-          id="explore-heading"
-          title={t("home.destinations")}
-          action={
-            <Link href={href(locale, "/destinations")}>
-              <Button variant="secondary" size="sm">
-                {t("home.browseAll")}
-              </Button>
-            </Link>
-          }
-        />
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {destinations.map((destination) => (
-            <li key={destination.id}>
-              <Link href={href(locale, `/destinations/${destination.slug}`)} className="block h-full">
-                <Card className="card-interactive relative h-full overflow-hidden">
-                  {/* Ordinal 1, not 0: index 0 is the frame the hero above already uses. */}
-                  <Photo
-                    src={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).src}
-                    srcSet={destinationPhoto(destination.slug, 1, { shape: PHOTO_SHAPE.card }).srcSet}
-                    sizes="(min-width: 1024px) 33vw, 100vw"
-                    fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
-                    alt=""
-                    ratio="16/9"
-                    fallbackLabel={t("hotel.imageFallback")}
-                  />
-                  <div className="p-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="font-semibold tracking-[-0.01em]">{destination.name}</p>
-                      <p className="text-muted text-xs">{destination.country}</p>
-                    </div>
-                    <p className="text-muted mt-1 line-clamp-2 text-sm leading-relaxed">{destination.blurb}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge tone="neutral">
-                        {destination.propertyCount} {t("results.count")}
-                      </Badge>
-                      {destination.fromPrice && (
-                        <span className="tabular text-xs font-semibold">
-                          {t("home.fromPerNight", {
-                            amount: formatMoney(
-                              destination.fromPrice.amount,
-                              destination.fromPrice.currency,
-                              locale,
-                            ),
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-              </Link>
             </li>
           ))}
         </ul>

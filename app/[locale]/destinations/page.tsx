@@ -5,7 +5,7 @@ import { bookableCountryList, DESTINATIONS } from "@/lib/data/destinations";
 import { localized } from "@/lib/data/catalog";
 import { REGIONS, type Region } from "@/lib/data/geo/countries";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
-import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
@@ -105,7 +105,7 @@ export default async function DestinationsIndexPage({
                         {locale === "ar" ? (country.nameAr ?? country.name) : country.name}
                       </Link>
                       <Badge tone="neutral">
-                        {total} {t("results.count")}
+                        {total} {countLabel(t, total)}
                       </Badge>
                     </div>
                     <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-sm">
