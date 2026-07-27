@@ -8,6 +8,7 @@ import { HotelCard, HotelCardSkeleton } from "@/components/commerce/hotel-card";
 import { ResultsMap } from "@/components/commerce/results-map";
 import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/commerce/filters-panel";
 import { Alert, Badge, Button, Card, Drawer, EmptyState, SectionHeading, cx } from "@/components/ui";
+import { NoResultsArt } from "@/components/ui/illustrations";
 import { formatDate, formatMoney, guestCount } from "@/lib/format";
 import { href, searchHref } from "@/lib/nav";
 import type { ApiError, Locale, SearchFilters, SearchIntent, SearchResponse, SortKey } from "@/lib/types";
@@ -302,6 +303,7 @@ function ZeroResults({
   return (
     <div className="space-y-4">
       <EmptyState
+        art={<NoResultsArt />}
         title={t("results.empty")}
         body={t("results.emptyBody")}
         actions={

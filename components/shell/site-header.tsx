@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Drawer, Select, cx } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { href } from "@/lib/nav";
 import { setPreferenceCookie } from "@/lib/cookies";
 import { CURRENCIES } from "@/lib/format";
@@ -39,8 +40,13 @@ export function SiteHeader() {
     <header className="surface sticky top-0 z-40 border-b">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
         <Link href={href(locale, "/")} className="flex items-center gap-2 font-bold">
+          {/* Wordmark: the Arabic initial of the brand, drawn as a monogram. */}
           <span aria-hidden className="bg-brand-600 grid size-8 place-items-center rounded-lg text-white">
-            ن
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M5 8v5a5 5 0 0 0 10 0V8" />
+              <circle cx="10" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
+              <path d="M18 8v11" opacity="0.55" />
+            </svg>
           </span>
           <span className="text-base">{t("brand.name")}</span>
         </Link>
@@ -81,12 +87,12 @@ export function SiteHeader() {
             aria-label={t("nav.assistant")}
             className="hidden sm:inline-flex"
           >
-            <span aria-hidden>✦</span>
+            <Icon name="sparkle" />
           </Button>
 
           <Link href={href(locale, "/notifications")} className="relative hidden sm:block">
             <Button variant="ghost" size="sm" aria-label={t("nav.notifications")}>
-              <span aria-hidden>🔔</span>
+              <Icon name="bell" />
             </Button>
             {unread > 0 && (
               <span className="bg-critical-500 absolute -top-0.5 end-0 grid size-4 place-items-center rounded-full text-[10px] font-bold text-white">
@@ -129,7 +135,7 @@ export function SiteHeader() {
           </div>
 
           <Button variant="ghost" size="sm" onClick={toggleTheme} aria-label="Toggle theme">
-            <span aria-hidden>{theme === "light" ? "◐" : "◑"}</span>
+            <Icon name={theme === "light" ? "moon" : "sun"} />
           </Button>
 
           {account ? (
@@ -153,7 +159,7 @@ export function SiteHeader() {
             onClick={() => setMenuOpen(true)}
             aria-label={t("a11y.openMenu")}
           >
-            <span aria-hidden>☰</span>
+            <Icon name="menu" />
           </Button>
         </div>
       </div>

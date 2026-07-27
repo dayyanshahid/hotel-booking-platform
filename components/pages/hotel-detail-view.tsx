@@ -21,8 +21,8 @@ import {
   Skeleton,
   Stars,
   Tabs,
-  cx,
 } from "@/components/ui";
+import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { addDays, distanceLabel, formatDate, formatMoney, guestCount, todayIso } from "@/lib/format";
 import { href, hotelHref } from "@/lib/nav";
 import type {
@@ -45,14 +45,12 @@ interface AvailabilityPayload {
 export function HotelDetailView({
   locale,
   hotel,
-  timezone,
   initialIntent,
   similar,
   strings,
 }: {
   locale: Locale;
   hotel: CanonicalHotel;
-  timezone: string;
   initialIntent: SearchIntent | null;
   similar: { slug: string; name: string; neighborhood: string; category: number; image: string }[];
   strings: { heading: string };
@@ -224,7 +222,7 @@ export function HotelDetailView({
           )}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {hotel.amenities.slice(0, 8).map((a) => (
-              <Badge key={a.code} tone="neutral">
+              <Badge key={a.code} tone="neutral" icon={<Icon name={amenityIcon(a.code)} size={13} />}>
                 {a.label}
                 {a.fee ? ` · ${a.fee}` : ""}
               </Badge>
@@ -261,7 +259,8 @@ export function HotelDetailView({
               }
               aria-pressed={saved}
             >
-              {saved ? `♥ ${t("results.savedHotel")}` : `♡ ${t("results.saveHotel")}`}
+              <HeartIcon filled={saved} size={17} />
+              {saved ? t("results.savedHotel") : t("results.saveHotel")}
             </Button>
           </div>
           <dl className="text-muted mt-4 space-y-1 border-t pt-3 text-xs">
@@ -418,7 +417,10 @@ export function HotelDetailView({
           <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {hotel.amenities.map((amenity) => (
               <li key={amenity.code} className="flex items-start justify-between gap-2 text-sm">
-                <span>{amenity.label}</span>
+                <span className="inline-flex items-center gap-2">
+                  <Icon name={amenityIcon(amenity.code)} size={16} className="text-brand-600 shrink-0" />
+                  {amenity.label}
+                </span>
                 <span className="text-muted text-xs">
                   {amenity.fee ?? (amenity.included ? t("rate.included") : "")}
                 </span>

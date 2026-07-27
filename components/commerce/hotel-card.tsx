@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card, Modal, Photo, Rating, Stars, cx } from "@/components/ui";
+import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { PriceBlock } from "./price";
 import { distanceLabel, formatDeadline } from "@/lib/format";
 import { hotelHref } from "@/lib/nav";
@@ -142,8 +143,8 @@ export function HotelCard({
                   })
                 }
               >
-                <span aria-hidden className={saved ? "text-critical-500" : ""}>
-                  {saved ? "♥" : "♡"}
+                <span className={saved ? "text-critical-500" : "text-[var(--text-muted)]"}>
+                  <HeartIcon filled={saved} />
                 </span>
               </Button>
             </div>
@@ -179,7 +180,10 @@ export function HotelCard({
 
           <div className="text-muted flex flex-wrap gap-x-3 gap-y-1 text-xs">
             {card.topAmenities.map((a) => (
-              <span key={a.code}>{a.label}</span>
+              <span key={a.code} className="inline-flex items-center gap-1">
+                <Icon name={amenityIcon(a.code)} size={14} />
+                {a.label}
+              </span>
             ))}
           </div>
 

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp, useApi } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Card, Drawer, Input, ToastStack, LiveRegion, cx } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { href } from "@/lib/nav";
 import { SCENARIOS } from "@/lib/server/scenarios";
 import type { ScenarioId } from "@/lib/server/scenarios";
@@ -17,12 +18,12 @@ import { setPreferenceCookie } from "@/lib/cookies";
 export function BottomNav() {
   const { locale, t, account } = useApp();
   const pathname = usePathname();
-  const items = [
-    { href: "/", label: t("nav.explore"), icon: "⌂" },
-    { href: "/saved", label: t("nav.saved"), icon: "♥" },
-    { href: "/trips", label: t("nav.trips"), icon: "✈" },
-    { href: "/support", label: t("nav.support"), icon: "☎" },
-    { href: account ? "/account" : "/signin", label: t("nav.account"), icon: "☺" },
+  const items: { href: string; label: string; icon: IconName }[] = [
+    { href: "/", label: t("nav.explore"), icon: "home" },
+    { href: "/saved", label: t("nav.saved"), icon: "heart" },
+    { href: "/trips", label: t("nav.trips"), icon: "plane" },
+    { href: "/support", label: t("nav.support"), icon: "lifebuoy" },
+    { href: account ? "/account" : "/signin", label: t("nav.account"), icon: "user" },
   ];
   return (
     <nav
@@ -42,9 +43,7 @@ export function BottomNav() {
               active ? "text-brand-700 font-semibold" : "text-muted",
             )}
           >
-            <span aria-hidden className="text-base">
-              {item.icon}
-            </span>
+            <Icon name={item.icon} size={20} />
             {item.label}
           </Link>
         );
@@ -304,7 +303,7 @@ export function ScenarioBar() {
           onClick={() => setOpen(true)}
           aria-label={t("dev.title")}
         >
-          <span aria-hidden>⚙</span>
+          <Icon name="settings" size={15} />
           {scenario === "normal" ? "QA" : localized(active!.label, locale)}
         </Button>
       </div>

@@ -1,5 +1,5 @@
 import { notFoundOrDemoState } from "@/lib/server/api";
-import { fail, localeFrom, ok } from "@/lib/server/api";
+import { localeFrom, ok } from "@/lib/server/api";
 import {
   getBooking,
   getSupplierReference,

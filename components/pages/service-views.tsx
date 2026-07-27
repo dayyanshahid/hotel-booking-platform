@@ -16,6 +16,7 @@ import {
   Select,
   cx,
 } from "@/components/ui";
+import { EmptyTripsArt, SupportArt } from "@/components/ui/illustrations";
 import { formatRelative } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AppNotification, Locale, PriceAlert, SupportCase } from "@/lib/types";
@@ -69,8 +70,13 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold sm:text-2xl">{t("support.title")}</h1>
-      <p className="text-muted text-sm">{t("support.body")}</p>
+      <div className="flex flex-wrap items-center gap-5">
+        <SupportArt className="hidden h-24 w-auto sm:block" />
+        <div>
+          <h1 className="text-xl font-bold sm:text-2xl">{t("support.title")}</h1>
+          <p className="text-muted mt-1 text-sm">{t("support.body")}</p>
+        </div>
+      </div>
 
       {created ? (
         <Card className="p-5">
@@ -232,6 +238,7 @@ export function NotificationsView({ locale }: { locale: Locale }) {
   if (!account) {
     return (
       <EmptyState
+        art={<EmptyTripsArt />}
         title={t("notifications.title")}
         body={t("account.signInBody")}
         actions={

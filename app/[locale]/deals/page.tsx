@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Badge, Card, SectionHeading } from "@/components/ui";
+import { Badge, Card, Photo, SectionHeading } from "@/components/ui";
+import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
 import { createTranslator, isLocale } from "@/lib/i18n";
@@ -26,12 +27,20 @@ export default async function DealsPage({ params }: { params: Promise<{ locale: 
         {COLLECTIONS.map((collection) => (
           <li key={collection.slug}>
             <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
-              <Card className="hover:surface-sunken h-full p-4">
-                <p className="font-semibold">{localized(collection.title, locale)}</p>
-                <p className="text-muted mt-1 text-sm">{localized(collection.body, locale)}</p>
-                <Badge tone="brand" className="mt-3">
-                  {HOTEL_SEEDS.filter((h) => h.tags.includes(collection.tag)).length} {t("results.count")}
-                </Badge>
+              <Card className="hover:surface-sunken h-full overflow-hidden">
+                <Photo
+                  src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+                  alt=""
+                  ratio="16/7"
+                  fallbackLabel=""
+                />
+                <div className="p-4">
+                  <p className="font-semibold">{localized(collection.title, locale)}</p>
+                  <p className="text-muted mt-1 text-sm">{localized(collection.body, locale)}</p>
+                  <Badge tone="brand" className="mt-3">
+                    {HOTEL_SEEDS.filter((h) => h.tags.includes(collection.tag)).length} {t("results.count")}
+                  </Badge>
+                </div>
               </Card>
             </Link>
           </li>

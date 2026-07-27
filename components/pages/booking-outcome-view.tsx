@@ -6,6 +6,7 @@ import { useApi, useApp } from "@/components/providers/app-provider";
 import { CancellationTimeline, PriceBlock } from "@/components/commerce/price";
 import { BookingVoucher } from "@/components/commerce/voucher";
 import { Alert, Badge, Button, Card, EmptyState, Input, SectionHeading, Skeleton, cx } from "@/components/ui";
+import { BookingConfirmedArt, BookingPendingArt, NotFoundArt } from "@/components/ui/illustrations";
 import { formatDate, formatDateTime, formatMoney, guestCount } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { ApiError, Booking, Locale } from "@/lib/types";
@@ -61,6 +62,7 @@ export function BookingOutcomeView({
   if (error) {
     return (
       <EmptyState
+        art={<NotFoundArt />}
         title={t("error.notFound")}
         body={error.message}
         actions={
@@ -96,7 +98,13 @@ export function BookingOutcomeView({
         )}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="flex flex-wrap items-center gap-4">
+            {(confirmed || pending) && (
+              <div className="hidden sm:block">
+                {confirmed ? <BookingConfirmedArt className="h-24 w-auto" /> : <BookingPendingArt className="h-24 w-auto" />}
+              </div>
+            )}
+            <div>
             <Badge tone={confirmed ? "positive" : pending ? "caution" : "critical"}>
               {confirmed ? t("booking.confirmedTitle") : pending ? t("booking.pendingTitle") : t("booking.failedTitle")}
             </Badge>
@@ -104,6 +112,7 @@ export function BookingOutcomeView({
               {confirmed ? t("booking.confirmedTitle") : pending ? t("booking.pendingTitle") : t("booking.failedTitle")}
             </h1>
             <p className="text-muted mt-1 text-sm">{booking.statusDetail}</p>
+            </div>
           </div>
           <div className="text-end">
             <p className="text-muted text-xs">{t("booking.reference")}</p>

@@ -6,6 +6,7 @@ import { DestinationSearchCta } from "@/components/pages/destination-cta";
 import { DESTINATIONS, getDestination } from "@/lib/data/destinations";
 import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
 import { localized } from "@/lib/data/catalog";
+import { sceneUrl } from "@/lib/illustration/scenes";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
@@ -93,10 +94,20 @@ export default async function DestinationPage({
       </nav>
 
       <header>
-        <h1 className="text-2xl font-bold sm:text-3xl">
-          {t("cms.destinationTitle", { destination: localized(destination.name, locale) })}
-        </h1>
-        <p className="text-muted mt-2 max-w-3xl text-sm">{localized(destination.blurb, locale)}</p>
+        <div className="relative overflow-hidden rounded-[var(--radius-card)] border">
+          <Photo
+            src={sceneUrl(destination.slug, "landmark", destination.slug)}
+            alt=""
+            ratio="21/6"
+            priority
+            fallbackLabel=""
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" aria-hidden />
+          <h1 className="absolute inset-x-0 bottom-0 p-5 text-2xl font-bold text-white sm:text-3xl">
+            {t("cms.destinationTitle", { destination: localized(destination.name, locale) })}
+          </h1>
+        </div>
+        <p className="text-muted mt-3 max-w-3xl text-sm">{localized(destination.blurb, locale)}</p>
         <div className="mt-4">
           <DestinationSearchCta locale={locale} destinationId={destination.id} label={localized(destination.name, locale)} />
         </div>

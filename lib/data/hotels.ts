@@ -2,6 +2,7 @@ import type { CanonicalHotel, CanonicalRoom, HotelImage, Locale } from "../types
 import { AMENITY_CATALOG, PROPERTY_TYPES, VIEW_CATALOG, BED_CATALOG, localized } from "./catalog";
 import { DESTINATIONS, getDestination } from "./destinations";
 import { ROOM_TEMPLATES } from "./rooms";
+import { sceneUrl } from "../illustration/scenes";
 
 type L = Record<Locale, string>;
 
@@ -560,7 +561,7 @@ function img(slug: string, index: number, category: HotelImage["category"], loca
   };
   return {
     id: `${slug}-${index}`,
-    url: `/api/image?seed=${encodeURIComponent(`${slug}-${index}`)}&kind=${category}`,
+    url: sceneUrl(`${slug}-${index}`, category),
     alt: `${captions[category][locale]} — ${name}`,
     category,
     caption: captions[category][locale],

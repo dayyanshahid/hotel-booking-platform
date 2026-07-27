@@ -19,6 +19,7 @@ import {
   Tabs,
   cx,
 } from "@/components/ui";
+import { EmptyTripsArt, NotFoundArt } from "@/components/ui/illustrations";
 import { formatDate, formatDateTime, formatDeadline, formatMoney, guestCount, todayIso } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { ApiError, Booking, CancellationQuote, Locale } from "@/lib/types";
@@ -56,6 +57,7 @@ export function TripsView({ locale }: { locale: Locale }) {
     return (
       <div className="space-y-4">
         <EmptyState
+          art={<EmptyTripsArt />}
           title={t("trips.title")}
           body={t("account.signInBody")}
           actions={
@@ -107,7 +109,7 @@ export function TripsView({ locale }: { locale: Locale }) {
 
       {!bookings && <Skeleton className="h-32 w-full" />}
 
-      {bookings && !list.length && <EmptyState title={t("trips.empty")} />}
+      {bookings && !list.length && <EmptyState art={<EmptyTripsArt />} title={t("trips.empty")} />}
 
       <ul className="space-y-3">
         {list.map((booking) => (
@@ -289,6 +291,7 @@ export function BookingDetailView({
   if (error) {
     return (
       <EmptyState
+        art={<NotFoundArt />}
         title={t(`error.${error.category}`)}
         body={error.message}
         actions={

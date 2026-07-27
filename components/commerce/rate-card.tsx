@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Accordion, Badge, Button, Card, Modal, Photo, cx } from "@/components/ui";
+import { Icon, amenityIcon } from "@/components/ui/icons";
 import { CancellationTimeline, PriceBlock } from "./price";
 import { formatDeadline } from "@/lib/format";
 import type { CanonicalRoom, Offer } from "@/lib/types";
@@ -52,7 +53,8 @@ export function RoomBlock({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <h3 className="text-base font-semibold wrap-anywhere">{room.name}</h3>
-              <p className="text-muted mt-1 text-sm">
+              <p className="text-muted mt-1 inline-flex flex-wrap items-center gap-x-1.5 text-sm">
+                <Icon name="bed" size={15} />
                 {room.sizeSqm && <>{room.sizeSqm} m² · </>}
                 {room.beds.map((b) => `${b.count} × ${b.type}`).join(" + ")} · {t("room.sleeps")}{" "}
                 {room.maxOccupancy}
@@ -67,7 +69,10 @@ export function RoomBlock({
 
           <div className="text-muted mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
             {room.amenities.slice(0, 6).map((a) => (
-              <span key={a.code}>{a.label}</span>
+              <span key={a.code} className="inline-flex items-center gap-1">
+                <Icon name={amenityIcon(a.code)} size={13} />
+                {a.label}
+              </span>
             ))}
             {room.extraBed && <span>{t("room.extraBed")}</span>}
             {room.cot && <span>{t("room.cot")}</span>}

@@ -14,7 +14,7 @@ import type {
 } from "@/lib/types";
 import { addDays, convertCurrency, isSupportedCurrency, nightsBetween } from "@/lib/format";
 import { applyMarkup } from "../markup";
-import { timezoneForCountry, hasKnownTimezone } from "../timezones";
+import { timezoneForCountry } from "../timezones";
 import { getHotelContent, getTypes, slugify, type TypeDictionaries } from "./content";
 import {
   hbImageUrl,

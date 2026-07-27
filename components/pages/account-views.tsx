@@ -18,6 +18,7 @@ import {
   Select,
   Toggle,
 } from "@/components/ui";
+import { EmptySavedArt } from "@/components/ui/illustrations";
 import { CURRENCIES } from "@/lib/format";
 import { formatMoney, formatRelative } from "@/lib/format";
 import { href } from "@/lib/nav";
@@ -344,6 +345,7 @@ export function SavedView({ locale }: { locale: Locale }) {
   if (!saved.length) {
     return (
       <EmptyState
+        art={<EmptySavedArt />}
         title={t("saved.title")}
         body={t("saved.empty")}
         actions={

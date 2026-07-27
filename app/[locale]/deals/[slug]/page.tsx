@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Badge, Card, Photo, SectionHeading, Stars } from "@/components/ui";
+import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
@@ -54,9 +55,19 @@ export default async function CollectionPage({
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold sm:text-3xl">{localized(collection.title, locale)}</h1>
-        <p className="text-muted mt-2 max-w-2xl text-sm">{localized(collection.body, locale)}</p>
+      <header className="relative overflow-hidden rounded-[var(--radius-card)] border">
+        <Photo
+          src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+          alt=""
+          ratio="21/6"
+          priority
+          fallbackLabel=""
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 p-5">
+          <h1 className="text-2xl font-bold text-white sm:text-3xl">{localized(collection.title, locale)}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-white/85">{localized(collection.body, locale)}</p>
+        </div>
       </header>
 
       {/* Promotion terms are always stated, never implied (§5.13). */}

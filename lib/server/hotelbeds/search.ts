@@ -196,7 +196,7 @@ export async function hotelbedsSuggestions(query: string, locale: Locale, limit 
 
   // Property-level matches from the cached catalogue.
   if (out.length < limit) {
-    for (const [slug, code] of Object.entries(index.bySlug)) {
+    for (const slug of Object.keys(index.bySlug)) {
       if (!slug.includes(q.replace(/\s+/g, "-"))) continue;
       const content = await getHotelBySlug(slug);
       if (!content) continue;

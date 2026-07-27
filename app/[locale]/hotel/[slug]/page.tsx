@@ -110,7 +110,6 @@ export default async function HotelPage({
       <HotelDetailView
         locale={locale}
         hotel={hotel}
-        timezone={destination.timezone}
         initialIntent={intent}
         similar={similar}
         strings={{ heading: t("hotel.rooms") }}

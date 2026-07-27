@@ -14,7 +14,7 @@ import {
   saveSession,
   setIdempotency,
 } from "@/lib/server/store";
-import { confirmBooking, getSupplierBooking } from "@/lib/server/hotelbeds/operations";
+import { confirmBooking } from "@/lib/server/hotelbeds/operations";
 import { HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/errors";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";

@@ -5,6 +5,9 @@ import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { Badge, Button, Card, Input, Photo, SectionHeading, cx } from "@/components/ui";
+import { Icon, type IconName } from "@/components/ui/icons";
+import { HeroSkyline } from "@/components/ui/illustrations";
+import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
 import { href, searchHref } from "@/lib/nav";
 import type { Locale, SearchIntent } from "@/lib/types";
@@ -34,6 +37,7 @@ export function HomeView({
     <div className="space-y-10">
       <section className="relative overflow-hidden rounded-[var(--radius-card)] border">
         <div className="from-brand-800 to-brand-600 absolute inset-0 bg-gradient-to-br" aria-hidden />
+        <HeroSkyline className="pointer-events-none absolute inset-x-0 bottom-0 h-24 w-full sm:h-32" />
         <div className="relative px-4 py-10 sm:px-8 sm:py-14">
           <h1 className="max-w-2xl text-2xl font-bold text-white sm:text-4xl">{t("home.heroTitle")}</h1>
           <p className="text-brand-50 mt-3 max-w-2xl text-sm sm:text-base">{t("home.heroSubtitle")}</p>
@@ -111,12 +115,20 @@ export function HomeView({
           {collections.map((collection) => (
             <li key={collection.slug}>
               <Link href={href(locale, `/deals/${collection.slug}`)} className="block h-full">
-                <Card className="hover:surface-sunken h-full p-4">
-                  <p className="font-semibold">{collection.title}</p>
-                  <p className="text-muted mt-1 text-sm">{collection.body}</p>
-                  <Badge tone="brand" className="mt-3">
-                    {collection.count} {t("results.count")}
-                  </Badge>
+                <Card className="hover:surface-sunken h-full overflow-hidden">
+                  <Photo
+                    src={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
+                    alt=""
+                    ratio="16/7"
+                    fallbackLabel=""
+                  />
+                  <div className="p-4">
+                    <p className="font-semibold">{collection.title}</p>
+                    <p className="text-muted mt-1 text-sm">{collection.body}</p>
+                    <Badge tone="brand" className="mt-3">
+                      {collection.count} {t("results.count")}
+                    </Badge>
+                  </div>
                 </Card>
               </Link>
             </li>
@@ -128,15 +140,15 @@ export function HomeView({
         <SectionHeading id="value-heading" title={t("home.valueTitle")} />
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { title: t("value.total.title"), body: t("value.total.body"), icon: "＄" },
-            { title: t("value.room.title"), body: t("value.room.body"), icon: "⌸" },
-            { title: t("value.care.title"), body: t("value.care.body"), icon: "✈" },
-            { title: t("value.local.title"), body: t("value.local.body"), icon: "ع" },
+            { title: t("value.total.title"), body: t("value.total.body"), icon: "receipt" as IconName },
+            { title: t("value.room.title"), body: t("value.room.body"), icon: "bed" as IconName },
+            { title: t("value.care.title"), body: t("value.care.body"), icon: "lifebuoy" as IconName },
+            { title: t("value.local.title"), body: t("value.local.body"), icon: "globe" as IconName },
           ].map((item) => (
             <li key={item.title}>
               <Card className="h-full p-4">
-                <span aria-hidden className="bg-brand-50 text-brand-700 grid size-9 place-items-center rounded-lg">
-                  {item.icon}
+                <span className="bg-brand-50 text-brand-700 grid size-10 place-items-center rounded-lg">
+                  <Icon name={item.icon} size={22} />
                 </span>
                 <p className="mt-3 font-semibold">{item.title}</p>
                 <p className="text-muted mt-1 text-sm">{item.body}</p>
@@ -153,7 +165,7 @@ export function HomeView({
             <li key={destination.id}>
               <Card className="h-full overflow-hidden">
                 <Photo
-                  src={`/api/image?seed=${destination.slug}&kind=view`}
+                  src={sceneUrl(destination.slug, "landmark", destination.slug)}
                   alt={destination.name}
                   ratio="16/9"
                   fallbackLabel={t("hotel.imageFallback")}
