@@ -2,6 +2,7 @@ import type { CanonicalHotel, CanonicalRoom, HotelImage, Locale } from "../types
 import { AMENITY_CATALOG, PROPERTY_TYPES, VIEW_CATALOG, BED_CATALOG, localized } from "./catalog";
 import { DESTINATIONS, getDestination } from "./destinations";
 import { ROOM_TEMPLATES } from "./rooms";
+import { generateHotels } from "./generated-hotels";
 import { sceneUrl } from "../illustration/scenes";
 import { PHOTO_CREDIT, PHOTO_SHAPE, propertyPhoto } from "./photos";
 
@@ -536,17 +537,36 @@ const HOTELS: HotelSeed[] = [
  * than hand-tagged, so a property can never be merchandised as accessible
  * without an accessible room to book (§12.1).
  */
-export const HOTEL_SEEDS = HOTELS.filter((h) => getDestination(h.destinationId)).map((h) => ({
+/**
+ * The hand-written properties above cover the cities somebody sat down and
+ * researched. Every other city in `geo/cities.ts` is filled by the generator,
+ * so a search for Lima or Reykjavík returns a usable results page instead of an
+ * empty one — see `generated-hotels.ts` for what that does and does not invent.
+ */
+const CURATED_DESTINATIONS = new Set(HOTELS.map((h) => h.destinationId));
+
+const ALL_HOTELS: HotelSeed[] = [...HOTELS, ...generateHotels(CURATED_DESTINATIONS)];
+
+export const HOTEL_SEEDS = ALL_HOTELS.filter((h) => getDestination(h.destinationId)).map((h) => ({
   ...h,
   tags: h.rooms.some((room) => ROOM_TEMPLATES[room]?.accessible) ? [...h.tags, "accessible"] : h.tags,
 }));
 
+const SEED_BY_SLUG = new Map(HOTEL_SEEDS.map((h) => [h.slug, h]));
+const SEEDS_BY_DESTINATION = new Map<string, HotelSeed[]>();
+for (const seed of HOTEL_SEEDS) {
+  SEEDS_BY_DESTINATION.set(seed.destinationId, [
+    ...(SEEDS_BY_DESTINATION.get(seed.destinationId) ?? []),
+    seed,
+  ]);
+}
+
 export function getHotelSeed(slug: string): HotelSeed | undefined {
-  return HOTEL_SEEDS.find((h) => h.slug === slug);
+  return SEED_BY_SLUG.get(slug);
 }
 
 export function hotelsInDestination(destinationId: string): HotelSeed[] {
-  return HOTEL_SEEDS.filter((h) => h.destinationId === destinationId);
+  return SEEDS_BY_DESTINATION.get(destinationId) ?? [];
 }
 
 /* ------------------------------------------------------------- builders */

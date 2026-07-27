@@ -91,13 +91,26 @@ export const VIEW_CATALOG: Record<string, L> = {
   none: { en: "No specific view", ar: "بدون إطلالة محددة" },
 };
 
+/**
+ * The property-type spread a global catalogue needs. A traveller filtering for
+ * a hostel in Lisbon or a villa in Bali is filtering for a different product,
+ * not a cheaper hotel, so each is its own type rather than a star rating.
+ */
 export const PROPERTY_TYPES: Record<string, L> = {
   hotel: { en: "Hotel", ar: "فندق" },
   resort: { en: "Resort", ar: "منتجع" },
   apartment: { en: "Hotel apartment", ar: "شقق فندقية" },
   boutique: { en: "Boutique hotel", ar: "فندق بوتيك" },
   serviced: { en: "Serviced residence", ar: "أجنحة فندقية" },
+  hostel: { en: "Hostel", ar: "بيت شباب" },
+  guesthouse: { en: "Guest house", ar: "بيت ضيافة" },
+  bnb: { en: "Bed and breakfast", ar: "مبيت وإفطار" },
+  villa: { en: "Villa", ar: "فيلا" },
+  aparthotel: { en: "Aparthotel", ar: "شقق فندقية مخدومة" },
 };
+
+/** Filterable property types, in the order the filter rail lists them. */
+export const PROPERTY_TYPE_KEYS = Object.keys(PROPERTY_TYPES);
 
 export const COLLECTIONS: {
   slug: string;

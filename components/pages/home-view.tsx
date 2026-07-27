@@ -375,13 +375,23 @@ export function HomeView({
       </section>
 
       {/*
-        Every destination, not the first three — this is the only place the
-        catalogue's breadth is visible, and a partial list made the product look
-        smaller than it is. The whole card is the link, so the caption does not
-        need a button competing with it.
+        Headline destinations, dealt across regions — the catalogue is far too
+        large to list here, and a home page that tried would be a directory. The
+        heading links through to the full index. The whole card is the link, so
+        the caption does not need a button competing with it.
       */}
       <section aria-labelledby="explore-heading">
-        <SectionHeading id="explore-heading" title={t("home.destinations")} />
+        <SectionHeading
+          id="explore-heading"
+          title={t("home.destinations")}
+          action={
+            <Link href={href(locale, "/destinations")}>
+              <Button variant="secondary" size="sm">
+                {t("home.browseAll")}
+              </Button>
+            </Link>
+          }
+        />
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {destinations.map((destination) => (
             <li key={destination.id}>

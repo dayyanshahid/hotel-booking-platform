@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/icons";
 import { href } from "@/lib/nav";
 import { setPreferenceCookie } from "@/lib/cookies";
 import { CURRENCIES } from "@/lib/format";
+import { MAJOR_CURRENCIES } from "@/lib/currencies";
 import { LOCALE_META, LOCALES } from "@/lib/i18n";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
@@ -116,7 +117,9 @@ export function SiteHeader() {
             onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
             className="hidden !min-h-9 !w-auto !py-1 sm:block"
           >
-            {(Object.keys(CURRENCIES) as CurrencyCode[]).map((code) => (
+            {/* The majors, not all 68 — a currency switcher is a shortcut, not a
+                reference table. */}
+            {MAJOR_CURRENCIES.map((code) => (
               <option key={code} value={code}>
                 {code}
               </option>
@@ -217,7 +220,7 @@ export function SiteHeader() {
               value={currency}
               onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
             >
-              {(Object.keys(CURRENCIES) as CurrencyCode[]).map((code) => (
+              {MAJOR_CURRENCIES.map((code) => (
                 <option key={code} value={code}>
                   {code} — {CURRENCIES[code].label}
                 </option>

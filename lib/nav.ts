@@ -65,7 +65,7 @@ export function intentFromSearchParams(
     accessibleRoom: get("accessible") === "1",
     nationality: get("nat"),
     locale,
-    currency: (get("currency") as SearchIntent["currency"]) ?? "SAR",
+    currency: (get("currency") as SearchIntent["currency"]) ?? "USD",
   };
 }
 

@@ -1,5 +1,7 @@
 import type { ChargeLine, CurrencyCode, PriceStack, RoomAllocation } from "../types";
 import { convertFromSar } from "../format";
+import { getCountry } from "../data/geo/countries";
+import { isCurrencyCode } from "../currencies";
 import { nightsBetween } from "../format";
 import type { HotelSeed } from "../data/hotels";
 import { ROOM_TEMPLATES } from "../data/rooms";
@@ -84,6 +86,12 @@ export function computePrice(input: PriceInput): PriceStack {
 
   const netStaySar = Math.round(nightly * nights * roomCount);
   const taxRate = TAX_RATE[countryCode] ?? 0.1;
+  // What the simulated source contracts in — the destination's own currency,
+  // falling back to USD where the platform has no rate for it.
+  const settlement: CurrencyCode = (() => {
+    const local = getCountry(countryCode)?.currency;
+    return isCurrencyCode(local) ? local : "USD";
+  })();
   const serviceRate = seed.category >= 5 ? 0.1 : seed.category === 4 ? 0.05 : 0;
 
   const baseSar = Math.round(netStaySar / (1 + taxRate + serviceRate));
@@ -160,9 +168,12 @@ export function computePrice(input: PriceInput): PriceStack {
     strikeTotal,
     discountLabel,
     memberDelta: input.memberRate ? Math.round(total * 0.07) : undefined,
-    chargeCurrency: currency === "SAR" ? undefined : "SAR",
+    // The simulated source settles in the destination's own currency, the way
+    // a local contract would. Hard-coding SAR told a guest booking Tokyo that
+    // their card would be charged in riyals.
+    chargeCurrency: currency === settlement ? undefined : settlement,
     fxBasis:
-      currency === "SAR"
+      currency === settlement
         ? undefined
         : ar
           ? "التحويل تقديري ويُثبّت عند الدفع."

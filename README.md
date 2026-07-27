@@ -210,8 +210,17 @@ Enforced by `tests/hotelbeds.test.ts`, not by convention:
 
 Everything is generated locally — no network calls, no API keys.
 
-- **24 canonical hotels** across Riyadh, Jeddah, Makkah, Dubai, Doha and Istanbul, with
-  rooms, policies, notices, landmarks and localized content.
+- **A worldwide catalogue.** 183 cities across 82 countries, assembled from
+  `lib/data/geo/` rather than hand-written: a city is searchable as soon as it has a slug,
+  a point and a time zone. Curated copy — neighbourhoods, blurbs, FAQs — is an *overlay*
+  in `lib/data/editorial.ts`, which is the reason the catalogue is not limited to the
+  handful of cities somebody had time to write about.
+- **~990 properties.** Twenty are hand-written with real neighbourhoods, landmarks and
+  notices; the rest are generated per city by `lib/data/generated-hotels.ts`, priced from a
+  per-country cost-of-stay table so Zurich is not Kathmandu. Generated properties claim no
+  landmarks and invent no brands — see the file header for what that rules out and why.
+- **68 currencies**, one for every country in the geography, with the destination's own
+  currency seeding the display default and the simulated supplier settling in it.
 - **Imagery** comes from `/api/image`, which renders deterministic SVG scenes. It stands in
   for the licensed-content CDN described in §12.2.
 - **Bookings persist** to `.data/bookings.json` so trips survive a dev restart.
@@ -275,5 +284,5 @@ These are scope decisions, not oversights:
   may not. A production BFF owns a database here. Locally, `.data/bookings.json` makes the
   whole post-booking journey durable.
 - **The twelve discovery decisions (D-01…D-12)** are open. The build assumes B2C, guest
-  checkout allowed, SAR default with multi-currency display, and merchant-of-record
+  checkout allowed, USD default with multi-currency display, and merchant-of-record
   behaviour at checkout; all are isolated behind the BFF and the pricing module.

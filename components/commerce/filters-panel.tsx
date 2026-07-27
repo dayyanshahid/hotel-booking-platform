@@ -103,6 +103,32 @@ export function FiltersPanel({
         </div>
       </fieldset>
 
+      {/*
+        Property type is a different product, not a cheaper hotel: someone
+        filtering for a hostel in Lisbon or a villa in Bali wants a different
+        thing entirely. The backend already faceted on this — nothing surfaced
+        it while the catalogue was six cities of hotels.
+      */}
+      {facets.propertyTypes.length > 1 && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.propertyType")}</legend>
+          <div className="mt-2 space-y-1">
+            {facets.propertyTypes.map((type) => (
+              <Checkbox
+                key={type.value}
+                checked={filters.propertyTypes?.includes(type.value) ?? false}
+                onChange={() => set({ propertyTypes: toggleIn(filters.propertyTypes, type.value) })}
+                label={
+                  <span className="flex items-center gap-2">
+                    {type.value} <Badge tone="neutral">{type.count}</Badge>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
+
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.amenities")}</legend>
         <div className="mt-2 space-y-1">
@@ -216,6 +242,14 @@ export function ActiveFilterChips({
       key: `cat-${cat}`,
       label: `${cat}★`,
       clear: () => onChange({ ...filters, categories: filters.categories?.filter((c) => c !== cat) }),
+    });
+  }
+  for (const type of filters.propertyTypes ?? []) {
+    chips.push({
+      key: `type-${type}`,
+      label: type,
+      clear: () =>
+        onChange({ ...filters, propertyTypes: filters.propertyTypes?.filter((t) => t !== type) }),
     });
   }
   for (const hood of filters.neighborhoods ?? []) {

@@ -1,4 +1,5 @@
 import type { CurrencyCode, Flexibility, Locale, RoomAllocation, SearchIntent } from "../types";
+import { CURRENCY_CODES } from "../currencies";
 import { todayIso } from "../format";
 
 export interface ValidationOutcome {
@@ -8,7 +9,11 @@ export interface ValidationOutcome {
 }
 
 const FLEX: Flexibility[] = ["exact", "p1", "p3", "p7"];
-const CURRENCIES: CurrencyCode[] = ["SAR", "USD", "EUR", "AED", "GBP"];
+/**
+ * Any currency the platform has a rate for. Hard-coding five here silently
+ * downgraded anyone who picked a sixth back to the home market's currency.
+ */
+const CURRENCIES: CurrencyCode[] = CURRENCY_CODES;
 
 export const MAX_ROOMS = 8;
 export const MAX_ADULTS_PER_ROOM = 6;

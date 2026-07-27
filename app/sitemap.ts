@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { siteUrl } from "@/lib/server/runtime";
-import { DESTINATIONS } from "@/lib/data/destinations";
+import { bookableCountryList, DESTINATIONS } from "@/lib/data/destinations";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
 import { LEGAL_PAGES } from "@/lib/data/content";
 import { COLLECTIONS } from "@/lib/data/catalog";
@@ -14,7 +14,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "",
     "/deals",
     "/help",
+    "/destinations",
     ...COLLECTIONS.map((c) => `/deals/${c.slug}`),
+    // Country pages sit between the index and the cities, so a crawler reaches
+    // every destination in two hops rather than depending on a search box.
+    ...bookableCountryList().map((c) => `/countries/${c.code.toLowerCase()}`),
     ...DESTINATIONS.map((d) => `/destinations/${d.slug}`),
     ...HOTEL_SEEDS.map((h) => `/hotel/${h.slug}`),
     ...LEGAL_PAGES.map((p) => `/legal/${p.slug}`),

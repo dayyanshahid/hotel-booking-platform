@@ -9,9 +9,16 @@ import type {
   Suggestion,
 } from "../types";
 import { AMENITY_CATALOG, BOARD_CATALOG, PROPERTY_TYPES, localized } from "../data/catalog";
-import { DESTINATIONS, EXTRA_PLACES, getDestination } from "../data/destinations";
-import { HOTEL_SEEDS, getHotelSeed } from "../data/hotels";
+import {
+  bookableCountryList,
+  destinationsInCountry,
+  DESTINATIONS,
+  EXTRA_PLACES,
+  getDestination,
+} from "../data/destinations";
+import { HOTEL_SEEDS, getHotelSeed, hotelsInDestination } from "../data/hotels";
 import { addDays, nightsBetween } from "../format";
+import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
@@ -29,6 +36,7 @@ import { hash01 } from "./pricing";
 export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
+  const t = createTranslator(locale);
   const out: Suggestion[] = [];
 
   for (const d of DESTINATIONS) {
@@ -61,6 +69,24 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
     }
   }
 
+  // Countries. On a six-city catalogue nobody types a country name; on a global
+  // one it is often the first thing they type, and it should land somewhere.
+  for (const country of bookableCountryList()) {
+    const label = locale === "ar" ? (country.nameAr ?? country.name) : country.name;
+    if (label.toLowerCase().includes(q) || country.name.toLowerCase().includes(q)) {
+      const cities = destinationsInCountry(country.code);
+      out.push({
+        id: `country-${country.code}`,
+        type: "country",
+        label,
+        context: t(`region.${country.region}`),
+        countryCode: country.code,
+        coordinates: cities[0]?.coordinates,
+        propertyCount: cities.reduce((sum, c) => sum + hotelsInDestination(c.id).length, 0),
+      });
+    }
+  }
+
   for (const p of EXTRA_PLACES) {
     const label = localized(p.name, locale);
     if (label.toLowerCase().includes(q) || p.name.en.toLowerCase().includes(q)) {
@@ -76,9 +102,15 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
     }
   }
 
+  // Hotels rank below every place type, so there is no point collecting more
+  // than could ever be shown — the catalogue is ~1,000 properties and this runs
+  // on every keystroke.
+  let hotelMatches = 0;
   for (const h of HOTEL_SEEDS) {
+    if (hotelMatches >= limit) break;
     const label = localized(h.name, locale);
     if (label.toLowerCase().includes(q) || h.name.en.toLowerCase().includes(q)) {
+      hotelMatches += 1;
       const d = getDestination(h.destinationId)!;
       out.push({
         id: `hotel-${h.slug}`,
@@ -92,7 +124,7 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
   }
 
   // Rank: exact prefix, then type weight (city > neighborhood > landmark > hotel), then size.
-  const weight: Record<string, number> = { city: 0, neighborhood: 1, airport: 2, landmark: 3, hotel: 4, region: 1, country: 0 };
+  const weight: Record<string, number> = { city: 0, country: 1, neighborhood: 2, airport: 3, landmark: 4, region: 2, hotel: 5 };
   return out
     .sort((a, b) => {
       const ap = a.label.toLowerCase().startsWith(q) ? 0 : 1;

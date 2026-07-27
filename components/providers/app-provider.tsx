@@ -148,7 +148,10 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
   const t = useMemo(() => createTranslator(locale), [locale]);
   const dir = LOCALE_META[locale].dir;
 
-  const [currency, setCurrencyState] = useState<CurrencyCode>("SAR");
+  // USD by default: the catalogue spans 82 countries, so the home market's
+  // currency is the wrong guess for almost every visitor. A stored preference
+  // or the destination's own currency overrides this immediately.
+  const [currency, setCurrencyState] = useState<CurrencyCode>("USD");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [account, setAccount] = useState<{ email: string } | null>(null);
   const [saved, setSaved] = useState<SavedHotel[]>([]);
@@ -164,7 +167,7 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
   const hydrated = useRef(false);
 
   useEffect(() => {
-    setCurrencyState(read<CurrencyCode>("nz_currency", "SAR"));
+    setCurrencyState(read<CurrencyCode>("nz_currency", "USD"));
     setTheme(read<"light" | "dark">("nz_theme", "light"));
     setAccount(read<{ email: string } | null>("nz_account", null));
     setSaved(read<SavedHotel[]>("nz_saved", []));

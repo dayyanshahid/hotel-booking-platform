@@ -1,4 +1,5 @@
 import { LOCALE_META } from "./i18n";
+import { CURRENCY_CODES, CURRENCY_TABLE, isCurrencyCode } from "./currencies";
 import type { CurrencyCode, Locale } from "./types";
 
 /**
@@ -6,35 +7,28 @@ import type { CurrencyCode, Locale } from "./types";
  * it never recomputes commercial totals.
  */
 
-export const CURRENCIES: Record<CurrencyCode, { label: string; symbol: string; decimals: number }> = {
-  SAR: { label: "Saudi riyal", symbol: "SAR", decimals: 0 },
-  USD: { label: "US dollar", symbol: "$", decimals: 0 },
-  EUR: { label: "Euro", symbol: "€", decimals: 0 },
-  AED: { label: "UAE dirham", symbol: "AED", decimals: 0 },
-  GBP: { label: "British pound", symbol: "£", decimals: 0 },
-};
+/**
+ * Presentation metadata for every currency the platform quotes in. The table
+ * itself lives in `currencies.ts` so the `CurrencyCode` type can be derived
+ * from it — a currency cannot be referenced anywhere without having a rate.
+ */
+export const CURRENCIES = CURRENCY_TABLE;
 
 /**
- * Indicative conversion basis relative to SAR — always labeled as indicative in
- * the UI, and always shown alongside the currency the card is actually charged
- * in (§8.4, E-20). A production build replaces this table with the rates the
- * payment provider will actually apply.
+ * Indicative conversion basis relative to SAR — always labelled as indicative
+ * in the UI, and always shown alongside the currency the card is actually
+ * charged in (§8.4, E-20). A production build replaces this with the rates the
+ * payment provider will actually apply; nothing here is a quote.
  */
-export const FX_FROM_SAR: Record<CurrencyCode, number> = {
-  SAR: 1,
-  USD: 0.267,
-  EUR: 0.246,
-  AED: 0.98,
-  GBP: 0.209,
-};
+export const FX_FROM_SAR: Record<CurrencyCode, number> = Object.fromEntries(
+  CURRENCY_CODES.map((code) => [code, CURRENCY_TABLE[code].rateFromSar]),
+) as Record<CurrencyCode, number>;
 
 export function convertFromSar(amountSar: number, currency: CurrencyCode): number {
   return Math.round(amountSar * FX_FROM_SAR[currency]);
 }
 
-export function isSupportedCurrency(code: string | undefined): code is CurrencyCode {
-  return Boolean(code && code in FX_FROM_SAR);
-}
+export const isSupportedCurrency = isCurrencyCode;
 
 /**
  * Convert between any two supported currencies. Suppliers quote in their own

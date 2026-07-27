@@ -6,8 +6,10 @@
  * is allowed to return to the client.
  */
 
+import type { CurrencyCode } from "./currencies";
+
+export type { CurrencyCode };
 export type Locale = "en" | "ar";
-export type CurrencyCode = "SAR" | "USD" | "EUR" | "AED" | "GBP";
 
 /* ------------------------------------------------------------------ search */
 

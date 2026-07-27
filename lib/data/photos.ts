@@ -18,6 +18,8 @@
  * illustrator in `lib/illustration/scenes.ts`, so no card ever renders empty.
  */
 
+import { getCity } from "./geo/cities";
+import { getCountry } from "./geo/countries";
 import type { HotelImage, Locale } from "@/lib/types";
 
 export type PhotoCategory = HotelImage["category"];
@@ -148,6 +150,21 @@ const DESTINATION_SETS: Record<string, readonly string[]> = {
 };
 
 /**
+ * Region fallbacks, assembled from frames already reviewed for the curated
+ * cities. Grouped so each region gets something recognisably of that part of
+ * the world rather than a single global default.
+ */
+const REGION_SETS: Record<string, readonly string[]> = {
+  middleEast: DESTINATION_SETS.dubai,
+  africa: DESTINATION_SETS.makkah,
+  asia: DESTINATION_SETS.doha,
+  europe: DESTINATION_SETS.istanbul,
+  northAmerica: DESTINATION_SETS.dubai,
+  southAmerica: DESTINATION_SETS.jeddah,
+  oceania: DESTINATION_SETS.jeddah,
+};
+
+/**
  * Collections get a named photo rather than a hashed one. There are only eight
  * of them and they sit side by side on one grid, where a repeat is obvious —
  * and several share a category, which is exactly when the hash collides.
@@ -178,7 +195,7 @@ function hash(value: string): number {
 
 function setFor(category: PhotoCategory, destination?: string): readonly string[] {
   if (category === "view") {
-    return (destination && DESTINATION_SETS[destination]) || DESTINATION_SETS.riyadh;
+    return destinationSet(destination);
   }
   return PROPERTY_SETS[category];
 }
@@ -246,10 +263,27 @@ export function propertyPhoto(
   return refFor(pick(key, category, ordinal, options.destination), options);
 }
 
+/**
+ * The photo set for a destination.
+ *
+ * Six cities have their own photographs. The other ~180 fall back to a set
+ * chosen by region rather than to whichever city happened to be written first —
+ * a Lima page showing a Riyadh skyline is worse than one showing an unnamed
+ * Latin American city, because only the first is actively wrong.
+ *
+ * Nothing here claims to be the city in question: the credit line says
+ * "illustrative", and the region fallback is chosen so the frame is at least
+ * plausible for where the guest is looking.
+ */
+function destinationSet(slug?: string): readonly string[] {
+  if (slug && DESTINATION_SETS[slug]) return DESTINATION_SETS[slug];
+  const region = slug ? getCity(slug) && getCountry(getCity(slug)!.countryCode)?.region : undefined;
+  return REGION_SETS[region ?? "middleEast"] ?? REGION_SETS.middleEast;
+}
+
 /** A destination hero. */
 export function destinationPhoto(slug: string, ordinal = 0, options: PhotoOptions = {}): PhotoRef {
-  const set = DESTINATION_SETS[slug];
-  if (!set) return propertyPhoto(slug, "exterior", ordinal, options);
+  const set = destinationSet(slug);
   return refFor(set[ordinal % set.length], options);
 }
 

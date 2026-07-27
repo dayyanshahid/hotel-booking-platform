@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { HomeView, type FeaturedStay, type PriceProof } from "@/components/pages/home-view";
-import { DESTINATIONS, getDestination } from "@/lib/data/destinations";
+import { featuredDestinations, getDestination } from "@/lib/data/destinations";
 import { COLLECTIONS, localized } from "@/lib/data/catalog";
 import { HOTEL_SEEDS, buildHotel, getHotelSeed } from "@/lib/data/hotels";
 import { destinationFromPrice, hotelFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
@@ -21,14 +21,17 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
  * before first paint, so indicative prices are computed in the home market's
  * currency and labelled as indicative.
  */
-const BROWSE_CURRENCY: CurrencyCode = "SAR";
+const BROWSE_CURRENCY: CurrencyCode = "USD";
 
-/** "Stays to start with" — spread across markets and star ratings on purpose. */
+/**
+ * "Stays to start with" — four continents on purpose. The home page of a global
+ * platform should not open with four hotels from one region.
+ */
 const FEATURED_SLUGS = [
-  "corniche-pearl-jeddah",
-  "olaya-grand-riyadh",
   "sultanahmet-old-city-hotel",
-  "marina-walk-hotel",
+  "paris-grand",
+  "tokyo-boutique",
+  "corniche-pearl-jeddah",
 ] as const;
 
 /** The stay the price-transparency example is worked through. */
@@ -88,7 +91,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   const t = createTranslator(locale);
 
-  const destinations = DESTINATIONS.map((d) => ({
+  // Headline destinations only, dealt round-robin across regions — rendering
+  // all 183 here would be a directory, not a home page. The rest are reachable
+  // from the region and country pages, and from search.
+  const destinations = featuredDestinations(12).map((d) => ({
     id: d.id,
     slug: d.slug,
     name: localized(d.name, locale),
