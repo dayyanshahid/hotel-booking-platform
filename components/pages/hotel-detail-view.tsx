@@ -183,7 +183,7 @@ export function HotelDetailView({
                 alt={heroImages[0]?.alt ?? hotel.name}
                 fill
                 priority
-                className="rounded-lg"
+                className="rounded-[14px]"
                 fallbackLabel={t("hotel.imageFallback")}
               />
             </button>
@@ -196,7 +196,7 @@ export function HotelDetailView({
                   fallbackSrc={image.fallbackUrl}
                   alt={image.alt}
                   fill
-                  className="rounded-lg"
+                  className="rounded-[14px]"
                   fallbackLabel={t("hotel.imageFallback")}
                 />
               </button>
@@ -221,7 +221,7 @@ export function HotelDetailView({
             <span className="text-muted text-sm">{hotel.propertyType}</span>
             {hotel.chain && <Badge tone="neutral">{hotel.chain}</Badge>}
           </div>
-          <h1 className="mt-1 text-2xl font-bold wrap-anywhere sm:text-3xl">{hotel.name}</h1>
+          <h1 className="mt-1 text-[28px] font-bold tracking-[-0.025em] wrap-anywhere sm:text-4xl">{hotel.name}</h1>
           <p className="text-muted mt-1 text-sm wrap-anywhere">
             {hotel.address.line1}, {hotel.address.city}, {hotel.address.country}
           </p>
@@ -561,7 +561,7 @@ export function HotelDetailView({
                 fallbackSrc={image.fallbackUrl}
                 alt={image.alt}
                 ratio="4/3"
-                className="rounded-lg"
+                className="rounded-[14px]"
                 fallbackLabel={t("hotel.imageFallback")}
               />
               <p className="text-muted mt-1 text-xs">
@@ -600,7 +600,7 @@ export function HotelDetailView({
 /** Coordinate-projected static map with a textual alternative (§5.6). */
 function StaticMap({ lat, lng, label }: { lat: number; lng: number; label: string }) {
   return (
-    <div className="surface-sunken relative overflow-hidden rounded-lg border" style={{ aspectRatio: "4/3" }}>
+    <div className="surface-sunken hairline relative overflow-hidden rounded-[var(--radius-card)] border" style={{ aspectRatio: "4/3" }}>
       <svg viewBox="0 0 400 300" className="size-full" role="img" aria-label={label}>
         <defs>
           <pattern id="minimap" width="30" height="30" patternUnits="userSpaceOnUse">

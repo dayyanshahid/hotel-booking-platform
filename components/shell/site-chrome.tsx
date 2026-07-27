@@ -28,7 +28,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Mobile primary"
-      className="surface no-print fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t lg:hidden"
+      className="surface-blur hairline no-print fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       {items.map((item) => {
         const target = href(locale, item.href);
@@ -40,6 +40,7 @@ export function BottomNav() {
             aria-current={active ? "page" : undefined}
             className={cx(
               "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px]",
+              "transition-colors duration-200 ease-[var(--ease-out)]",
               active ? "text-brand-700 font-semibold" : "text-muted",
             )}
           >
@@ -85,20 +86,25 @@ export function SiteFooter() {
   ];
 
   return (
-    <footer className="surface no-print mt-12 border-t pb-24 lg:pb-8">
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4">
+    <footer className="surface hairline no-print mt-16 border-t pb-24 lg:pb-8">
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
-          <p className="font-bold">{t("brand.name")}</p>
-          <p className="text-muted mt-2 max-w-xs text-sm">{t("brand.tagline")}</p>
-          <p className="text-muted mt-4 text-xs">{t("footer.disclaimer")}</p>
+          <p className="text-lg font-bold tracking-[-0.02em]">{t("brand.name")}</p>
+          <p className="text-muted mt-2 max-w-xs text-sm leading-relaxed">{t("brand.tagline")}</p>
+          <p className="text-muted mt-5 max-w-xs text-xs leading-relaxed">{t("footer.disclaimer")}</p>
         </div>
         {columns.map((column) => (
           <div key={column.title}>
-            <p className="text-sm font-semibold">{column.title}</p>
-            <ul className="mt-3 space-y-2">
+            {/* Column headings are set as small caps so they label the list
+                without competing with the links for weight. */}
+            <p className="text-muted text-[11px] font-semibold uppercase tracking-[0.09em]">{column.title}</p>
+            <ul className="mt-4 space-y-3">
               {column.links.map((link) => (
                 <li key={link.href}>
-                  <Link href={href(locale, link.href)} className="text-muted text-sm hover:underline">
+                  <Link
+                    href={href(locale, link.href)}
+                    className="hover:text-brand-700 text-sm transition-colors duration-150"
+                  >
                     {link.label}
                   </Link>
                 </li>
@@ -107,8 +113,10 @@ export function SiteFooter() {
           </div>
         ))}
       </div>
-      <div className="text-muted mx-auto max-w-7xl border-t px-4 py-4 text-xs">
-        © {new Date().getFullYear()} {t("brand.name")}. {t("footer.rights")}
+      <div className="hairline mx-auto max-w-7xl border-t px-4 py-5">
+        <p className="text-muted text-xs">
+          © {new Date().getFullYear()} {t("brand.name")}. {t("footer.rights")}
+        </p>
       </div>
     </footer>
   );

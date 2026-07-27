@@ -320,9 +320,9 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold sm:text-2xl">{t("checkout.title")}</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.025em] sm:text-[32px]">{t("checkout.title")}</h1>
         {expiry && !expired && (
-          <Badge tone={expiry.minutes < 3 ? "caution" : "neutral"}>
+          <Badge tone={expiry.minutes < 3 ? "caution" : "neutral"} className="tabular">
             {t("checkout.expiresIn", { time: formatDuration(expiry.minutes, expiry.seconds) })}
           </Badge>
         )}
@@ -347,16 +347,18 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
           {step === 0 && (
             <>
               {!account && (
-                <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <p className="text-sm">{t("checkout.signInFaster")}</p>
-                  <div className="flex gap-2">
-                    <Link href={href(locale, "/signin")}>
-                      <Button size="sm" variant="secondary">
-                        {t("nav.signIn")}
-                      </Button>
-                    </Link>
-                    <Badge tone="positive">{t("checkout.guestCheckout")}</Badge>
+                <Card className="flex flex-wrap items-center justify-between gap-4 p-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{t("checkout.signInFaster")}</p>
+                    {/* Stated as fact, not as a chip beside a button — chip-shaped
+                        text next to a real control reads as a disabled action. */}
+                    <p className="text-muted mt-0.5 text-xs">{t("checkout.guestCheckoutHint")}</p>
                   </div>
+                  <Link href={href(locale, "/signin")} className="shrink-0">
+                    <Button size="sm" variant="secondary">
+                      {t("nav.signIn")}
+                    </Button>
+                  </Link>
                 </Card>
               )}
 
@@ -435,7 +437,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
               )}
 
               <Card className="p-4">
-                <SectionHeading title={t("checkout.payment")} description={t("checkout.paymentSecure")} />
+                <SectionHeading level="card" title={t("checkout.payment")} description={t("checkout.paymentSecure")} />
                 {payment?.mode === "guarantee" && (
                   <div className="mb-3">
                     <Alert tone="info">
@@ -451,7 +453,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
                       <label
                         key={option.code}
                         className={cx(
-                          "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-3 text-sm",
+                          "flex min-h-12 cursor-pointer items-center gap-3 rounded-[var(--radius-control)] border px-3.5 text-sm transition-[border-color,background-color,box-shadow] duration-150 ease-[var(--ease-out)]",
                           method === option.code && "border-brand-500 bg-brand-50/40",
                         )}
                       >
@@ -469,7 +471,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
                 </div>
 
                 {method === "card" && (
-                  <div className="surface-sunken mt-4 rounded-lg border border-dashed p-4">
+                  <div className="surface-sunken mt-4 rounded-[var(--radius-card)] border border-dashed p-4">
                     <p className="text-muted text-xs font-medium">
                       {locale === "ar"
                         ? "حقول مزود الدفع الآمنة (محاكاة)"
@@ -492,7 +494,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
               </Card>
 
               <Card className="p-4">
-                <SectionHeading title={t("checkout.terms")} />
+                <SectionHeading level="card" title={t("checkout.terms")} />
                 <div className="space-y-3">
                   <Checkbox
                     checked={consents.terms}
@@ -795,7 +797,7 @@ function FieldGroup({
   if (!fields.length) return null;
   return (
     <Card className="p-4">
-      <SectionHeading title={title} description={description} />
+      <SectionHeading level="card" title={title} description={description} />
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((field) => (
           <Field

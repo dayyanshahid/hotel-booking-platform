@@ -165,7 +165,7 @@ export function DestinationAutocomplete({
       )}
 
       {open && (
-        <div className="surface absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-lg border shadow-[var(--shadow-float)]">
+        <div className="surface hairline rise absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-y-auto rounded-[var(--radius-card)] border shadow-[var(--shadow-float)]">
           {query.trim().length < 2 && recentItems.length > 0 && (
             <p className="text-muted px-3 pt-2 text-xs font-semibold uppercase">{t("search.recent")}</p>
           )}

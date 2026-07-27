@@ -121,16 +121,29 @@ export function SectionHeading({
   description,
   action,
   id,
+  level = "page",
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   id?: string;
+  /**
+   * "page" heads a whole section of the page; "card" heads a group inside a
+   * card, where the page-level size would out-shout the card's own content.
+   */
+  level?: "page" | "card";
 }) {
+  const page = level === "page";
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className={cx("flex flex-wrap items-end justify-between gap-3", page ? "mb-5" : "mb-4")}>
       <div>
-        <h2 id={id} className="text-xl font-semibold sm:text-[26px]">
+        <h2
+          id={id}
+          className={cx(
+            "font-semibold",
+            page ? "text-xl tracking-[-0.02em] sm:text-[26px]" : "text-base tracking-[-0.01em] sm:text-lg",
+          )}
+        >
           {title}
         </h2>
         {description && <p className="text-muted mt-1 max-w-2xl text-sm">{description}</p>}
@@ -222,7 +235,7 @@ export function Alert({
 
 /** Skeletons match the final geometry so nothing shifts on load (§11.2). */
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cx("surface-sunken shimmer rounded-[10px]", className)} />;
+  return <div aria-hidden className={cx("shimmer rounded-[10px]", className)} />;
 }
 
 export function EmptyState({
@@ -240,12 +253,14 @@ export function EmptyState({
   art?: ReactNode;
 }) {
   return (
-    <Card className="p-8 text-center">
-      {art && <div className="mb-4 flex justify-center">{art}</div>}
-      {icon && <div className="mb-3 flex justify-center">{icon}</div>}
-      <h3 className="text-base font-semibold">{title}</h3>
-      {body && <p className="text-muted mx-auto mt-2 max-w-md text-sm">{body}</p>}
-      {actions && <div className="mt-4 flex flex-wrap justify-center gap-2">{actions}</div>}
+    // Constrained rather than full-bleed: centred text stranded across a wide
+    // card reads as a layout failure, not as a designed empty state.
+    <Card className="mx-auto w-full max-w-xl px-6 py-12 text-center">
+      {art && <div className="mb-5 flex justify-center">{art}</div>}
+      {icon && <div className="mb-4 flex justify-center">{icon}</div>}
+      <h3 className="text-lg font-semibold tracking-[-0.015em]">{title}</h3>
+      {body && <p className="text-muted mx-auto mt-2 max-w-sm text-sm leading-relaxed">{body}</p>}
+      {actions && <div className="mt-6 flex flex-wrap justify-center gap-2">{actions}</div>}
     </Card>
   );
 }
@@ -447,19 +462,20 @@ export function Modal({
   const widths = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl" };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+    <div className="scrim fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={cx(
-          "surface max-h-[92vh] w-full overflow-y-auto rounded-t-2xl shadow-[var(--shadow-float)] sm:rounded-[var(--radius-card)]",
+          "surface rise max-h-[92vh] w-full overflow-y-auto rounded-t-[var(--radius-sheet)]",
+          "shadow-[var(--shadow-float)] sm:rounded-[var(--radius-sheet)]",
           widths[size],
         )}
       >
-        <div className="surface sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-5 py-4">
-          <h2 className="text-base font-semibold">{title}</h2>
+        <div className="surface-blur hairline sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-5 py-4">
+          <h2 className="text-base font-semibold tracking-[-0.015em]">{title}</h2>
           {dismissible && (
             <Button variant="ghost" size="sm" onClick={onClose} aria-label={labelClose}>
               <Icon name="close" />
@@ -467,7 +483,7 @@ export function Modal({
           )}
         </div>
         <div className="px-5 py-4">{children}</div>
-        {footer && <div className="surface sticky bottom-0 border-t px-5 py-4">{footer}</div>}
+        {footer && <div className="surface-blur hairline sticky bottom-0 border-t px-5 py-4">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -504,18 +520,19 @@ export function Drawer({
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end bg-black/50 sm:items-stretch sm:justify-end">
+    <div className="scrim fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
         className={cx(
-          "surface flex max-h-[88vh] w-full flex-col rounded-t-2xl shadow-[var(--shadow-float)] sm:max-h-none sm:w-[420px] sm:rounded-none",
+          "surface rise flex max-h-[88vh] w-full flex-col rounded-t-[var(--radius-sheet)]",
+          "shadow-[var(--shadow-float)] sm:max-h-none sm:w-[420px] sm:rounded-none",
           side === "start" && "sm:me-auto",
         )}
       >
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <h2 className="text-base font-semibold">{title}</h2>
+        <div className="hairline flex items-center justify-between border-b px-5 py-4">
+          <h2 className="text-base font-semibold tracking-[-0.015em]">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
             <Icon name="close" />
           </Button>
@@ -757,7 +774,7 @@ export function ToastStack({
           key={toast.id}
           role="status"
           className={cx(
-            "pointer-events-auto rounded-lg px-4 py-2 text-sm text-white shadow-[var(--shadow-float)]",
+            "pointer-events-auto rounded-[var(--radius-pill)] px-4 py-2.5 text-sm font-medium text-white shadow-[var(--shadow-float)]",
             toast.tone === "critical" ? "bg-critical-700" : toast.tone === "success" ? "bg-positive-700" : "bg-ink-900",
           )}
         >

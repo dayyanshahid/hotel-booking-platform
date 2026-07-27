@@ -57,8 +57,11 @@ export function FiltersPanel({
               aria-pressed={filters.categories?.includes(cat.value) ?? false}
               onClick={() => set({ categories: toggleIn(filters.categories, cat.value) })}
               className={cx(
-                "min-h-9 rounded-full border px-3 text-xs font-medium",
-                filters.categories?.includes(cat.value) ? "bg-brand-600 border-brand-600 text-white" : "surface",
+                "min-h-9 rounded-[var(--radius-pill)] border px-3.5 text-xs font-medium",
+                "transition-[background-color,border-color,color] duration-200 ease-[var(--ease-out)]",
+                filters.categories?.includes(cat.value)
+                  ? "bg-brand-600 border-brand-600 text-white"
+                  : "surface hover:border-brand-300",
               )}
             >
               {cat.value}★ ({cat.count})
@@ -255,7 +258,7 @@ export function ActiveFilterChips({
           key={chip.key}
           type="button"
           onClick={chip.clear}
-          className="surface inline-flex min-h-9 items-center gap-1 rounded-full border px-3 text-xs"
+          className="surface hover:border-brand-300 inline-flex min-h-9 items-center gap-1 rounded-[var(--radius-pill)] border px-3 text-xs transition-colors duration-150"
         >
           {chip.label}
           <span aria-hidden>✕</span>

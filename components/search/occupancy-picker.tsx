@@ -64,7 +64,7 @@ export function OccupancyPicker({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="surface mt-1.5 min-h-11 w-full rounded-lg border px-3 text-start text-sm"
+        className="surface mt-1.5 min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 text-start text-sm transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)]"
       >
         {summary}
       </button>
@@ -73,11 +73,11 @@ export function OccupancyPicker({
         <div
           role="dialog"
           aria-label={t("common.guests")}
-          className="surface absolute inset-x-0 top-full z-30 mt-1 w-full rounded-lg border p-4 shadow-[var(--shadow-float)] sm:w-[420px]"
+          className="surface hairline rise absolute inset-x-0 top-full z-30 mt-2 w-full rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-float)] sm:w-[420px]"
         >
           <div className="max-h-[50vh] space-y-4 overflow-y-auto">
             {rooms.map((room, index) => (
-              <div key={index} className="rounded-lg border p-3">
+              <div key={index} className="hairline rounded-[var(--radius-control)] border p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-semibold">
                     {t("common.room")} {index + 1}

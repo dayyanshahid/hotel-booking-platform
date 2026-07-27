@@ -111,7 +111,7 @@ export function DateRangePicker({
         aria-haspopup="dialog"
         aria-describedby={error ? "dates-error" : undefined}
         className={cx(
-          "surface mt-1.5 min-h-11 w-full rounded-lg border px-3 text-start text-sm",
+          "surface mt-1.5 min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 text-start text-sm transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)]",
           error && "border-critical-500",
         )}
       >
@@ -127,7 +127,7 @@ export function DateRangePicker({
         <div
           role="dialog"
           aria-label={t("common.dates")}
-          className="surface absolute inset-x-0 top-full z-30 mt-1 w-full rounded-lg border p-3 shadow-[var(--shadow-float)] sm:w-[560px]"
+          className="surface hairline rise absolute inset-x-0 top-full z-30 mt-2 w-full rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-float)] sm:w-[560px]"
         >
           <div className="mb-2 flex items-center justify-between">
             <Button
@@ -146,7 +146,9 @@ export function DateRangePicker({
                 ‹
               </span>
             </Button>
-            <p className="text-sm font-semibold">{t("a11y.calendarHelp")}</p>
+            {/* Keyboard guidance, not a title — it sits between the month arrows
+                and must not read as the heading for the grid below it. */}
+            <p className="text-muted text-xs">{t("a11y.calendarHelp")}</p>
             <Button
               size="sm"
               variant="ghost"
@@ -193,7 +195,7 @@ export function DateRangePicker({
                   onClick={() => onChange({ checkIn, checkOut, flexibility: option.id })}
                   aria-pressed={flexibility === option.id}
                   className={cx(
-                    "min-h-9 rounded-full border px-3 text-xs font-medium",
+                    "min-h-9 rounded-[var(--radius-pill)] border px-3.5 text-xs font-medium transition-colors duration-150",
                     flexibility === option.id ? "bg-brand-600 border-brand-600 text-white" : "surface",
                   )}
                 >
@@ -272,7 +274,7 @@ function MonthGrid({
               onMouseEnter={() => onHover(date)}
               onClick={() => onPick(date)}
               className={cx(
-                "relative min-h-10 rounded-md text-sm",
+                "relative min-h-10 rounded-[10px] text-sm transition-colors duration-100",
                 disabled && "text-muted cursor-not-allowed line-through opacity-40",
                 !disabled && "hover:surface-sunken",
                 inRange && "bg-brand-50 text-brand-900",

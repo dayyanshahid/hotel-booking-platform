@@ -127,7 +127,8 @@ export function ResultsMap({
                       type="button"
                       onClick={() => onSelect(isCluster ? cheapest.slug : first.slug)}
                       className={cx(
-                        "min-h-8 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold shadow",
+                        "tabular min-h-8 whitespace-nowrap rounded-[var(--radius-pill)] border px-3 text-xs font-semibold",
+                        "shadow-[var(--shadow-card)] transition-[background-color,border-color,color,transform] duration-150 ease-[var(--ease-out)] hover:scale-105",
                         active ? "bg-brand-600 border-brand-600 text-white" : "surface",
                       )}
                     >
@@ -172,13 +173,13 @@ export function ResultsMap({
                 fallbackSrc={selectedCard.heroImageFallback}
                 alt={selectedCard.heroAlt}
                 ratio="1/1"
-                className="w-24 shrink-0 rounded-md"
+                className="w-24 shrink-0 rounded-[var(--radius-control)]"
                 fallbackLabel={t("hotel.imageFallback")}
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{selectedCard.name}</p>
                 <p className="text-muted truncate text-xs">{selectedCard.neighborhood}</p>
-                <p className="mt-1 text-sm font-bold">
+                <p className="tabular mt-1 text-sm font-bold">
                   {formatMoney(selectedCard.price.total, selectedCard.price.currency, locale)}
                 </p>
                 <div className="mt-1 flex items-center gap-2">

@@ -43,7 +43,7 @@ export function RoomBlock({
               fallbackSrc={room.images[0]?.fallbackUrl}
               alt={room.images[0]?.alt ?? room.name}
               ratio="4/3"
-              className="rounded-lg"
+              className="rounded-[14px]"
               fallbackLabel={t("hotel.imageFallback")}
             />
             <span className="text-brand-700 mt-1 inline-block text-xs font-medium">
@@ -82,7 +82,7 @@ export function RoomBlock({
           </div>
 
           {room.mappingConfidence < 0.8 && (
-            <p className="text-caution-700 bg-caution-50 mt-3 rounded-md p-2 text-xs">{t("room.uncertainMatch")}</p>
+            <p className="text-caution-700 bg-caution-50 mt-3 rounded-[10px] px-2.5 py-2 text-xs">{t("room.uncertainMatch")}</p>
           )}
 
           <ul className="mt-4 space-y-3">
@@ -110,7 +110,7 @@ export function RoomBlock({
                 fallbackSrc={image.fallbackUrl}
                 alt={image.alt}
                 ratio="4/3"
-                className="rounded-lg"
+                className="rounded-[14px]"
                 fallbackLabel={t("hotel.imageFallback")}
               />
               <p className="text-muted mt-1 text-xs">
@@ -148,7 +148,7 @@ function RateRow({
   return (
     <li
       className={cx(
-        "rounded-lg border p-3",
+        "hairline rounded-[var(--radius-control)] border p-3.5",
         selected ? "border-brand-500 bg-brand-50/40" : "surface",
       )}
     >

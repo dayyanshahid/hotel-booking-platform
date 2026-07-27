@@ -251,7 +251,7 @@ export function AccountView({ locale }: { locale: Locale }) {
           <SectionHeading title={t("account.travelers")} description={t("account.travelersBody")} />
           <ul className="space-y-2">
             {travelers.map((traveler) => (
-              <li key={traveler.id} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
+              <li key={traveler.id} className="hairline flex items-center justify-between gap-3 rounded-[var(--radius-control)] border p-3.5 text-sm">
                 <span>
                   {traveler.firstName} {traveler.surname}
                   <Badge tone="neutral" className="ms-2">

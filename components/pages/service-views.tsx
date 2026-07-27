@@ -68,6 +68,8 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
     { id: "email", label: t("support.email"), sla: 8 },
   ];
 
+  const slaHours = channels.find((c) => c.id === channel)?.sla ?? 8;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-5">
@@ -109,8 +111,11 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
               <label
                 key={item.id}
                 className={cx(
-                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-3 text-sm",
-                  category === item.id && "border-brand-500 bg-brand-50/40",
+                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-[var(--radius-control)] border px-3.5 text-sm",
+                  "transition-[border-color,background-color,box-shadow] duration-150 ease-[var(--ease-out)]",
+                  category === item.id
+                    ? "border-brand-500 bg-brand-50 shadow-[0_0_0_3px_var(--ring)]"
+                    : "hover:border-brand-300",
                 )}
               >
                 <input
@@ -118,7 +123,7 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
                   name="support-category"
                   checked={category === item.id}
                   onChange={() => setCategory(item.id)}
-                  className="size-4"
+                  className="size-4 accent-[var(--focus)]"
                 />
                 {item.label}
               </label>
@@ -135,8 +140,11 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
                   onClick={() => setChannel(item.id)}
                   aria-pressed={channel === item.id}
                   className={cx(
-                    "min-h-11 rounded-full border px-4 text-sm",
-                    channel === item.id ? "bg-brand-600 border-brand-600 text-white" : "surface",
+                    "min-h-11 rounded-[var(--radius-pill)] border px-4 text-sm font-medium",
+                    "transition-[background-color,border-color,color] duration-200 ease-[var(--ease-out)]",
+                    channel === item.id
+                      ? "bg-brand-600 border-brand-600 text-white"
+                      : "surface hover:border-brand-300",
                   )}
                 >
                   {item.label}
@@ -144,7 +152,9 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
               ))}
             </div>
             <p className="text-muted mt-2 text-xs">
-              {t("support.sla", { hours: channels.find((c) => c.id === channel)?.sla ?? 8 })}
+              {/* A one-hour SLA needs its own string; "within 1 hours" is not a
+                  sentence in either language. */}
+              {slaHours === 1 ? t("support.slaOne") : t("support.sla", { hours: slaHours })}
             </p>
           </div>
 
@@ -156,7 +166,7 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
                 maxLength={800}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                className="surface w-full rounded-lg border px-3 py-2 text-sm"
+                className="surface w-full rounded-[var(--radius-control)] border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] focus:border-brand-500 focus:shadow-[0_0_0_4px_var(--ring)]"
               />
             </Field>
             {bookingReference && (
