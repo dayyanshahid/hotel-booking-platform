@@ -48,7 +48,7 @@ export async function reconcileBooking(booking: Booking, locale: Locale): Promis
       : await findSupplierBookingByClientReference(booking.reference);
 
     if (supplierBooking?.reference) {
-      if (!linked) linkSupplierReference(booking.reference, supplierBooking.reference, "hotelbeds");
+      if (!linked) await linkSupplierReference(booking.reference, supplierBooking.reference, "hotelbeds");
       const cancelled = supplierBooking.status === "CANCELLED";
       const resolved: Booking = {
         ...booking,
@@ -137,7 +137,7 @@ export async function reconcileBooking(booking: Booking, locale: Locale): Promis
       ],
     };
     await saveBooking(confirmed, confirmed.contact.email);
-    pushNotification(confirmed.contact.email, {
+    await pushNotification(confirmed.contact.email, {
       id: `nt_${Math.random().toString(36).slice(2, 9)}`,
       kind: "booking",
       title: locale === "ar" ? "تم تأكيد حجزك" : "Your booking is confirmed",

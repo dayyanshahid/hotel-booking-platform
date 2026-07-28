@@ -67,7 +67,7 @@ export async function GET(req: Request) {
     });
   }
 
-  for (const supportCase of listCases()) {
+  for (const supportCase of await listCases()) {
     if (!`${supportCase.caseId} ${supportCase.category}`.toLowerCase().includes(query)) continue;
     hits.push({
       type: "case",

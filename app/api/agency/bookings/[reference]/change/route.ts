@@ -44,7 +44,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
   // One open request per booking. A second is almost always the same agent
   // asking again, and two cases for one change is how a customer gets two
   // different answers.
-  const existing = listCases().find(
+  const existing = (await listCases()).find(
     (item) => item.bookingReference === reference && item.status !== "resolved" && item.category.startsWith("change:"),
   );
   if (existing) return ok({ case: existing, alreadyOpen: true });
@@ -75,7 +75,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
     ],
   };
 
-  saveCase(supportCase);
+  await saveCase(supportCase);
   return ok({ case: supportCase, alreadyOpen: false });
 }
 

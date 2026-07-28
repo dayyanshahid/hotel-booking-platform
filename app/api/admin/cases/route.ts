@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const owner = url.searchParams.get("owner") ?? "all";
   const now = Date.now();
 
-  const cases = listCases()
+  const cases = (await listCases())
     .filter((item) => (status === "all" ? true : status === "open" ? item.status !== "resolved" : item.status === status))
     .filter((item) => {
       if (owner === "mine") return item.assignee === session.email;

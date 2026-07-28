@@ -1,7 +1,5 @@
 import "server-only";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { dataDir } from "../server/runtime";
+import { driver } from "../server/persistence";
 
 /**
  * Platform state the console owns: what we charge, and what operators did.
@@ -11,7 +9,7 @@ import { dataDir } from "../server/runtime";
  * has no concept of it.
  */
 
-const FILE = path.join(dataDir(), "platform.json");
+const KEY = "platform";
 
 /**
  * One operator action.
@@ -68,39 +66,27 @@ interface Shape {
 
 const state: Shape = { settings: null, audit: [] };
 let loaded = false;
-let seenMtimeMs = 0;
+let seenVersion: string | null = null;
 let pinned = false;
 
 async function load(): Promise<void> {
   if (pinned) return;
-  let mtimeMs = 0;
-  try {
-    mtimeMs = (await fs.stat(FILE)).mtimeMs;
-  } catch {
-    // No file yet.
-  }
-  if (loaded && mtimeMs === seenMtimeMs) return;
+  const version = await driver().version(KEY);
+  if (loaded && version === seenVersion) return;
 
   loaded = true;
-  seenMtimeMs = mtimeMs;
-  try {
-    const parsed = JSON.parse(await fs.readFile(FILE, "utf8")) as Partial<Shape>;
+  seenVersion = version;
+  const parsed = await driver().read<Partial<Shape>>(KEY);
+  if (parsed) {
     state.settings = parsed.settings ?? null;
     state.audit = parsed.audit ?? [];
-  } catch {
-    state.settings = state.settings ?? null;
   }
 }
 
 async function persist(): Promise<void> {
   if (pinned) return;
-  try {
-    await fs.mkdir(path.dirname(FILE), { recursive: true });
-    await fs.writeFile(FILE, JSON.stringify(state, null, 2), "utf8");
-    seenMtimeMs = (await fs.stat(FILE)).mtimeMs;
-  } catch {
-    // Best effort; the in-memory copy stays authoritative for this instance.
-  }
+  await driver().write(KEY, state);
+  seenVersion = await driver().version(KEY);
 }
 
 /** The stored override, or null when the deployed default still stands. */

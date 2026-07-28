@@ -413,14 +413,14 @@ export async function POST(req: Request) {
     // Guarded by supplier now that there is more than one. Writing "hotelbeds"
     // unconditionally overwrote the TourMind link recorded above, which would
     // have sent every TourMind cancellation to the wrong API.
-    linkSupplierReference(booking.reference, supplierReference, "hotelbeds");
+    await linkSupplierReference(booking.reference, supplierReference, "hotelbeds");
   }
   if (tourmindAgentRef) {
-    linkSupplierReference(booking.reference, tourmindAgentRef, "tourmind");
+    await linkSupplierReference(booking.reference, tourmindAgentRef, "tourmind");
   }
   saveSession({ ...session, idempotencyKeys: [...session.idempotencyKeys, body.idempotencyKey] });
 
-  pushNotification(booking.contact.email, {
+  await pushNotification(booking.contact.email, {
     id: `nt_${Math.random().toString(36).slice(2, 9)}`,
     kind: "booking",
     title: pending

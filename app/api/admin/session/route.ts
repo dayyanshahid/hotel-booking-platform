@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   }
 
   const allowed = isAdminEmail(body.email);
-  const code = allowed ? issueOtp(body.email.toLowerCase(), "admin") : undefined;
+  const code = allowed ? await issueOtp(body.email.toLowerCase(), "admin") : undefined;
   return ok({ sent: true, email: body.email.toLowerCase(), demoCode: code });
 }
 
@@ -32,7 +32,7 @@ export async function PUT(req: Request) {
   const body = await readJson<{ email: string; code: string }>(req);
   if (!body?.email || !body.code) return fail("validation", "error.validation", locale, { status: 400 });
 
-  if (!isAdminEmail(body.email) || !verifyOtp(body.email.toLowerCase(), "admin", body.code)) {
+  if (!isAdminEmail(body.email) || !(await verifyOtp(body.email.toLowerCase(), "admin", body.code))) {
     return fail("accountSecurity", "account.codeInvalid", locale, { status: 401, action: "authenticate" });
   }
 

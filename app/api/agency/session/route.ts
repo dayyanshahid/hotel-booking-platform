@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const agent = await getAgentByEmail(body.email);
-  const code = agent?.active ? issueOtp(body.email.toLowerCase(), "agency") : undefined;
+  const code = agent?.active ? await issueOtp(body.email.toLowerCase(), "agency") : undefined;
 
   // `demoCode` mirrors the consumer flow so the portal can be walked end-to-end
   // in this environment; a real deployment delivers it out-of-band only.
@@ -37,7 +37,7 @@ export async function PUT(req: Request) {
   if (!body?.email || !body.code) return fail("validation", "error.validation", locale, { status: 400 });
 
   const agent = await getAgentByEmail(body.email);
-  if (!agent || !agent.active || !verifyOtp(body.email.toLowerCase(), "agency", body.code)) {
+  if (!agent || !agent.active || !(await verifyOtp(body.email.toLowerCase(), "agency", body.code))) {
     return fail("accountSecurity", "account.codeInvalid", locale, { status: 401, action: "authenticate" });
   }
 

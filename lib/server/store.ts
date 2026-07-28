@@ -1,6 +1,4 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import { dataDir } from "./runtime";
+import { driver } from "./persistence";
 import type {
   Booking,
   CancellationPolicy,
@@ -18,8 +16,14 @@ import type { BoardCode, RateClass } from "./pricing";
 import type { SourceCode } from "./suppliers";
 
 /**
- * Process-local persistence. A production BFF owns these in a database; the
- * shapes here mirror what the frontend contract needs (§8.5, §8.6).
+ * Where a booking lives between requests.
+ *
+ * The volatile half — offers, checkout sessions, cancellation quotes — is
+ * deliberately process-local: it is short-lived working state tied to one
+ * conversation with the guest, and re-quoting is the correct behaviour when it
+ * is gone. Bookings and their supplier references are not: they are the record
+ * of money taken and a room held, so they go through the shared persistence
+ * driver and survive whichever instance happened to create them.
  */
 
 /**
@@ -128,63 +132,150 @@ const store: StoreShape =
     supplierRefs: new Map(),
   });
 
-const DATA_DIR = dataDir();
-const DATA_FILE = path.join(DATA_DIR, "bookings.json");
-let loaded = false;
+/**
+ * A document several instances share.
+ *
+ * Each concern gets its own — bookings, support, sign-in codes — so recording a
+ * support case does not rewrite every booking, and a busy sign-in flow does not
+ * compete for the same document as the booking record.
+ *
+ * The discipline every caller follows is load, mutate, save. A document is
+ * written whole, so an instance that mutated without reading would persist its
+ * own partial view over everybody else's: the one way a shared store loses more
+ * than no store at all.
+ */
+class SharedDoc<T> {
+  private version: string | null = null;
+  private everLoaded = false;
 
-/** Bookings are the only records worth surviving a dev-server restart. */
+  constructor(
+    private readonly key: string,
+    private readonly apply: (value: T) => void,
+    private readonly snapshot: () => T,
+  ) {}
+
+  /** Reads only when the stored version has moved since we last looked. */
+  async load(): Promise<void> {
+    const version = await driver().version(this.key);
+    if (this.everLoaded && version === this.version) return;
+    this.everLoaded = true;
+    this.version = version;
+    const parsed = await driver().read<T>(this.key);
+    if (parsed) this.apply(parsed);
+  }
+
+  async save(): Promise<void> {
+    await driver().write(this.key, this.snapshot());
+    // Our own write must not look like someone else's change on the next read.
+    this.version = await driver().version(this.key);
+  }
+
+  /** Test seam: behave like a process that has never read this document. */
+  forget(): void {
+    this.everLoaded = false;
+    this.version = null;
+  }
+}
+
+/* The record of money taken and a room held. */
+interface BookingsDoc {
+  bookings: Booking[];
+  byEmail: [string, string[]][];
+}
+
+const bookingsDoc = new SharedDoc<BookingsDoc>(
+  "bookings",
+  (value) => {
+    store.bookings.clear();
+    store.bookingsByEmail.clear();
+    for (const booking of value.bookings ?? []) store.bookings.set(booking.reference, booking);
+    for (const [email, refs] of value.byEmail ?? []) store.bookingsByEmail.set(email, refs);
+  },
+  () => ({
+    bookings: [...store.bookings.values()],
+    byEmail: [...store.bookingsByEmail.entries()],
+  }),
+);
+
+/* Kept apart from the booking document so it can never be serialised with it. */
+type SupplierRefsDoc = [string, { reference: string; source: string }][];
+
+const supplierRefsDoc = new SharedDoc<SupplierRefsDoc>(
+  "supplier-refs",
+  (value) => {
+    store.supplierRefs.clear();
+    for (const [key, ref] of value) store.supplierRefs.set(key, ref);
+  },
+  () => [...store.supplierRefs.entries()],
+);
+
+/*
+ * Everything a guest leaves behind that someone else has to answer.
+ *
+ * A support case raised on one instance and an operator working the queue on
+ * another is the ordinary case, not the edge one — without this the console
+ * shows whatever its own instance happened to see.
+ */
+interface SupportDoc {
+  cases: SupportCase[];
+  alerts: PriceAlert[];
+  travelers: [string, TravelerProfile[]][];
+  notifications: [string, AppNotification[]][];
+}
+
+const supportDoc = new SharedDoc<SupportDoc>(
+  "support",
+  (value) => {
+    store.cases.clear();
+    store.alerts.clear();
+    store.travelers.clear();
+    store.notifications.clear();
+    for (const item of value.cases ?? []) store.cases.set(item.caseId, item);
+    for (const alert of value.alerts ?? []) store.alerts.set(alert.id, alert);
+    for (const [email, profiles] of value.travelers ?? []) store.travelers.set(email, profiles);
+    for (const [channel, list] of value.notifications ?? []) store.notifications.set(channel, list);
+  },
+  () => ({
+    cases: [...store.cases.values()],
+    alerts: [...store.alerts.values()],
+    travelers: [...store.travelers.entries()],
+    notifications: [...store.notifications.entries()],
+  }),
+);
+
+/*
+ * Sign-in codes.
+ *
+ * The instance that issues a code is rarely the one that checks it, so holding
+ * them in process meant sign-in worked only when a lambda happened to be
+ * reused. `DEMO_OTP` papered over that; this removes the need for it.
+ */
+type OtpDoc = [string, { code: string; expiresAt: number; purpose: string }][];
+
+const otpDoc = new SharedDoc<OtpDoc>(
+  "otps",
+  (value) => {
+    store.otps.clear();
+    const now = Date.now();
+    for (const [key, entry] of value) if (entry.expiresAt > now) store.otps.set(key, entry);
+  },
+  // Expired codes are dropped on the way out rather than accumulating forever.
+  () => [...store.otps.entries()].filter(([, entry]) => entry.expiresAt > Date.now()),
+);
+
+/**
+ * Test seam: forget the sign-in codes this process is holding, which is what a
+ * cold instance sees.
+ */
+export function __resetOtpCache(): void {
+  store.otps.clear();
+  otpDoc.forget();
+}
+
+/** Bookings and the supplier references that belong to them. */
 export async function loadPersisted(): Promise<void> {
-  if (loaded) return;
-  loaded = true;
-  try {
-    const raw = await fs.readFile(DATA_FILE, "utf8");
-    const parsed = JSON.parse(raw) as { bookings: Booking[]; byEmail: [string, string[]][] };
-    for (const b of parsed.bookings ?? []) store.bookings.set(b.reference, b);
-    for (const [email, refs] of parsed.byEmail ?? []) store.bookingsByEmail.set(email, refs);
-  } catch {
-    /* first run */
-  }
-  try {
-    const raw = await fs.readFile(path.join(DATA_DIR, "supplier-refs.json"), "utf8");
-    for (const [key, value] of JSON.parse(raw) as [string, { reference: string; source: string }][]) {
-      store.supplierRefs.set(key, value);
-    }
-  } catch {
-    /* no live bookings yet */
-  }
-}
-
-async function persistSupplierRefs(): Promise<void> {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(
-      path.join(DATA_DIR, "supplier-refs.json"),
-      JSON.stringify([...store.supplierRefs.entries()], null, 2),
-      "utf8",
-    );
-  } catch {
-    /* best effort */
-  }
-}
-
-async function persist(): Promise<void> {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(
-      DATA_FILE,
-      JSON.stringify(
-        {
-          bookings: [...store.bookings.values()],
-          byEmail: [...store.bookingsByEmail.entries()],
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
-  } catch {
-    /* persistence is best-effort in the demo environment */
-  }
+  await bookingsDoc.load();
+  await supplierRefsDoc.load();
 }
 
 /* ------------------------------------------------------------- offers */
@@ -218,6 +309,10 @@ export function getSession(id: string): StoredSession | undefined {
 /* ----------------------------------------------------------- bookings */
 
 export async function saveBooking(booking: Booking, email?: string): Promise<void> {
+  // Read before writing. A document is written whole, so an instance that has
+  // never read would otherwise persist its own single booking over everyone
+  // else's — the one way a shared store loses more data than no store at all.
+  await loadPersisted();
   store.bookings.set(booking.reference, booking);
   if (email) {
     const key = email.trim().toLowerCase();
@@ -225,7 +320,7 @@ export async function saveBooking(booking: Booking, email?: string): Promise<voi
     if (!list.includes(booking.reference)) list.push(booking.reference);
     store.bookingsByEmail.set(key, list);
   }
-  await persist();
+  await bookingsDoc.save();
 }
 
 export async function getBooking(reference: string): Promise<Booking | undefined> {
@@ -253,9 +348,17 @@ export function setIdempotency(key: string, reference: string): void {
 }
 
 /** Supplier-side identifiers, kept out of every customer-facing payload. */
-export function linkSupplierReference(platformReference: string, reference: string, source: string): void {
+export async function linkSupplierReference(
+  platformReference: string,
+  reference: string,
+  source: string,
+): Promise<void> {
+  // Awaited rather than fired and forgotten: a lambda is frozen the moment it
+  // responds, and losing this link means a real supplier booking nobody can
+  // cancel.
+  await loadPersisted();
   store.supplierRefs.set(platformReference, { reference, source });
-  void persistSupplierRefs();
+  await supplierRefsDoc.save();
 }
 
 export function getSupplierReference(platformReference: string): { reference: string; source: string } | undefined {
@@ -274,47 +377,62 @@ export function getQuote(id: string): CancellationQuote | undefined {
 
 /* ------------------------------------------------- alerts, cases, misc */
 
-export function saveAlert(alert: PriceAlert): void {
+export async function saveAlert(alert: PriceAlert): Promise<void> {
+  await supportDoc.load();
   store.alerts.set(alert.id, alert);
+  await supportDoc.save();
 }
 
-export function listAlerts(): PriceAlert[] {
+export async function listAlerts(): Promise<PriceAlert[]> {
+  await supportDoc.load();
   return [...store.alerts.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function removeAlert(id: string): void {
+export async function removeAlert(id: string): Promise<void> {
+  await supportDoc.load();
   const alert = store.alerts.get(id);
-  if (alert) store.alerts.set(id, { ...alert, status: "unsubscribed" });
+  if (!alert) return;
+  store.alerts.set(id, { ...alert, status: "unsubscribed" });
+  await supportDoc.save();
 }
 
-export function saveCase(supportCase: SupportCase): void {
+export async function saveCase(supportCase: SupportCase): Promise<void> {
+  await supportDoc.load();
   store.cases.set(supportCase.caseId, supportCase);
+  await supportDoc.save();
 }
 
-export function listCases(): SupportCase[] {
+export async function listCases(): Promise<SupportCase[]> {
+  await supportDoc.load();
   return [...store.cases.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function getCase(id: string): SupportCase | undefined {
+export async function getCase(id: string): Promise<SupportCase | undefined> {
+  await supportDoc.load();
   return store.cases.get(id);
 }
 
-export function pushNotification(channel: string, notification: AppNotification): void {
+export async function pushNotification(channel: string, notification: AppNotification): Promise<void> {
+  await supportDoc.load();
   const list = store.notifications.get(channel) ?? [];
   list.unshift(notification);
   store.notifications.set(channel, list.slice(0, 50));
+  await supportDoc.save();
 }
 
-export function listNotifications(channel: string): AppNotification[] {
+export async function listNotifications(channel: string): Promise<AppNotification[]> {
+  await supportDoc.load();
   return store.notifications.get(channel) ?? [];
 }
 
-export function markNotificationsRead(channel: string): void {
+export async function markNotificationsRead(channel: string): Promise<void> {
+  await supportDoc.load();
   const list = store.notifications.get(channel) ?? [];
   store.notifications.set(
     channel,
     list.map((n) => ({ ...n, read: true })),
   );
+  await supportDoc.save();
 }
 
 /* ---------------------------------------------------------------- OTP */
@@ -335,42 +453,45 @@ function fixedOtp(): string | null {
   return value && /^\d{4,8}$/.test(value) ? value : null;
 }
 
-export function issueOtp(key: string, purpose: string): string {
+export async function issueOtp(key: string, purpose: string): Promise<string> {
   // Demo environment: the code is surfaced in the response so the flow can be
   // exercised. A real deployment sends it out-of-band only.
   const code = fixedOtp() ?? String(100000 + Math.floor(Math.random() * 899999));
+  await otpDoc.load();
   store.otps.set(`${purpose}:${key.toLowerCase()}`, {
     code,
     expiresAt: Date.now() + 10 * 60 * 1000,
     purpose,
   });
+  await otpDoc.save();
   return code;
 }
 
-export function verifyOtp(key: string, purpose: string, code: string): boolean {
-  /*
-   * A configured code verifies without consulting the store, which also fixes
-   * a real fault on serverless: the request that issued a code and the one
-   * that checks it are often different instances, and this store is
-   * process-local. Sign-in worked only because instances happened to be reused.
-   */
+export async function verifyOtp(key: string, purpose: string, code: string): Promise<boolean> {
+  // A configured code verifies without consulting the store at all.
   const fixed = fixedOtp();
   if (fixed && code.trim() === fixed) return true;
 
+  await otpDoc.load();
   const entry = store.otps.get(`${purpose}:${key.toLowerCase()}`);
   if (!entry) return false;
   if (entry.expiresAt < Date.now()) return false;
   if (entry.code !== code.trim()) return false;
+  // Single use, and the deletion has to be visible to the next instance too.
   store.otps.delete(`${purpose}:${key.toLowerCase()}`);
+  await otpDoc.save();
   return true;
 }
 
 /* --------------------------------------------------------- travelers */
 
-export function saveTravelers(email: string, profiles: TravelerProfile[]): void {
+export async function saveTravelers(email: string, profiles: TravelerProfile[]): Promise<void> {
+  await supportDoc.load();
   store.travelers.set(email.toLowerCase(), profiles);
+  await supportDoc.save();
 }
 
-export function listTravelers(email: string): TravelerProfile[] {
+export async function listTravelers(email: string): Promise<TravelerProfile[]> {
+  await supportDoc.load();
   return store.travelers.get(email.toLowerCase()) ?? [];
 }

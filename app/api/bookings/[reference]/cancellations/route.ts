@@ -32,7 +32,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
     if (previous) return ok({ booking: previous, replay: true });
   }
 
-  if (!verifyOtp(booking.contact.email, "cancel", body.otp ?? "")) {
+  if (!(await verifyOtp(booking.contact.email, "cancel", body.otp ?? ""))) {
     return fail("accountSecurity", "account.codeInvalid", locale, { status: 401, action: "authenticate" });
   }
 

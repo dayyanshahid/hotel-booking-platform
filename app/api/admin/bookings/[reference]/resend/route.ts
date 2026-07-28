@@ -22,7 +22,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
   if (!booking) return fail("validation", "error.notFound", locale, { status: 404 });
 
   const now = new Date().toISOString();
-  pushNotification(booking.contact.email, {
+  await pushNotification(booking.contact.email, {
     id: `nt_${Math.random().toString(36).slice(2, 9)}`,
     kind: "booking",
     title: locale === "ar" ? "تفاصيل حجزك" : "Your booking details",

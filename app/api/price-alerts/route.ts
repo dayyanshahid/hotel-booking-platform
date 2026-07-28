@@ -30,19 +30,19 @@ export async function POST(req: Request) {
     createdAt: new Date().toISOString(),
     status: "active",
   };
-  saveAlert(alert);
+  await saveAlert(alert);
   return ok(alert);
 }
 
 export async function GET() {
-  return ok({ alerts: listAlerts() });
+  return ok({ alerts: await listAlerts() });
 }
 
 export async function DELETE(req: Request) {
   const locale = localeFrom(req);
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return fail("validation", "error.validation", locale, { status: 400 });
-  removeAlert(id);
+  await removeAlert(id);
   return ok({ removed: id });
 }
 

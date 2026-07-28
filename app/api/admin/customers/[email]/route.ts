@@ -21,14 +21,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ email: string }
   if (!bookings.length) return fail("validation", "error.notFound", locale, { status: 404 });
 
   const references = new Set(bookings.map((b) => b.reference));
-  const cases = listCases().filter((c) => c.bookingReference && references.has(c.bookingReference));
+  const cases = (await listCases()).filter((c) => c.bookingReference && references.has(c.bookingReference));
 
   return ok({
     email,
     bookings,
     cases,
-    travellers: listTravelers(email),
+    travellers: await listTravelers(email),
     // What we have sent them — the answer to "I never got a confirmation".
-    notifications: listNotifications(email).slice(0, 20),
+    notifications: (await listNotifications(email)).slice(0, 20),
   });
 }

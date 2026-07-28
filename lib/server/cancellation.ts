@@ -78,7 +78,7 @@ export async function cancelBooking({
     try {
       const outcome = await performCancellation(linked.reference);
       if (outcome.cancellationReference) {
-        linkSupplierReference(booking.reference, outcome.cancellationReference, "hotelbeds-cancellation");
+        await linkSupplierReference(booking.reference, outcome.cancellationReference, "hotelbeds-cancellation");
       }
       if (outcome.status !== "CANCELLED") uncertain = true;
     } catch (error) {
@@ -200,7 +200,7 @@ export async function cancelBooking({
   }
 
   await saveBooking(updated, updated.contact.email);
-  pushNotification(updated.contact.email, {
+  await pushNotification(updated.contact.email, {
     id: `nt_${Math.random().toString(36).slice(2, 9)}`,
     kind: "cancellation",
     title: uncertain

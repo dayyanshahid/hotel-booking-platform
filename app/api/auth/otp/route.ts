@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     return fail("validation", "error.validation", locale, { status: 422, fields: { email: "invalid" } });
   }
   const purpose = body.purpose ?? "signin";
-  const code = issueOtp(body.email, purpose);
+  const code = await issueOtp(body.email, purpose);
   return ok({ sent: true, email: body.email.toLowerCase(), purpose, demoCode: code });
 }
 
@@ -23,7 +23,7 @@ export async function PUT(req: Request) {
   const body = await readJson<{ email: string; code: string; purpose?: string }>(req);
   if (!body?.email || !body.code) return fail("validation", "error.validation", locale, { status: 400 });
   const purpose = body.purpose ?? "signin";
-  if (!verifyOtp(body.email, purpose, body.code)) {
+  if (!(await verifyOtp(body.email, purpose, body.code))) {
     return fail("accountSecurity", "account.codeInvalid", locale, { status: 401, action: "authenticate" });
   }
   return ok({ verified: true, email: body.email.toLowerCase() });

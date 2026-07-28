@@ -414,7 +414,7 @@ interface EnvironmentPayload {
     environment: string;
     commit: string | null;
   };
-  storage: { dataDir: string; durable: boolean };
+  storage: { driver: "filesystem" | "kv"; dataDir: string | null; durable: boolean; concurrentWrites: string };
   secrets: { name: string; set: boolean; required: boolean }[];
   operators: { email: string; current: boolean }[];
 }
@@ -455,7 +455,8 @@ function Environment() {
         <Row label={t("admin.origin")} value={data.deployment.origin} />
         {data.deployment.region && <Row label={t("admin.region")} value={data.deployment.region} />}
         {data.deployment.commit && <Row label={t("admin.commit")} value={data.deployment.commit} />}
-        <Row label={t("admin.dataDir")} value={data.storage.dataDir} />
+        <Row label={t("admin.storageDriver")} value={t(`admin.storage.${data.storage.driver}`)} />
+        {data.storage.dataDir && <Row label={t("admin.dataDir")} value={data.storage.dataDir} />}
       </Card>
 
       <Card className="space-y-2 p-5">

@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   }
   const booking = await getBooking(body.reference);
   const matches = booking && booking.contact.email === body.email.trim().toLowerCase();
-  const code = matches ? issueOtp(body.email, `lookup:${body.reference.toUpperCase()}`) : undefined;
+  const code = matches ? await issueOtp(body.email, `lookup:${body.reference.toUpperCase()}`) : undefined;
   return ok({
     sent: true,
     email: body.email.toLowerCase(),
@@ -31,7 +31,7 @@ export async function PUT(req: Request) {
   if (!body?.reference || !body.email || !body.code) {
     return fail("validation", "error.validation", locale, { status: 400 });
   }
-  const ok1 = verifyOtp(body.email, `lookup:${body.reference.toUpperCase()}`, body.code);
+  const ok1 = await verifyOtp(body.email, `lookup:${body.reference.toUpperCase()}`, body.code);
   if (!ok1) return fail("accountSecurity", "account.codeInvalid", locale, { status: 401, action: "authenticate" });
   const booking = await getBooking(body.reference);
   if (!booking) return fail("validation", "error.notFound", locale, { status: 404 });

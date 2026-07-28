@@ -17,7 +17,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ caseId: strin
   const session = await currentAdmin();
   if (!session) return fail("accountSecurity", "admin.signInRequired", locale, { status: 401, action: "authenticate" });
 
-  const supportCase = getCase(caseId);
+  const supportCase = await getCase(caseId);
   if (!supportCase) return fail("validation", "error.notFound", locale, { status: 404 });
 
   const body = await readJson<{
@@ -59,7 +59,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ caseId: strin
       ? [...supportCase.messages, { at: new Date().toISOString(), from: "agent" as const, body: reply }]
       : supportCase.messages,
   };
-  saveCase(updated);
+  await saveCase(updated);
 
   await appendAudit({
     actor: session.email,

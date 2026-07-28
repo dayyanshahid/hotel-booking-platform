@@ -10,7 +10,7 @@ import { GET as bookingRoute_GET } from "@/app/api/bookings/[reference]/route";
 import { POST as quoteRoute } from "@/app/api/bookings/[reference]/cancellation-quotes/route";
 import { POST as cancelRoute } from "@/app/api/bookings/[reference]/cancellations/route";
 import { POST as lookupRoute } from "@/app/api/bookings/lookup/route";
-import { issueOtp, verifyOtp } from "@/lib/server/store";
+import { __resetOtpCache, issueOtp, verifyOtp } from "@/lib/server/store";
 import { POST as otpRoute } from "@/app/api/auth/otp/route";
 import type { ScenarioId } from "@/lib/server/scenarios";
 import type { Booking, CheckoutSession, Offer, RecheckResult } from "@/lib/types";
@@ -382,36 +382,47 @@ describe("fixed demo sign-in code", () => {
     else process.env.DEMO_OTP = original;
   });
 
-  it("issues and accepts the configured code", () => {
+  it("issues and accepts the configured code", async () => {
     process.env.DEMO_OTP = "198400";
-    expect(issueOtp("someone@example.com", "signin")).toBe("198400");
-    expect(verifyOtp("someone@example.com", "signin", "198400")).toBe(true);
+    expect(await issueOtp("someone@example.com", "signin")).toBe("198400");
+    expect(await verifyOtp("someone@example.com", "signin", "198400")).toBe(true);
   });
 
-  it("accepts it without an issued entry", () => {
-    // The point of the fix: on serverless the instance that issues a code is
-    // often not the one that checks it, and this store does not span them.
+  it("accepts it without an issued entry", async () => {
     process.env.DEMO_OTP = "198400";
-    expect(verifyOtp("never-asked@example.com", "signin", "198400")).toBe(true);
+    expect(await verifyOtp("never-asked@example.com", "signin", "198400")).toBe(true);
   });
 
-  it("still refuses a wrong code", () => {
+  it("still refuses a wrong code", async () => {
     process.env.DEMO_OTP = "198400";
-    expect(verifyOtp("someone@example.com", "signin", "000000")).toBe(false);
+    expect(await verifyOtp("someone@example.com", "signin", "000000")).toBe(false);
   });
 
-  it("falls back to a random code when unset", () => {
+  it("falls back to a random code when unset", async () => {
     delete process.env.DEMO_OTP;
-    const code = issueOtp("random@example.com", "signin");
+    const code = await issueOtp("random@example.com", "signin");
     expect(code).toMatch(/^\d{6}$/);
-    expect(verifyOtp("random@example.com", "signin", "198400")).toBe(false);
+    expect(await verifyOtp("random@example.com", "signin", "198400")).toBe(false);
   });
 
-  it("ignores a malformed value rather than trusting it", () => {
+  it("ignores a malformed value rather than trusting it", async () => {
     // An empty or non-numeric DEMO_OTP must not become a code that verifies.
     process.env.DEMO_OTP = "not-a-code";
-    const code = issueOtp("safe@example.com", "signin");
+    const code = await issueOtp("safe@example.com", "signin");
     expect(code).toMatch(/^\d{6}$/);
-    expect(verifyOtp("safe@example.com", "signin", "not-a-code")).toBe(false);
+    expect(await verifyOtp("safe@example.com", "signin", "not-a-code")).toBe(false);
+  });
+
+  it("survives the instance that issued it", async () => {
+    // The real fault this fixes: the request that issues a code and the one
+    // that checks it are usually different instances. With a shared driver the
+    // code is written down, so a cold process can still verify it.
+    delete process.env.DEMO_OTP;
+    const code = await issueOtp("across@example.com", "signin");
+    __resetOtpCache();
+    expect(await verifyOtp("across@example.com", "signin", code)).toBe(true);
+    // And it is single use, across instances too.
+    __resetOtpCache();
+    expect(await verifyOtp("across@example.com", "signin", code)).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ export async function GET(req: Request) {
     for (const record of await listAgencyBookings(agency.id)) trade.add(record.reference);
   }
 
-  const cases = listCases();
+  const cases = await listCases();
 
   interface Row {
     email: string;

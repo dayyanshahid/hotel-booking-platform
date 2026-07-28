@@ -6,7 +6,7 @@ import type { TravelerProfile } from "@/lib/types";
 export async function GET(req: Request) {
   const email = (new URL(req.url).searchParams.get("email") ?? "").toLowerCase();
   if (!email) return ok({ travelers: [] });
-  return ok({ travelers: listTravelers(email) });
+  return ok({ travelers: await listTravelers(email) });
 }
 
 export async function PUT(req: Request) {
@@ -28,7 +28,7 @@ export async function PUT(req: Request) {
     nationality: t.nationality,
     consentAt: t.consentAt || new Date().toISOString(),
   }));
-  saveTravelers(body.email, cleaned);
+  await saveTravelers(body.email, cleaned);
   return ok({ travelers: cleaned });
 }
 

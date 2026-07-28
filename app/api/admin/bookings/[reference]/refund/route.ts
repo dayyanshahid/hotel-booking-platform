@@ -49,7 +49,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ reference: st
   };
 
   await saveBooking(updated, updated.contact.email);
-  pushNotification(updated.contact.email, {
+  await pushNotification(updated.contact.email, {
     id: `nt_${Math.random().toString(36).slice(2, 9)}`,
     kind: "payment",
     title: locale === "ar" ? "تم تحويل المبلغ المسترد" : "Your refund has been sent",

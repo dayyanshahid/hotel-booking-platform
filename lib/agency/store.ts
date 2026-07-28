@@ -1,7 +1,5 @@
 import "server-only";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { dataDir } from "../server/runtime";
+import { driver } from "../server/persistence";
 import { policyFrom } from "./pricing";
 import type {
   Agency,
@@ -24,7 +22,8 @@ import type {
  * and a bug can never leave a stored total disagreeing with its own history.
  */
 
-const FILE = path.join(dataDir(), "agencies.json");
+/** One document, read and written whole. */
+const KEY = "agencies";
 
 interface Shape {
   agencies: Agency[];
@@ -39,7 +38,7 @@ const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [], quote
 let loaded = false;
 
 /**
- * The file's modification time as of our last read.
+ * The stored document's version as of our last read.
  *
  * The consumer store can get away with loading once, because the same request
  * that writes a booking is the one that reads it back. This store cannot: the
@@ -49,10 +48,10 @@ let loaded = false;
  * their balance stay at the full limit after a booking that had demonstrably
  * been recorded.
  *
- * A stat per read is cheap and makes the file, not whichever copy happened to
- * load first, the source of truth.
+ * A version check per read is cheap and makes the store, not whichever copy
+ * happened to load first, the source of truth.
  */
-let seenMtimeMs = 0;
+let seenVersion: string | null = null;
 
 /** Set by the test seam, which owns its state outright and must not re-read. */
 let pinned = false;
@@ -109,18 +108,15 @@ function seed(): void {
 export async function loadAgencies(): Promise<void> {
   if (pinned) return;
 
-  let mtimeMs = 0;
-  try {
-    mtimeMs = (await fs.stat(FILE)).mtimeMs;
-  } catch {
-    // No file yet — fall through to the seed on a first load.
-  }
-  if (loaded && mtimeMs === seenMtimeMs) return;
+  // Cheaper than reading the document: on KV this is one small round trip
+  // instead of pulling every booking and ledger entry on every request.
+  const version = await driver().version(KEY);
+  if (loaded && version === seenVersion) return;
 
   loaded = true;
-  seenMtimeMs = mtimeMs;
+  seenVersion = version;
   try {
-    const parsed = JSON.parse(await fs.readFile(FILE, "utf8")) as Partial<Shape>;
+    const parsed = (await driver().read<Partial<Shape>>(KEY)) ?? {};
     state.agencies = parsed.agencies ?? [];
     state.agents = parsed.agents ?? [];
     state.ledger = parsed.ledger ?? [];
@@ -129,22 +125,17 @@ export async function loadAgencies(): Promise<void> {
     state.customers = parsed.customers ?? [];
     state.agencies = state.agencies.map(migrate);
   } catch {
-    // No file yet.
+    // Nothing stored yet.
   }
   if (!state.agencies.length) seed();
 }
 
 async function persist(): Promise<void> {
   if (pinned) return;
-  try {
-    await fs.mkdir(path.dirname(FILE), { recursive: true });
-    await fs.writeFile(FILE, JSON.stringify(state, null, 2), "utf8");
-    // Our own write is not a change to react to; recording it here stops the
-    // next read from discarding state we already hold.
-    seenMtimeMs = (await fs.stat(FILE)).mtimeMs;
-  } catch {
-    // Persistence is best-effort; the process-local copy stays authoritative.
-  }
+  await driver().write(KEY, state);
+  // Our own write is not a change to react to; recording it here stops the
+  // next read from discarding state we already hold.
+  seenVersion = await driver().version(KEY);
 }
 
 /* --------------------------------------------------------------- reads */

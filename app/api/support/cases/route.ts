@@ -49,12 +49,12 @@ export async function POST(req: Request) {
     ],
   };
 
-  saveCase(supportCase);
+  await saveCase(supportCase);
   return ok(supportCase);
 }
 
 export async function GET() {
-  return ok({ cases: listCases() });
+  return ok({ cases: await listCases() });
 }
 
 export const dynamic = "force-dynamic";
