@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { TripPrompt } from "@/components/search/trip-prompt";
@@ -10,7 +9,7 @@ import { Accordion, Badge, Button, Card, Photo, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { countLabel } from "@/lib/i18n";
 import { href, searchHref, searchParamsFromIntent, typedSearchHref } from "@/lib/nav";
 import type { CurrencyCode, Locale, SearchFilters, SearchIntent } from "@/lib/types";

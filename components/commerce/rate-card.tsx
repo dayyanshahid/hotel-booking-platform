@@ -10,6 +10,23 @@ import { useAgencyQuotes } from "@/components/agency/use-agency";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { formatDeadline } from "@/lib/format";
 import type { CanonicalRoom, Offer } from "@/lib/types";
+import type { ReactNode } from "react";
+
+/**
+ * How a rate is priced and acted on, when the audience is not a traveller.
+ *
+ * The trade portal shows the same rooms and the same rate conditions — that is
+ * the point of one component — but the money reads differently (cost, sell and
+ * margin against the struck public price) and the action is not "select" but
+ * "put this in a quote" or "book it on the account".
+ */
+export interface TradeRate {
+  /** Replaces the public price block for this rate. */
+  price?: (offer: Offer, quote?: AgencyOfferView) => ReactNode;
+  selectLabel?: string;
+  /** An extra action beside the primary one, per rate. */
+  secondary?: (offer: Offer) => ReactNode;
+}
 
 /**
  * F-041 — canonical room with its materially distinct rates.
@@ -24,12 +41,14 @@ export function RoomBlock({
   onSelect,
   selectedOfferId,
   busyOfferId,
+  trade,
 }: {
   room: CanonicalRoom;
   offers: Offer[];
   onSelect: (offer: Offer) => void;
   selectedOfferId?: string | null;
   busyOfferId?: string | null;
+  trade?: TradeRate;
 }) {
   const { t, locale } = useApp();
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -100,6 +119,7 @@ export function RoomBlock({
                 selected={selectedOfferId === offer.offerId}
                 busy={busyOfferId === offer.offerId}
                 quote={quotes[offer.offerId]}
+                trade={trade}
               />
             ))}
           </ul>
@@ -143,12 +163,14 @@ function RateRow({
   selected,
   busy,
   quote,
+  trade,
 }: {
   offer: Offer;
   onSelect: (offer: Offer) => void;
   selected: boolean;
   busy: boolean;
   quote?: AgencyOfferView;
+  trade?: TradeRate;
 }) {
   const { t, locale } = useApp();
   const [whyOpen, setWhyOpen] = useState<null | { label: string; reason: string }>(null);
@@ -243,11 +265,22 @@ function RateRow({
         </div>
 
         <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
-          <PriceBlock price={offer.price} size="md" />
-          <TradeStrip quote={quote} className="w-full text-start sm:min-w-[260px]" />
-          <Button variant="action" onClick={() => onSelect(offer)} loading={busy} className="w-full sm:w-auto">
-            {t("room.selectRate")}
-          </Button>
+          {trade?.price ? (
+            trade.price(offer, quote)
+          ) : (
+            <>
+              <PriceBlock price={offer.price} size="md" />
+              {/* A traveller browsing with an agent session open still sees
+                  their own trade figures under the public price. */}
+              <TradeStrip quote={quote} className="w-full text-start sm:min-w-[260px]" />
+            </>
+          )}
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+            {trade?.secondary?.(offer)}
+            <Button variant="action" onClick={() => onSelect(offer)} loading={busy} className="w-full sm:w-auto">
+              {trade?.selectLabel ?? t("room.selectRate")}
+            </Button>
+          </div>
         </div>
       </div>
 
