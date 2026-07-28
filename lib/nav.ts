@@ -13,7 +13,7 @@ export function href(locale: Locale, path: string): string {
  * credit balance.
  */
 export function isPortalPath(pathname: string): boolean {
-  return /^\/(en|ar)\/agency(\/|$)/.test(pathname);
+  return /^\/(en|ar)\/(agency|admin)(\/|$)/.test(pathname);
 }
 
 /**

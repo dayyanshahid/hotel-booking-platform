@@ -34,6 +34,25 @@ function secret(): string {
   return "dev-only-agency-secret";
 }
 
+/**
+ * Our own staff, by email.
+ *
+ * An allowlist in configuration rather than a flag in the store, because the
+ * operator role can create agencies and write off their debts — and a
+ * privilege that can be granted by writing a row is a privilege anyone who can
+ * write a row already has. Changing who is an operator should require a deploy.
+ */
+export function isOpsEmail(email: string): boolean {
+  const raw = process.env.AGENCY_OPS_EMAILS ?? "";
+  if (!raw.trim()) return false;
+  const needle = email.trim().toLowerCase();
+  return raw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(needle);
+}
+
 function sign(payload: string): string {
   return createHmac("sha256", secret()).update(payload).digest("base64url");
 }
@@ -99,7 +118,10 @@ export async function activeAgent(): Promise<AgencySession | null> {
   const [agent, agency] = await Promise.all([getAgentByEmail(session.email), getAgency(session.agencyId)]);
   if (!agent?.active || agent.agencyId !== session.agencyId) return null;
   if (!agency || agency.status !== "active") return null;
-  return session;
+  // Re-derived from configuration on every request rather than trusted from the
+  // cookie: removing someone from the allowlist has to take effect now, not
+  // when their session happens to expire.
+  return { ...session, ops: isOpsEmail(session.email) };
 }
 
 export async function startSession(session: AgencySession): Promise<void> {

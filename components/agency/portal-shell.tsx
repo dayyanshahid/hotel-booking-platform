@@ -46,8 +46,11 @@ export function PortalShell({
 
   const links = [
     { path: "/agency", label: t("agency.dashboard") },
+    { path: "/agency/search", label: t("agency.searchStays") },
+    { path: "/agency/quotes", label: t("agency.quotes") },
     { path: "/agency/bookings", label: t("agency.bookings") },
     { path: "/agency/credit", label: t("agency.credit") },
+    { path: "/agency/reports", label: t("agency.reports") },
     { path: "/agency/team", label: t("agency.team") },
     { path: "/agency/settings", label: t("agency.settings") },
   ];
@@ -78,7 +81,7 @@ export function PortalShell({
               </span>
             </p>
           )}
-          <Link href={href(locale, "/")}>
+          <Link href={href(locale, "/agency/search")}>
             <Button variant="secondary" size="sm">
               {t("agency.searchStays")}
             </Button>

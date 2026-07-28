@@ -21,6 +21,7 @@ export async function GET(req: Request) {
       commissionPercent: agency.commissionPercent,
       markup: agency.markup,
       credit: agency.credit,
+      profile: agency.profile,
     },
     balance,
   });

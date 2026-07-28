@@ -1,4 +1,4 @@
-import type { AgencyOfferView, MarkupRule } from "./types";
+import type { AgencyOfferView, MarkupPolicy, MarkupRule } from "./types";
 
 /**
  * Agency pricing.
@@ -30,20 +30,30 @@ export function applyAgencyMarkup(cost: number, rule: MarkupRule): number {
   return round(cost * (1 + percent / 100));
 }
 
+/**
+ * The rule that applies to a stay in this country.
+ *
+ * First match wins rather than most-specific, because the overrides are a short
+ * list an agency maintains by hand and "the one I put in for Saudi Arabia"
+ * should be the one that fires. A duplicate country is a data-entry mistake,
+ * not a precedence puzzle to solve at runtime.
+ */
+export function ruleFor(policy: MarkupPolicy, countryCode?: string): MarkupRule {
+  if (!countryCode) return policy.default;
+  const needle = countryCode.toUpperCase();
+  const override = policy.overrides.find((o) => o.countryCode.toUpperCase() === needle);
+  return override?.rule ?? policy.default;
+}
+
 export function agencyOfferView(
   offerId: string,
   cost: number,
   currency: string,
-  rule: MarkupRule,
+  policy: MarkupPolicy,
+  countryCode?: string,
 ): AgencyOfferView {
-  const sell = applyAgencyMarkup(cost, rule);
-  return {
-    offerId,
-    cost,
-    sell,
-    margin: sell - cost,
-    currency,
-  };
+  const sell = applyAgencyMarkup(cost, ruleFor(policy, countryCode));
+  return { offerId, cost, sell, margin: sell - cost, currency };
 }
 
 /**
@@ -57,4 +67,9 @@ export function agencyOfferView(
 export function marginPercent(view: AgencyOfferView): number {
   if (view.sell <= 0) return 0;
   return Math.round((view.margin / view.sell) * 1000) / 10;
+}
+
+/** A policy from a bare rule — used when migrating older stored agencies. */
+export function policyFrom(rule: MarkupRule): MarkupPolicy {
+  return { default: rule, overrides: [] };
 }

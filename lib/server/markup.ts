@@ -16,8 +16,33 @@ export interface MarkupResult {
   markupPercent: number;
 }
 
+/**
+ * The operator's override, when one has been set in the console.
+ *
+ * `applyMarkup` is called deep inside supplier adapters, in loops, per rate — it
+ * has to stay synchronous, so the stored value is cached here and refreshed by
+ * {@link primeMarkup} at the top of the request paths that price anything.
+ * Undefined means nobody has overridden the deployed default.
+ */
+let override: number | undefined;
+
+/** Bounds a typo can't escape: a 0% or a 900% markup are both incidents. */
+export const MARKUP_RANGE = { min: 0, max: 60 } as const;
+
+export function setMarkupOverride(percent: number | undefined): void {
+  override =
+    percent === undefined
+      ? undefined
+      : Math.min(MARKUP_RANGE.max, Math.max(MARKUP_RANGE.min, percent));
+}
+
+/** What the platform is currently adding to net. */
+export function currentMarkupPercent(): number {
+  return override ?? getHotelbedsConfig().markupPercent;
+}
+
 export function applyMarkup(net: number, options: { percent?: number } = {}): MarkupResult {
-  const percent = options.percent ?? getHotelbedsConfig().markupPercent;
+  const percent = options.percent ?? currentMarkupPercent();
   const total = Math.round(net * (1 + percent / 100));
   return { total, net, markupPercent: percent };
 }

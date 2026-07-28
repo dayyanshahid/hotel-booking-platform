@@ -15,7 +15,10 @@ import type { Agency, AgencyBalance, AgencyOfferView, AgencySession } from "@/li
 
 export interface AgencyContext {
   session: AgencySession;
-  agency: Pick<Agency, "id" | "name" | "slug" | "countryCode" | "commissionPercent" | "markup" | "credit">;
+  agency: Pick<
+    Agency,
+    "id" | "name" | "slug" | "countryCode" | "commissionPercent" | "markup" | "credit" | "profile"
+  >;
   balance: AgencyBalance | null;
 }
 

@@ -49,6 +49,25 @@ export interface MarkupRule {
   currency?: string;
 }
 
+/**
+ * A different margin for one country.
+ *
+ * Agencies do not price the world uniformly. A Karachi agency sells Makkah on
+ * thin margins because every competitor in the city sells the same hotels, and
+ * takes more on a European city break nobody is shopping around for. One global
+ * percentage forces them to pick which of those two they get wrong.
+ */
+export interface MarkupOverride {
+  /** ISO 3166-1 alpha-2. */
+  countryCode: string;
+  rule: MarkupRule;
+}
+
+export interface MarkupPolicy {
+  default: MarkupRule;
+  overrides: MarkupOverride[];
+}
+
 export interface CreditTerms {
   /**
    * Agreed limit, in whole currency units like every other amount in the app.
@@ -58,6 +77,22 @@ export interface CreditTerms {
   currency: string;
   /** Days from booking to settlement. */
   paymentDays: number;
+}
+
+/**
+ * Who the agency is, for the documents it hands its customers.
+ *
+ * A quote or a voucher with our name on it is no use to an agency — their
+ * customer bought from them. These fields are what turn a booking record into
+ * something an agency can put in front of the person who paid for it.
+ */
+export interface AgencyProfile {
+  legalName: string;
+  address: string;
+  city: string;
+  taxNumber?: string;
+  email: string;
+  phone: string;
 }
 
 export interface Agency {
@@ -78,8 +113,9 @@ export interface Agency {
    * could find elsewhere — and so our own supplier margin stays ours.
    */
   commissionPercent: number;
-  markup: MarkupRule;
+  markup: MarkupPolicy;
   credit: CreditTerms;
+  profile: AgencyProfile;
   createdAt: string;
 }
 
@@ -120,6 +156,12 @@ export interface AgencySession {
   name: string;
   role: AgentRole;
   agencyName: string;
+  /**
+   * Our own staff, identified by an allowlist rather than a row anyone can
+   * write. Operators onboard agencies and record their payments; that is not an
+   * agency role, so it is not part of {@link AgentRole}.
+   */
+  ops?: boolean;
 }
 
 /**
@@ -155,6 +197,15 @@ export interface AgencyBooking {
   checkIn: string;
   checkOut: string;
   leadGuest: string;
+  /**
+   * What a traveller would have paid on the public site that day.
+   *
+   * Stored rather than re-derived, because what we retained on this booking is
+   * `publicPrice − cost` and the commission it was based on can change later.
+   * Inverting today's percentage against yesterday's sale gives a number that
+   * looks right and is not.
+   */
+  publicPrice: number;
   /** What the agency owes us. */
   cost: number;
   /** What the agency charges its customer, at the markup in force that day. */
@@ -162,4 +213,53 @@ export interface AgencyBooking {
   currency: string;
   status: "confirmed" | "pending" | "cancelled" | "failed";
   createdAt: string;
+  /** The agency's own reference for this sale, if they recorded one. */
+  customerReference?: string;
+}
+
+/* ------------------------------------------------------------ quotations */
+
+/**
+ * A line on a customer quote.
+ *
+ * Snapshotted rather than referenced. A quote is a document an agency sends to
+ * a person, and it has to keep saying the same thing after the underlying rate
+ * has moved or expired — a quote that silently reprices is worse than one that
+ * is plainly out of date.
+ */
+export interface AgencyQuoteItem {
+  id: string;
+  hotelName: string;
+  city: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  roomName: string;
+  boardLabel: string;
+  rooms: number;
+  guests: number;
+  cost: number;
+  sell: number;
+  currency: string;
+  /** Plain-language cancellation summary, as it stood when quoted. */
+  cancellation: string;
+  /** The offer this came from, so an agent can try to book it directly. */
+  offerId?: string;
+}
+
+export interface AgencyQuote {
+  id: string;
+  reference: string;
+  agencyId: string;
+  agentId: string;
+  agentName: string;
+  customerName: string;
+  customerEmail?: string;
+  notes?: string;
+  items: AgencyQuoteItem[];
+  currency: string;
+  validUntil: string;
+  status: "open" | "accepted" | "declined" | "expired";
+  createdAt: string;
+  updatedAt: string;
 }

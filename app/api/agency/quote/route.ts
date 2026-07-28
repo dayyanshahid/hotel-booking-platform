@@ -3,6 +3,7 @@ import { activeAgent } from "@/lib/agency/session";
 import { getAgency } from "@/lib/agency/store";
 import { viewOffer } from "@/lib/agency/rates";
 import { getOffer } from "@/lib/server/store";
+import { countryForOffer } from "@/lib/agency/context";
 
 /**
  * What an agent quotes.
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     // A missing offer means the quote expired, not that pricing failed; the
     // caller sees which ids came back and re-searches for the rest.
     if (!offer) return [];
-    return [viewOffer(offerId, offer.price.total, offer.price.currency, agency)];
+    return [viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer))];
   });
 
   return ok({ quotes, commissionPercent: agency.commissionPercent, markup: agency.markup });

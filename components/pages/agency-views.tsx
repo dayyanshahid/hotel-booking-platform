@@ -21,7 +21,15 @@ import {
 import { Wordmark } from "@/components/ui/wordmark";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
-import type { Agent, AgencyBooking, LedgerEntry, MarkupRule } from "@/lib/agency/types";
+import type {
+  Agent,
+  AgencyBooking,
+  AgencyProfile,
+  LedgerEntry,
+  MarkupOverride,
+  MarkupPolicy,
+  MarkupRule,
+} from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
 /* ------------------------------------------------------------- sign-in */
@@ -176,9 +184,14 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         <Figure
           label={t("agency.markup")}
           value={
-            context.agency.markup.mode === "percent"
-              ? `${context.agency.markup.value}%`
-              : formatMoney(context.agency.markup.value, currency, locale)
+            context.agency.markup.default.mode === "percent"
+              ? `${context.agency.markup.default.value}%`
+              : formatMoney(context.agency.markup.default.value, currency, locale)
+          }
+          note={
+            context.agency.markup.overrides.length
+              ? t("agency.overrideCount", { n: context.agency.markup.overrides.length })
+              : undefined
           }
         />
         <Figure label={t("agency.margin")} value={formatMoney(margin, currency, locale)} />
@@ -202,7 +215,7 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
             standalone
             title={t("agency.noBookings")}
             actions={
-              <Link href={href(locale, "/")}>
+              <Link href={href(locale, "/agency/search")}>
                 <Button>{t("agency.searchStays")}</Button>
               </Link>
             }
@@ -216,11 +229,12 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
   );
 }
 
-function Figure({ label, value }: { label: string; value: string }) {
+function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <Card className="p-4">
       <p className="text-muted text-xs">{label}</p>
       <p className="mt-1 text-lg font-bold">{value}</p>
+      {note && <p className="text-muted mt-0.5 text-xs">{note}</p>}
     </Card>
   );
 }
@@ -288,7 +302,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
           standalone
           title={t("agency.noBookings")}
           actions={
-            <Link href={href(locale, "/")}>
+            <Link href={href(locale, "/agency/search")}>
               <Button>{t("agency.searchStays")}</Button>
             </Link>
           }
@@ -332,7 +346,14 @@ function BookingTable({ locale, bookings }: { locale: Locale; bookings: AgencyBo
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <Badge tone={BOOKING_TONE[booking.status]}>{t(BOOKING_STATUS[booking.status])}</Badge>
-                  <p className="mt-1 font-semibold wrap-anywhere">{booking.hotelName}</p>
+                  <p className="mt-1 font-semibold wrap-anywhere">
+                    <Link
+                      href={href(locale, `/agency/bookings/${booking.reference}`)}
+                      className="hover:underline"
+                    >
+                      {booking.hotelName}
+                    </Link>
+                  </p>
                   <p className="text-muted text-sm">
                     {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)}
                   </p>
@@ -374,10 +395,88 @@ export function AgencyCreditView({ locale }: { locale: Locale }) {
       {(context) => (
         <div className="space-y-4">
           <CreditPanel locale={locale} context={context} />
+          <Periods locale={locale} />
           <Statement locale={locale} />
         </div>
       )}
     </PortalShell>
+  );
+}
+
+interface StatementPeriod {
+  month: string;
+  charged: number;
+  credited: number;
+  settled: number;
+  currency: string;
+}
+
+/**
+ * The monthly view.
+ *
+ * An agency settles by month, so the question "what do we owe for June" has to
+ * be answerable without adding up a ledger by eye. Charged and settled stay as
+ * two columns rather than one net figure: an accounts clerk matching payments
+ * needs to see what was invoiced and what has been paid against it.
+ */
+function Periods({ locale }: { locale: Locale }) {
+  const { t } = useApp();
+  const [periods, setPeriods] = useState<StatementPeriod[] | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/agency/statements", { credentials: "same-origin" });
+      const body = (await res.json()) as { ok: boolean; data?: { periods: StatementPeriod[] } };
+      setPeriods(body.ok && body.data ? body.data.periods : []);
+    })();
+  }, []);
+
+  if (!periods) return <Skeleton className="h-24 w-full" />;
+  if (!periods.length) return null;
+
+  return (
+    <section className="space-y-2">
+      <SectionHeading title={t("agency.periods")} description={t("agency.periodsBody")} />
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead className="text-muted hairline border-b text-xs">
+            <tr>
+              <th className="p-3 text-start font-medium">{t("agency.month")}</th>
+              <th className="p-3 text-end font-medium">{t("agency.charged")}</th>
+              <th className="p-3 text-end font-medium">{t("agency.credited")}</th>
+              <th className="p-3 text-end font-medium">{t("agency.settled")}</th>
+              <th className="p-3 text-end font-medium">{t("agency.outstanding")}</th>
+              <th className="p-3 text-end font-medium" />
+            </tr>
+          </thead>
+          <tbody className="divide-ink-100 divide-y">
+            {periods.map((period) => {
+              const currency = period.currency as CurrencyCode;
+              const outstanding = period.charged - period.credited - period.settled;
+              return (
+                <tr key={period.month}>
+                  <td className="p-3 font-medium">{period.month}</td>
+                  <td className="p-3 text-end tabular-nums">{formatMoney(period.charged, currency, locale)}</td>
+                  <td className="p-3 text-end tabular-nums">{formatMoney(period.credited, currency, locale)}</td>
+                  <td className="p-3 text-end tabular-nums">{formatMoney(period.settled, currency, locale)}</td>
+                  <td className="p-3 text-end font-semibold tabular-nums">
+                    {formatMoney(Math.max(0, outstanding), currency, locale)}
+                  </td>
+                  <td className="p-3 text-end">
+                    <a
+                      className="text-brand-700 text-xs underline"
+                      href={`/api/agency/statements?format=csv&month=${period.month}`}
+                    >
+                      CSV
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
+    </section>
   );
 }
 
@@ -560,7 +659,8 @@ export function AgencySettingsView({ locale }: { locale: Locale }) {
 
 function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
-  const [markup, setMarkup] = useState<MarkupRule>(context.agency.markup);
+  const [markup, setMarkup] = useState<MarkupPolicy>(context.agency.markup);
+  const [profile, setProfile] = useState<AgencyProfile>(context.agency.profile);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -575,7 +675,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ markup }),
+      body: JSON.stringify({ markup, profile }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
@@ -587,9 +687,22 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
     refreshAgency();
   }
 
+  function setDefault(next: Partial<MarkupRule>) {
+    setMarkup({ ...markup, default: { ...markup.default, ...next } });
+  }
+
+  function setOverride(index: number, next: Partial<MarkupOverride>) {
+    setMarkup({
+      ...markup,
+      overrides: markup.overrides.map((o, i) => (i === index ? { ...o, ...next } : o)),
+    });
+  }
+
   return (
     <div className="space-y-4">
       <SectionHeading title={t("agency.settings")} />
+      {error && <Alert tone="critical">{error}</Alert>}
+      {saved && <Alert tone="success">{t("agency.markupSaved")}</Alert>}
 
       <Card className="space-y-2 p-5">
         <h2 className="font-semibold">{t("agency.commission")}</h2>
@@ -600,56 +713,184 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
       <Card className="space-y-3 p-5">
         <h2 className="font-semibold">{t("agency.markup")}</h2>
         <p className="text-muted text-sm">{t("agency.markupBody")}</p>
-        {error && <Alert tone="critical">{error}</Alert>}
-        {saved && <Alert tone="success">{t("agency.markupSaved")}</Alert>}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t("agency.markupMode")} htmlFor="markup-mode">
             <Select
               id="markup-mode"
-              value={markup.mode}
+              value={markup.default.mode}
               disabled={!isAdmin}
-              onChange={(e) => setMarkup({ ...markup, mode: e.target.value as MarkupRule["mode"] })}
+              onChange={(e) => setDefault({ mode: e.target.value as MarkupRule["mode"] })}
             >
               <option value="percent">{t("agency.markupPercent")}</option>
               <option value="fixed">{t("agency.markupFixed")}</option>
             </Select>
           </Field>
-          <Field
-            label={markup.mode === "percent" ? "%" : currency}
-            htmlFor="markup-value"
-          >
+          <Field label={markup.default.mode === "percent" ? "%" : currency} htmlFor="markup-value">
             <Input
               id="markup-value"
               type="number"
               min={0}
-              step={markup.mode === "percent" ? 0.5 : 1}
-              value={String(markup.value)}
+              step={markup.default.mode === "percent" ? 0.5 : 1}
+              value={String(markup.default.value)}
               disabled={!isAdmin}
-              onChange={(e) => setMarkup({ ...markup, value: Number(e.target.value) })}
+              onChange={(e) => setDefault({ value: Number(e.target.value) })}
             />
           </Field>
         </div>
 
         <p className="text-muted text-sm">
           {t("agency.cost")} {formatMoney(1000, currency, locale)} → {t("agency.sell")}{" "}
-          <strong>
-            {formatMoney(
-              markup.mode === "percent"
-                ? Math.round(1000 * (1 + Math.max(0, markup.value) / 100))
-                : 1000 + Math.max(0, Math.round(markup.value)),
-              currency,
-              locale,
-            )}
-          </strong>
+          <strong>{formatMoney(previewSell(1000, markup.default), currency, locale)}</strong>
         </p>
+      </Card>
+
+      {/*
+        Per-country margins. Kept on its own card because it is a list an agency
+        edits occasionally, not a setting they scan — and burying it under the
+        default rule made both look like one control.
+      */}
+      <Card className="space-y-3 p-5">
+        <h2 className="font-semibold">{t("agency.overrides")}</h2>
+        <p className="text-muted text-sm">{t("agency.overridesBody")}</p>
+
+        {!markup.overrides.length && <p className="text-muted text-sm">{t("agency.noOverrides")}</p>}
+
+        <ul className="space-y-2">
+          {markup.overrides.map((override, index) => (
+            <li key={index} className="grid items-end gap-2 sm:grid-cols-[110px_1fr_120px_auto]">
+              <Field label={t("agency.country")} htmlFor={`ov-country-${index}`}>
+                <Input
+                  id={`ov-country-${index}`}
+                  value={override.countryCode}
+                  maxLength={2}
+                  disabled={!isAdmin}
+                  onChange={(e) => setOverride(index, { countryCode: e.target.value.toUpperCase() })}
+                />
+              </Field>
+              <Field label={t("agency.markupMode")} htmlFor={`ov-mode-${index}`}>
+                <Select
+                  id={`ov-mode-${index}`}
+                  value={override.rule.mode}
+                  disabled={!isAdmin}
+                  onChange={(e) =>
+                    setOverride(index, { rule: { ...override.rule, mode: e.target.value as MarkupRule["mode"] } })
+                  }
+                >
+                  <option value="percent">{t("agency.markupPercent")}</option>
+                  <option value="fixed">{t("agency.markupFixed")}</option>
+                </Select>
+              </Field>
+              <Field label={override.rule.mode === "percent" ? "%" : currency} htmlFor={`ov-value-${index}`}>
+                <Input
+                  id={`ov-value-${index}`}
+                  type="number"
+                  min={0}
+                  step={override.rule.mode === "percent" ? 0.5 : 1}
+                  value={String(override.rule.value)}
+                  disabled={!isAdmin}
+                  onChange={(e) => setOverride(index, { rule: { ...override.rule, value: Number(e.target.value) } })}
+                />
+              </Field>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setMarkup({ ...markup, overrides: markup.overrides.filter((_, i) => i !== index) })
+                  }
+                >
+                  {t("common.remove")}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
 
         {isAdmin && (
-          <Button onClick={save} loading={busy}>
-            {t("common.save")}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setMarkup({
+                ...markup,
+                overrides: [...markup.overrides, { countryCode: "", rule: { mode: "percent", value: 10 } }],
+              })
+            }
+          >
+            {t("agency.addOverride")}
           </Button>
         )}
       </Card>
+
+      <Card className="space-y-3 p-5">
+        <h2 className="font-semibold">{t("agency.profile")}</h2>
+        <p className="text-muted text-sm">{t("agency.profileBody")}</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label={t("agency.legalName")} htmlFor="pf-legal">
+            <Input
+              id="pf-legal"
+              value={profile.legalName}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, legalName: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.taxNumber")} htmlFor="pf-tax">
+            <Input
+              id="pf-tax"
+              value={profile.taxNumber ?? ""}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, taxNumber: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.address")} htmlFor="pf-address">
+            <Input
+              id="pf-address"
+              value={profile.address}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.city")} htmlFor="pf-city">
+            <Input
+              id="pf-city"
+              value={profile.city}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, city: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.workEmail")} htmlFor="pf-email">
+            <Input
+              id="pf-email"
+              type="email"
+              value={profile.email}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.phone")} htmlFor="pf-phone">
+            <Input
+              id="pf-phone"
+              value={profile.phone}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+            />
+          </Field>
+        </div>
+      </Card>
+
+      {isAdmin && (
+        <Button onClick={save} loading={busy}>
+          {t("common.save")}
+        </Button>
+      )}
     </div>
   );
+}
+
+/** What a $1,000 cost sells for under a rule — the sanity check before saving. */
+function previewSell(cost: number, rule: MarkupRule): number {
+  return rule.mode === "percent"
+    ? Math.round(cost * (1 + Math.max(0, rule.value) / 100))
+    : cost + Math.max(0, Math.round(rule.value));
 }

@@ -96,8 +96,15 @@ export default async function LocaleLayout({
             <SiteFooter />
             <BottomNav />
           </ConsumerChrome>
-          <ConsentBanner />
-          <AssistantDrawer />
+          {/*
+            Both of these speak to a traveller: a cookie consent for the
+            booking flow, and a trip assistant. Neither belongs over an
+            operator console or a counter agent's screen.
+          */}
+          <ConsumerChrome>
+            <ConsentBanner />
+            <AssistantDrawer />
+          </ConsumerChrome>
           <ScenarioBar />
           <GlobalOverlays />
         </AppProvider>

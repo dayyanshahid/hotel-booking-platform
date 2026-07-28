@@ -28,13 +28,18 @@ export function agencyCost(publicPrice: number, agency: Agency): number {
  * `publicPrice` is what the consumer site would charge, so an agent can see at
  * a glance whether their selling price is still competitive with the open
  * market — the question they are actually asked at the counter.
+ *
+ * `countryCode` is where the stay is, which decides which of the agency's
+ * markup rules applies. Omitting it falls back to their default rather than
+ * failing: a country we cannot resolve should still produce a sellable price.
  */
 export function viewOffer(
   offerId: string,
   publicPrice: number,
   currency: string,
   agency: Agency,
+  countryCode?: string,
 ): AgencyOfferView & { publicPrice: number } {
   const cost = agencyCost(publicPrice, agency);
-  return { ...agencyOfferView(offerId, cost, currency, agency.markup), publicPrice };
+  return { ...agencyOfferView(offerId, cost, currency, agency.markup, countryCode), publicPrice };
 }

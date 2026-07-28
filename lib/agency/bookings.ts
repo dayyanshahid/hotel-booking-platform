@@ -19,6 +19,8 @@ import type { AgencySession, LedgerEntry } from "./types";
 
 export interface AgencyCommit {
   reference: string;
+  /** The public price this was derived from — kept for the platform's own books. */
+  publicPrice: number;
   cost: number;
   sell: number;
   margin: number;
@@ -30,12 +32,14 @@ export async function priceForAgency(
   publicPrice: number,
   currency: string,
   agencyId: string,
+  countryCode?: string,
 ): Promise<AgencyCommit | null> {
   const agency = await getAgency(agencyId);
   if (!agency) return null;
-  const view = viewOffer("", publicPrice, currency, agency);
+  const view = viewOffer("", publicPrice, currency, agency, countryCode);
   return {
     reference: "",
+    publicPrice,
     cost: view.cost,
     sell: view.sell,
     margin: view.margin,

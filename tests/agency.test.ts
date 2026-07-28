@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { applyAgencyMarkup, agencyOfferView, marginPercent } from "@/lib/agency/pricing";
+import { applyAgencyMarkup, agencyOfferView, marginPercent, policyFrom } from "@/lib/agency/pricing";
 import { agencyCost, viewOffer } from "@/lib/agency/rates";
 import { decodeSession, encodeSession } from "@/lib/agency/session";
 import {
@@ -18,8 +18,15 @@ const agency: Agency = {
   countryCode: "PK",
   status: "active",
   commissionPercent: 12,
-  markup: { mode: "percent", value: 10 },
+  markup: { default: { mode: "percent", value: 10 }, overrides: [{ countryCode: "SA", rule: { mode: "percent", value: 5 } }] },
   credit: { limit: 100_000, currency: "USD", paymentDays: 30 },
+  profile: {
+    legalName: "Test Travel (Pvt) Ltd",
+    address: "1 Test Road",
+    city: "Karachi",
+    email: "ops@test.example",
+    phone: "+92 21 000 0000",
+  },
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
@@ -53,7 +60,7 @@ describe("agency pricing", () => {
   it("states margin against the selling price, not cost", () => {
     // 20% on cost is 16.7% of sell. Quoting the larger figure beside a price
     // the customer can see would flatter rather than inform.
-    const view = agencyOfferView("off_1", 1000, "USD", { mode: "percent", value: 20 });
+    const view = agencyOfferView("off_1", 1000, "USD", { default: { mode: "percent", value: 20 }, overrides: [] });
     expect(marginPercent(view)).toBeCloseTo(16.7, 1);
   });
 
@@ -150,5 +157,33 @@ describe("agency credit", () => {
   it("refuses any booking for a suspended agency", async () => {
     __resetAgencies({ agencies: [{ ...agency, status: "suspended" }] });
     expect(await canCommit(agency.id, 1)).toBe(false);
+  });
+});
+
+describe("markup by country", () => {
+  it("uses the country rule where one exists", () => {
+    // The agency sells Saudi Arabia at 5% and everything else at 10%; a Makkah
+    // stay must not be priced on the default.
+    const sa = viewOffer("off_1", 1000, "USD", agency, "SA");
+    const pt = viewOffer("off_2", 1000, "USD", agency, "PT");
+    expect(sa.sell).toBe(924); // 880 cost + 5%
+    expect(pt.sell).toBe(968); // 880 cost + 10%
+  });
+
+  it("matches the country case-insensitively", () => {
+    expect(viewOffer("off_1", 1000, "USD", agency, "sa").sell).toBe(924);
+  });
+
+  it("falls back to the default when the country is unknown", () => {
+    expect(viewOffer("off_1", 1000, "USD", agency, undefined).sell).toBe(968);
+    expect(viewOffer("off_1", 1000, "USD", agency, "ZZ").sell).toBe(968);
+  });
+
+  it("reads a bare rule stored before policies existed", () => {
+    // Older records hold `{mode, value}` where a policy now lives. Migrating on
+    // read is what stops `.overrides` throwing on a real agency's settings page.
+    const policy = policyFrom({ mode: "percent", value: 12 });
+    expect(policy.default.value).toBe(12);
+    expect(policy.overrides).toEqual([]);
   });
 });

@@ -23,6 +23,7 @@ import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/serve
 import { activeAgent } from "@/lib/agency/session";
 import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
 import { saveAgencyBooking } from "@/lib/agency/store";
+import { countryForOffer } from "@/lib/agency/context";
 import type { Booking, BookingGuest, Locale, RoomAllocation, ServiceEvent } from "@/lib/types";
 
 interface Body {
@@ -172,7 +173,12 @@ export async function POST(req: Request) {
   const agent = await activeAgent();
   let agencyCommit: AgencyCommit | null = null;
   if (agent) {
-    agencyCommit = await priceForAgency(session.price.total, session.price.currency, agent.agencyId);
+    agencyCommit = await priceForAgency(
+      session.price.total,
+      session.price.currency,
+      agent.agencyId,
+      countryForOffer(offer),
+    );
     if (!agencyCommit) {
       return fail("policyRestriction", "agency.suspended", locale, { status: 403, action: "contactSupport" });
     }
@@ -392,6 +398,7 @@ export async function POST(req: Request) {
       checkIn: booking.checkIn,
       checkOut: booking.checkOut,
       leadGuest: `${booking.guests[0].firstName} ${booking.guests[0].surname}`.trim(),
+      publicPrice: commit.publicPrice,
       cost: commit.cost,
       sell: commit.sell,
       currency: commit.currency,

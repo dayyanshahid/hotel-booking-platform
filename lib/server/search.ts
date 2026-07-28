@@ -21,6 +21,7 @@ import { addDays, nightsBetween } from "../format";
 import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
+import { primeMarkup } from "./platform";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
 import {
   isTourmindSlug,
@@ -214,6 +215,8 @@ export interface SearchOptions {
 }
 
 export async function runSearch(intent: SearchIntent, options: SearchOptions): Promise<SearchResponse> {
+  // Pick up any markup the console has set before a single rate is priced.
+  await primeMarkup();
   const { locale, scenario } = options;
   const resolved = resolveDestination(intent);
   const effectiveIntent: SearchIntent = { ...intent, destinationId: resolved.destinationId };
@@ -502,6 +505,9 @@ export async function runHotelAvailability(
   locale: Locale,
   scenario: ScenarioId,
 ): Promise<NormalizedHotel | null> {
+  // The detail page prices independently of search, so it primes too.
+  await primeMarkup();
+
   // Live properties resolve through the supplier adapter; demo properties keep
   // using the simulated sources. Both return the same canonical shape.
   if (isTourmindSlug(slug)) {

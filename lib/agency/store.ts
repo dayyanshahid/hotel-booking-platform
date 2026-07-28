@@ -2,7 +2,16 @@ import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { dataDir } from "../server/runtime";
-import type { Agency, Agent, AgencyBalance, AgencyBooking, LedgerEntry } from "./types";
+import { policyFrom } from "./pricing";
+import type {
+  Agency,
+  Agent,
+  AgencyBalance,
+  AgencyBooking,
+  AgencyQuote,
+  LedgerEntry,
+  MarkupRule,
+} from "./types";
 
 /**
  * Process-local persistence for the B2B side, matching the consumer store's
@@ -21,9 +30,10 @@ interface Shape {
   agents: Agent[];
   ledger: LedgerEntry[];
   bookings: AgencyBooking[];
+  quotes: AgencyQuote[];
 }
 
-const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [] };
+const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [], quotes: [] };
 let loaded = false;
 
 /**
@@ -59,8 +69,16 @@ function seed(): void {
     countryCode: "PK",
     status: "active",
     commissionPercent: 12,
-    markup: { mode: "percent", value: 10 },
+    markup: { default: { mode: "percent", value: 10 }, overrides: [{ countryCode: "SA", rule: { mode: "percent", value: 6 } }] },
     credit: { limit: 25_000, currency: "USD", paymentDays: 30 },
+    profile: {
+      legalName: "Matchless Tours and Travels",
+      address: "Shahrah-e-Faisal",
+      city: "Karachi",
+      taxNumber: "",
+      email: "hotels@matchless.example",
+      phone: "+92 21 111 000 000",
+    },
     createdAt: now,
   };
   state.agencies.push(agency);
@@ -105,6 +123,8 @@ export async function loadAgencies(): Promise<void> {
     state.agents = parsed.agents ?? [];
     state.ledger = parsed.ledger ?? [];
     state.bookings = parsed.bookings ?? [];
+    state.quotes = parsed.quotes ?? [];
+    state.agencies = state.agencies.map(migrate);
   } catch {
     // No file yet.
   }
@@ -125,6 +145,34 @@ async function persist(): Promise<void> {
 }
 
 /* --------------------------------------------------------------- reads */
+
+/**
+ * Brings a stored agency up to the current shape.
+ *
+ * Records written before markup became a policy hold a bare rule, and ones
+ * written before profiles existed hold nothing at all. Reading those as-is
+ * would surface `undefined` in a quote header or throw on `.overrides`, so the
+ * gap is closed on the way in rather than guarded at every use.
+ */
+function migrate(agency: Agency): Agency {
+  const stored: unknown = agency.markup;
+  const markup =
+    stored && typeof stored === "object" && "mode" in stored
+      ? policyFrom(stored as MarkupRule)
+      : ((stored as Agency["markup"]) ?? policyFrom({ mode: "percent", value: 10 }));
+
+  return {
+    ...agency,
+    markup: { default: markup.default, overrides: markup.overrides ?? [] },
+    profile: agency.profile ?? {
+      legalName: agency.name,
+      address: "",
+      city: "",
+      email: "",
+      phone: "",
+    },
+  };
+}
 
 export async function getAgency(id: string): Promise<Agency | undefined> {
   await loadAgencies();
@@ -247,12 +295,80 @@ export async function listAgencyBookings(agencyId: string): Promise<AgencyBookin
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/* -------------------------------------------------------------- quotes */
+
+export async function saveQuote(quote: AgencyQuote): Promise<void> {
+  await loadAgencies();
+  const i = state.quotes.findIndex((q) => q.id === quote.id);
+  if (i >= 0) state.quotes[i] = quote;
+  else state.quotes.push(quote);
+  await persist();
+}
+
+export async function getQuote(id: string): Promise<AgencyQuote | undefined> {
+  await loadAgencies();
+  return state.quotes.find((q) => q.id === id);
+}
+
+export async function listQuotes(agencyId: string): Promise<AgencyQuote[]> {
+  await loadAgencies();
+  return state.quotes
+    .filter((q) => q.agencyId === agencyId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/* ---------------------------------------------------------- statements */
+
+/**
+ * What an agency owes for a calendar month.
+ *
+ * Bookings and their cancellations net off within the month they happened, so a
+ * stay booked and dropped in the same week does not appear as money owed.
+ * Settlements are listed separately rather than folded in: an agency reading a
+ * statement wants to see what it was charged and what it has paid as two
+ * numbers, not one difference.
+ */
+export interface StatementPeriod {
+  /** `YYYY-MM`. */
+  month: string;
+  charged: number;
+  credited: number;
+  settled: number;
+  currency: string;
+  entries: LedgerEntry[];
+}
+
+export async function statementPeriods(agencyId: string): Promise<StatementPeriod[]> {
+  const agency = await getAgency(agencyId);
+  if (!agency) return [];
+  const byMonth = new Map<string, StatementPeriod>();
+
+  for (const entry of state.ledger.filter((e) => e.agencyId === agencyId)) {
+    const month = entry.at.slice(0, 7);
+    const period =
+      byMonth.get(month) ??
+      ({ month, charged: 0, credited: 0, settled: 0, currency: agency.credit.currency, entries: [] } as StatementPeriod);
+
+    if (entry.kind === "settlement") period.settled += Math.abs(entry.amount);
+    else if (entry.amount < 0) period.charged += -entry.amount;
+    else period.credited += entry.amount;
+
+    period.entries.push(entry);
+    byMonth.set(month, period);
+  }
+
+  return [...byMonth.values()]
+    .map((p) => ({ ...p, entries: p.entries.sort((a, b) => b.at.localeCompare(a.at)) }))
+    .sort((a, b) => b.month.localeCompare(a.month));
+}
+
 /** Test seam: reset without touching the disk. */
 export function __resetAgencies(next?: Partial<Shape>): void {
   state.agencies = next?.agencies ?? [];
   state.agents = next?.agents ?? [];
   state.ledger = next?.ledger ?? [];
   state.bookings = next?.bookings ?? [];
+  state.quotes = next?.quotes ?? [];
   loaded = true;
   pinned = true;
 }
