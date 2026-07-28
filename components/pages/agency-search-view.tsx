@@ -8,10 +8,11 @@ import type { AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { Nothing, PageHeader, TableSkeleton, TradePrices } from "@/components/agency/ui";
+import Link from "next/link";
 import { addDays, formatDate, nightsBetween, todayIso } from "@/lib/format";
-import { href } from "@/lib/nav";
+import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
-import type { CurrencyCode, HotelResultCard, Locale, Suggestion } from "@/lib/types";
+import type { CurrencyCode, HotelResultCard, Locale, SearchIntent, Suggestion } from "@/lib/types";
 
 /**
  * Searching from inside the portal.
@@ -24,6 +25,21 @@ import type { CurrencyCode, HotelResultCard, Locale, Suggestion } from "@/lib/ty
  */
 export function AgencySearchView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <TradeSearch locale={locale} context={context} />}</PortalShell>;
+}
+
+/** The applied criteria as a query string the property page can read back. */
+function propertyQuery(criteria: Criteria, locale: Locale): string {
+  return searchParamsFromIntent({
+    destinationId: criteria.destinationId,
+    destinationDisplay: criteria.destinationDisplay,
+    destinationType: criteria.destinationType as SearchIntent["destinationType"],
+    checkIn: criteria.checkIn,
+    checkOut: criteria.checkOut,
+    flexibility: "exact",
+    rooms: Array.from({ length: criteria.rooms }, () => ({ adults: criteria.adults, childrenAges: [] })),
+    locale,
+    currency: criteria.currency as SearchIntent["currency"],
+  }).toString();
 }
 
 interface Criteria {
@@ -55,6 +71,12 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   });
 
   const [results, setResults] = useState<HotelResultCard[] | null>(null);
+  /**
+   * The criteria the visible results were fetched with — not the ones in the
+   * form, which the agent may have started editing. A property link built from
+   * the form would price a different stay from the one on screen.
+   */
+  const [applied, setApplied] = useState<Criteria | null>(null);
   const [quotes, setQuotes] = useState<Record<string, AgencyOfferView>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +144,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       return;
     }
     setResults(body.data.results);
+    setApplied(next);
     setPartial(body.data.partial);
 
     // One quote call for the whole page rather than one per row.
@@ -288,6 +311,14 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
       {busy && <TableSkeleton rows={4} />}
 
+      {/*
+        An empty page says "nothing available", never which supplier came back
+        empty. Agents are customers of ours, not partners in our supply
+        arrangements, and the canonical contract (§9.4) keeps supplier identity
+        off every client response — the trade ones included. An operator who
+        does need to know sees it on the console's catalogue screen, where an
+        unmapped supplier is named outright.
+      */}
       {results && !results.length && !busy && (
         <Nothing icon="search" title={t("results.empty")} body={t("agency.noResultsBody")} />
       )}
@@ -327,7 +358,20 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <p className="font-semibold wrap-anywhere">{card.name}</p>
+                          {/* The name opens every rate; "Book" stays the fast
+                              path for the one the row already shows. */}
+                          <p className="font-semibold wrap-anywhere">
+                            {applied ? (
+                              <Link
+                                href={`${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied, locale)}`}
+                                className="hover:underline"
+                              >
+                                {card.name}
+                              </Link>
+                            ) : (
+                              card.name
+                            )}
+                          </p>
                           {card.category > 0 && (
                             <span className="text-caution-700 text-xs" aria-label={`${card.category} stars`}>
                               {"★".repeat(Math.round(card.category))}

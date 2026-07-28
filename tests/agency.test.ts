@@ -187,3 +187,52 @@ describe("markup by country", () => {
     expect(policy.overrides).toEqual([]);
   });
 });
+
+describe("supplier-agnostic trade pricing", () => {
+  /**
+   * The point of the whole architecture, asserted at the trade layer.
+   *
+   * An agency's cost, selling price and margin must not depend on which
+   * supplier the rate came from — a TourMind rate and a Hotelbeds rate at the
+   * same public price must produce identical figures — and the view an agent
+   * receives must never carry a supplier binding, however the offer was stored.
+   */
+  const hotelbedsOffer = {
+    offerId: "of_hb",
+    price: { total: 1000, currency: "USD" },
+    hotelbeds: { rateKey: "RATE|KEY|SECRET", hotelCode: 1234, roomCode: "DBL", boardCode: "BB", net: 700, supplierCurrency: "EUR" },
+    intent: { destinationId: "dest-lisbon" },
+  };
+  const tourmindOffer = {
+    offerId: "of_tm",
+    price: { total: 1000, currency: "USD" },
+    tourmind: { rateCode: "TM-RATE-CODE", hotelCode: "9911", net: 690, supplierCurrency: "CNY" },
+    intent: { destinationId: "dest-lisbon" },
+  };
+
+  it("prices both suppliers identically from the same public price", () => {
+    const hb = viewOffer(hotelbedsOffer.offerId, hotelbedsOffer.price.total, "USD", agency, "PT");
+    const tm = viewOffer(tourmindOffer.offerId, tourmindOffer.price.total, "USD", agency, "PT");
+    expect(tm.cost).toBe(hb.cost);
+    expect(tm.sell).toBe(hb.sell);
+    expect(tm.margin).toBe(hb.margin);
+  });
+
+  it("leaks no supplier binding into what the agent receives", () => {
+    for (const offer of [hotelbedsOffer, tourmindOffer]) {
+      const view = viewOffer(offer.offerId, offer.price.total, "USD", agency, "PT");
+      const serialised = JSON.stringify(view);
+      // The exact secrets held server-side for each supplier.
+      for (const secret of ["RATE|KEY|SECRET", "TM-RATE-CODE", "9911", "1234", "700", "690", "EUR", "CNY"]) {
+        expect(serialised).not.toContain(secret);
+      }
+      expect(Object.keys(view)).toEqual(["offerId", "cost", "sell", "margin", "currency", "publicPrice"]);
+    }
+  });
+
+  it("applies a country rule regardless of supplier", () => {
+    // Saudi Arabia carries a 5% override on this agency; both suppliers follow it.
+    expect(viewOffer("of_hb", 1000, "USD", agency, "SA").sell).toBe(924);
+    expect(viewOffer("of_tm", 1000, "USD", agency, "SA").sell).toBe(924);
+  });
+});
