@@ -6,13 +6,15 @@ import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Checkbox, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
+import { SearchBar } from "@/components/search/search-bar";
+import { TripPrompt } from "@/components/search/trip-prompt";
 import { Icon } from "@/components/ui/icons";
 import { Nothing, PageHeader, TableSkeleton, TradePrices } from "@/components/agency/ui";
 import Link from "next/link";
 import { addDays, formatDate, nightsBetween, todayIso } from "@/lib/format";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
-import type { CurrencyCode, HotelResultCard, Locale, SearchIntent, Suggestion } from "@/lib/types";
+import type { CurrencyCode, HotelResultCard, Locale, SearchIntent } from "@/lib/types";
 
 /**
  * Searching from inside the portal.
@@ -27,48 +29,39 @@ export function AgencySearchView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <TradeSearch locale={locale} context={context} />}</PortalShell>;
 }
 
-/** The applied criteria as a query string the property page can read back. */
-function propertyQuery(criteria: Criteria, locale: Locale): string {
-  return searchParamsFromIntent({
-    destinationId: criteria.destinationId,
-    destinationDisplay: criteria.destinationDisplay,
-    destinationType: criteria.destinationType as SearchIntent["destinationType"],
-    checkIn: criteria.checkIn,
-    checkOut: criteria.checkOut,
-    flexibility: "exact",
-    rooms: Array.from({ length: criteria.rooms }, () => ({ adults: criteria.adults, childrenAges: [] })),
-    locale,
-    currency: criteria.currency as SearchIntent["currency"],
-  }).toString();
-}
-
-interface Criteria {
-  destinationId: string;
-  destinationDisplay: string;
-  destinationType: string;
-  checkIn: string;
-  checkOut: string;
-  adults: number;
-  rooms: number;
-  currency: string;
+/**
+ * The applied search as a query string the property page can read back.
+ *
+ * It carries the whole allocation, child ages included, because the property
+ * page re-prices from it. A link that dropped the children would quote an
+ * agent a room for two and surprise them at the counter.
+ */
+function propertyQuery(intent: SearchIntent): string {
+  return searchParamsFromIntent(intent).toString();
 }
 
 function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
   const router = useRouter();
 
-  const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [criteria, setCriteria] = useState<Criteria>({
+  /**
+   * What the bar is pre-filled with. It is not the applied search: the bar owns
+   * its own working copy from here, and `applied` below is what the visible
+   * results were actually fetched with.
+   */
+  const [seed, setSeed] = useState<SearchIntent>(() => ({
     destinationId: "",
     destinationDisplay: "",
     destinationType: "city",
     checkIn: addDays(todayIso(), 21),
     checkOut: addDays(todayIso(), 24),
-    adults: 2,
-    rooms: 1,
-    currency: context.agency.credit.currency,
-  });
+    flexibility: "exact",
+    rooms: [{ adults: 2, childrenAges: [] }],
+    locale,
+    // Trade prices settle in the agency's currency, not whatever the agent
+    // happens to be browsing the consumer site in.
+    currency: context.agency.credit.currency as SearchIntent["currency"],
+  }));
 
   const [results, setResults] = useState<HotelResultCard[] | null>(null);
   /**
@@ -76,7 +69,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * form, which the agent may have started editing. A property link built from
    * the form would price a different stay from the one on screen.
    */
-  const [applied, setApplied] = useState<Criteria | null>(null);
+  const [applied, setApplied] = useState<SearchIntent | null>(null);
   const [quotes, setQuotes] = useState<Record<string, AgencyOfferView>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,39 +95,15 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [maxPrice, setMaxPrice] = useState("");
   const [board, setBoard] = useState("all");
 
-  useEffect(() => {
-    if (query.trim().length < 2) return;
-    const id = window.setTimeout(async () => {
-      const res = await fetch(
-        `/api/search/suggestions?q=${encodeURIComponent(query)}&locale=${locale}`,
-        { credentials: "same-origin" },
-      );
-      const body = (await res.json()) as { ok: boolean; data?: { suggestions: Suggestion[] } };
-      if (body.ok && body.data) setSuggestions(body.data.suggestions);
-    }, 200);
-    return () => window.clearTimeout(id);
-  }, [query, locale]);
-
-  async function run(next: Criteria) {
-    if (!next.destinationId) {
+  async function run(intent: SearchIntent) {
+    if (!intent.destinationId) {
       setError(t("agency.pickDestination"));
       return;
     }
     setBusy(true);
     setError(null);
     setResults(null);
-
-    const intent = {
-      destinationId: next.destinationId,
-      destinationDisplay: next.destinationDisplay,
-      destinationType: next.destinationType,
-      checkIn: next.checkIn,
-      checkOut: next.checkOut,
-      flexibility: "exact",
-      rooms: Array.from({ length: next.rooms }, () => ({ adults: next.adults, childrenAges: [] })),
-      locale,
-      currency: next.currency,
-    };
+    setSeed(intent);
 
     const res = await fetch("/api/hotels/search", {
       method: "POST",
@@ -153,7 +122,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       return;
     }
     setResults(body.data.results);
-    setApplied(next);
+    setApplied(intent);
     setPartial(body.data.partial);
 
     // One quote call for the whole page rather than one per row.
@@ -172,7 +141,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     }
   }
 
-  const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
+  const nights = nightsBetween(seed.checkIn, seed.checkOut);
 
   const filtered = (() => {
     if (!results) return results;
@@ -210,102 +179,61 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     <div className="space-y-5">
       <PageHeader title={t("agency.searchStays")} description={t("agency.searchBody")} />
 
+      {/*
+        The same bar the consumer site uses, running the search here instead of
+        navigating. The portal used to have its own — a datalist, two date
+        fields and two selects — which meant an agent could not search for a
+        family with children at all, on a platform that prices them fine for a
+        traveller booking direct. The counter needs *more* of the search, not
+        less of it.
+      */}
       <Card className="space-y-3 p-4">
-        <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto_auto]">
-          <Field label={t("common.destination")} htmlFor="tr-dest">
-            <Input
-              id="tr-dest"
-              list="tr-dest-options"
-              value={query}
-              placeholder={t("search.placeholder")}
-              onChange={(e) => {
-                const value = e.target.value;
-                setQuery(value);
-                const match = suggestions.find((s) => `${s.label} — ${s.context}` === value);
-                if (match) {
-                  setCriteria((c) => ({
-                    ...c,
-                    destinationId: match.id,
-                    destinationDisplay: match.label,
-                    destinationType: match.type,
-                  }));
-                }
-              }}
-            />
-            <datalist id="tr-dest-options">
-              {suggestions.map((s) => (
-                <option key={s.id} value={`${s.label} — ${s.context}`} />
-              ))}
-            </datalist>
-          </Field>
-
-          <Field label={t("search.checkIn")} htmlFor="tr-in">
-            <Input
-              id="tr-in"
-              type="date"
-              value={criteria.checkIn}
-              min={todayIso()}
-              onChange={(e) => {
-                const checkIn = e.target.value;
-                setCriteria((c) => ({
-                  ...c,
-                  checkIn,
-                  // Keeping the stay length is what an agent expects when they
-                  // move the arrival date; recomputing to a fixed checkout is not.
-                  checkOut: checkIn >= c.checkOut ? addDays(checkIn, Math.max(1, nights)) : c.checkOut,
-                }));
-              }}
-            />
-          </Field>
-
-          <Field label={t("search.checkOut")} htmlFor="tr-out">
-            <Input
-              id="tr-out"
-              type="date"
-              value={criteria.checkOut}
-              min={addDays(criteria.checkIn, 1)}
-              onChange={(e) => setCriteria((c) => ({ ...c, checkOut: e.target.value }))}
-            />
-          </Field>
-
-          <Field label={t("common.rooms")} htmlFor="tr-rooms">
-            <Select
-              id="tr-rooms"
-              value={String(criteria.rooms)}
-              onChange={(e) => setCriteria((c) => ({ ...c, rooms: Number(e.target.value) }))}
-            >
-              {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label={t("common.adults")} htmlFor="tr-adults">
-            <Select
-              id="tr-adults"
-              value={String(criteria.adults)}
-              onChange={(e) => setCriteria((c) => ({ ...c, adults: Number(e.target.value) }))}
-            >
-              {[1, 2, 3, 4].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => run(criteria)} loading={busy}>
-            {t("common.search")}
-          </Button>
+        <SearchBar
+          /*
+           * Keyed on the search itself so a sentence rewrites the controls.
+           * The bar keeps its own working copy of the intent — that is what
+           * makes it editable — which meant interpreting "2 rooms in Dubai in
+           * October" ran the right search while the bar above it still read
+           * 1 room in August. The next thing the agent does is edit that bar,
+           * and they would have been editing the wrong stay.
+           */
+          key={searchParamsFromIntent(seed).toString()}
+          variant="panel"
+          initial={seed}
+          currency={seed.currency}
+          busy={busy}
+          onSearch={run}
+        />
+        <div className="hairline flex flex-wrap items-center justify-between gap-3 border-t pt-3">
           <p className="text-muted text-sm">
-            {formatDate(criteria.checkIn, locale)} → {formatDate(criteria.checkOut, locale)} · {nights}{" "}
-            {nights === 1 ? t("common.night") : t("common.nights")}
+            {formatDate(seed.checkIn, locale)} → {formatDate(seed.checkOut, locale)} · {nights}{" "}
+            {nights === 1 ? t("common.night") : t("common.nights")} ·{" "}
+            {t("agency.pricedIn", { currency: seed.currency })}
           </p>
         </div>
+
+        {/*
+          An agent is usually repeating a sentence a caller just said. Typing it
+          is faster than filling four controls, and it is the same interpreter
+          the consumer site runs — so a trade search cannot understand less of a
+          request than a traveller's would.
+        */}
+        <TripPrompt
+          className="max-w-none"
+          currency={seed.currency as CurrencyCode}
+          label={t("agency.describeTrip")}
+          placeholder={t("agency.describeTripPlaceholder")}
+          onRun={(intent, filters) => {
+            // Filters the sentence asked for are applied to the results we are
+            // about to fetch, so "free cancellation" narrows the page rather
+            // than being read aloud and forgotten.
+            setRefundableOnly(Boolean(filters.refundableOnly));
+            setMinStars(filters.categories?.[0] ?? 0);
+            setMaxPrice(filters.maxPrice ? String(filters.maxPrice) : "");
+            setBoard(filters.boards?.includes("BB") ? "breakfast" : "all");
+            void run(intent);
+          }}
+        />
       </Card>
 
       {error && <Alert tone="critical">{error}</Alert>}
@@ -454,7 +382,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                           <p className="font-semibold wrap-anywhere">
                             {applied ? (
                               <Link
-                                href={`${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied, locale)}`}
+                                href={`${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied)}`}
                                 className="hover:underline"
                               >
                                 {card.name}

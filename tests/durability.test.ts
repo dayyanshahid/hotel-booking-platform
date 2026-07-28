@@ -16,10 +16,6 @@ import type { Booking } from "@/lib/types";
 
 let tempDir = "";
 
-declare global {
-  var __nazilStore: unknown;
-}
-
 async function freshInstance() {
   vi.resetModules();
   delete (globalThis as { __nazilStore?: unknown }).__nazilStore;

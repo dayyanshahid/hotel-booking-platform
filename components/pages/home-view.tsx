@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
+import { TripPrompt } from "@/components/search/trip-prompt";
 import { Accordion, Badge, Button, Card, Photo, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
@@ -12,7 +13,7 @@ import { sceneUrl } from "@/lib/illustration/scenes";
 import { formatDate, formatMoney } from "@/lib/format";
 import { countLabel } from "@/lib/i18n";
 import { href, searchHref, searchParamsFromIntent, typedSearchHref } from "@/lib/nav";
-import type { CurrencyCode, Locale, SearchIntent } from "@/lib/types";
+import type { CurrencyCode, Locale, SearchFilters, SearchIntent } from "@/lib/types";
 
 interface DestinationSummary {
   id: string;
@@ -109,6 +110,20 @@ export function HomeView({
   totalCountries: number;
 }) {
   const { t, recent, saved, currency } = useApp();
+  const router = useRouter();
+
+  /**
+   * What "run this" means on the consumer site: open the results page already
+   * narrowed to what the sentence asked for, rather than showing everything and
+   * making the guest re-apply it.
+   */
+  function runInterpreted(intent: SearchIntent, filters: SearchFilters) {
+    const params = searchParamsFromIntent(intent);
+    for (const [key, value] of Object.entries(filters)) {
+      params.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
+    router.push(`${href(locale, "/search")}?${params.toString()}`);
+  }
 
   /*
    * A property-type pill needs somewhere to search. It uses the leading
@@ -220,7 +235,7 @@ export function HomeView({
         <div className="rounded-[var(--radius-card)] border-[3px] border-action-400 shadow-[var(--shadow-raised)]">
           <SearchBar variant="hero" />
         </div>
-        <AiPrompt />
+        <TripPrompt tone="onMedia" onRun={runInterpreted} />
       </div>
 
       {/* --------------------------------------------------- personalised */}
@@ -631,125 +646,5 @@ function PillRow({
     </div>
   );
 }
-interface Interpretation {
-  intent: SearchIntent | null;
-  filters: Record<string, unknown>;
-  understood: string[];
-  assumed: string[];
-  missing: string[];
-}
 
-/**
- * Describe your trip.
- *
- * The point is that it *runs the search*. The previous version parsed a
- * sentence in the browser against six hard-coded city names, produced no dates
- * and no destination id, showed what it thought and then told the reader to go
- * and fill the form in themselves — a demonstration of understanding with
- * nowhere to go.
- *
- * Interpretation now happens on the server against the real suggestion index,
- * so it knows every city we sell in both languages. What it read and what it
- * had to assume are shown separately, because a guess presented as an
- * understanding is how someone ends up on the wrong dates.
- */
-function AiPrompt() {
-  const { t, locale, currency, track } = useApp();
-  const router = useRouter();
-  const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Interpretation | null>(null);
-
-  async function interpret() {
-    setBusy(true);
-    const res = await fetch("/api/search/interpret", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-locale": locale },
-      body: JSON.stringify({ text: prompt, currency }),
-    });
-    const body = (await res.json()) as { ok: boolean; data?: Interpretation };
-    setBusy(false);
-    if (!body.ok || !body.data) return;
-    setResult(body.data);
-    track("ai_prompt_interpreted", {
-      resolved: body.data.intent ? "yes" : "no",
-      assumed: body.data.assumed.length,
-    });
-  }
-
-  function run() {
-    if (!result?.intent) return;
-    // Filters travel in the URL alongside the intent, so the search page opens
-    // already narrowed to what was asked for rather than showing everything and
-    // making the guest re-apply it.
-    const params = searchParamsFromIntent(result.intent);
-    for (const [key, value] of Object.entries(result.filters)) {
-      params.set(key, Array.isArray(value) ? value.join(",") : String(value));
-    }
-    track("ai_prompt_searched", {});
-    router.push(`${href(locale, "/search")}?${params.toString()}`);
-  }
-
-  return (
-    <div className="mt-6 max-w-3xl">
-      <label htmlFor="ai-prompt" className="inline-flex items-center gap-1.5 text-sm font-semibold">
-        <Icon name="sparkle" size={15} />
-        {t("home.aiPrompt")}
-      </label>
-      {/*
-        Field and action are one pill rather than two floating controls: over a
-        photograph, separate elements read as debris instead of a control.
-      */}
-      <div className="surface mt-2 flex flex-col gap-2 rounded-[var(--radius-card)] border p-1.5 sm:flex-row sm:items-center">
-        <input
-          id="ai-prompt"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && prompt.trim()) void interpret();
-          }}
-          placeholder={t("home.aiPlaceholder")}
-          className="min-h-10 w-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-[var(--text-muted)]"
-        />
-        <Button type="button" onClick={interpret} loading={busy} disabled={!prompt.trim()} className="shrink-0">
-          {t("home.aiInterpret")}
-        </Button>
-      </div>
-
-      {result && (
-        <Card className="rise mt-3 space-y-2 p-4 text-sm">
-          {result.intent ? (
-            <>
-              <p className="font-medium">{t("home.aiInterpreted")}</p>
-              <p className="wrap-anywhere">
-                <strong>{result.intent.destinationDisplay}</strong> ·{" "}
-                {formatDate(result.intent.checkIn, locale)} → {formatDate(result.intent.checkOut, locale)} ·{" "}
-                {result.intent.rooms.length} {t("common.rooms")} ·{" "}
-                {result.intent.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0)}{" "}
-                {t("common.guests")}
-              </p>
-              {result.understood.length > 0 && (
-                <p className="text-muted text-xs">{result.understood.join(" · ")}</p>
-              )}
-              {/* Assumptions are set apart, not blended into what was read. */}
-              {result.assumed.length > 0 && (
-                <p className="text-caution-700 text-xs">
-                  {t("home.aiAssumed")}: {result.assumed.join(", ")}
-                </p>
-              )}
-              <Button size="sm" onClick={run}>
-                {t("home.aiSearch")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <p className="font-medium">{t("home.aiNoDestination")}</p>
-              <p className="text-muted text-xs">{t("home.aiNoDestinationBody")}</p>
-            </>
-          )}
-        </Card>
-      )}
-    </div>
-  );
-}
 

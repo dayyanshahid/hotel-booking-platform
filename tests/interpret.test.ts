@@ -53,6 +53,57 @@ describe("interpreting a described trip", () => {
     expect(result.assumed).not.toContain("in two weeks");
   });
 
+  it("reads a count written as a word", async () => {
+    /*
+     * Found by the console's own availability probe: "Two rooms in Porto"
+     * booked one room, and the stray "two" matched a property called Two
+     * Seasons — so the search ran against a hotel in Dubai and came back empty,
+     * which read as a supply gap in Portugal.
+     */
+    const result = await interpretTrip("Two rooms in Porto, 12 October, 4 nights", "en", "USD", TODAY);
+    expect(result.intent?.destinationDisplay).toBe("Porto");
+    expect(result.intent?.destinationType).not.toBe("hotel");
+    expect(result.intent?.rooms).toHaveLength(2);
+    expect(result.intent?.checkIn).toBe("2026-10-12");
+    expect(stayLength(result.intent!)).toBe(4);
+  });
+
+  it("reads a party size the way people state it", async () => {
+    // The example printed in the field's own placeholder. "Family of four" was
+    // silently searched as two adults, which prices a different holiday.
+    const result = await interpretTrip(
+      "Family of four, Jeddah beachfront, 3 nights in October, free cancellation",
+      "en",
+      "USD",
+      TODAY,
+    );
+    expect(result.intent?.destinationDisplay).toBe("Jeddah");
+    const guests = result.intent!.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
+    expect(guests).toBe(4);
+    expect(result.filters.refundableOnly).toBe(true);
+    expect(stayLength(result.intent!)).toBe(3);
+  });
+
+  it("takes children out of a stated party rather than adding to it", async () => {
+    const result = await interpretTrip("Family of 4 in Lisbon with 2 children", "en", "USD", TODAY);
+    const rooms = result.intent!.rooms;
+    expect(rooms.reduce((sum, room) => sum + room.adults, 0)).toBe(2);
+    expect(rooms.flatMap((room) => room.childrenAges)).toHaveLength(2);
+  });
+
+  it("prefers a place named anywhere in the sentence over a hotel", async () => {
+    // A word early in the sentence matching a property name must not win over
+    // a city named later; the guest said where they were going.
+    const result = await interpretTrip("Grand tour of Lisbon, 3 nights", "en", "USD", TODAY);
+    expect(result.intent?.destinationType).not.toBe("hotel");
+    expect(result.intent?.destinationDisplay).toBe("Lisbon");
+  });
+
+  it("still resolves a property when the sentence names no place", async () => {
+    const result = await interpretTrip("Porto Grand Hotel, 2 nights", "en", "USD", TODAY);
+    expect(result.intent).not.toBeNull();
+  });
+
   it("pushes a month that has passed into next year", async () => {
     const result = await interpretTrip("Porto 12 March", "en", "USD", TODAY);
     expect(result.intent?.checkIn).toBe("2027-03-12");

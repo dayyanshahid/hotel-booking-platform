@@ -13,20 +13,44 @@ import { validateIntent } from "@/lib/server/validate";
 import type { SearchIntent } from "@/lib/types";
 
 /**
- * The persistent, editable search context (§2.1) used on home, results and
- * hotel pages. The same validation module runs here and in the BFF so the rules
- * cannot drift.
+ * The persistent, editable search context (§2.1). The same validation module
+ * runs here and in the BFF so the rules cannot drift.
+ *
+ * One bar, three surfaces. It began as consumer furniture that always pushed to
+ * `/search`, which is why the trade portal grew its own version out of a
+ * datalist and two date inputs — and why an agent could not search for a family
+ * with children at all, on a platform whose consumer site prices them fine. A
+ * search control that differs by audience does not differ in styling; it
+ * differs in what can be asked for.
+ *
+ * `onSearch` is the whole of the difference: given one, the bar hands over the
+ * validated intent and navigates nowhere, so a portal can run the search in
+ * place. Without one it behaves exactly as it always has.
  */
 export function SearchBar({
   initial,
   variant = "hero",
+  currency: currencyOverride,
+  submitLabel,
   onSubmitted,
+  onSearch,
+  busy,
 }: {
   initial?: SearchIntent | null;
-  variant?: "hero" | "compact";
+  variant?: "hero" | "compact" | "panel";
+  /**
+   * The trade portal prices in the agency's own settlement currency, which is
+   * not the one the visitor happens to be browsing in.
+   */
+  currency?: SearchIntent["currency"];
+  submitLabel?: string;
   onSubmitted?: (intent: SearchIntent) => void;
+  /** Run the search here instead of navigating to the consumer results page. */
+  onSearch?: (intent: SearchIntent) => void;
+  busy?: boolean;
 }) {
-  const { t, locale, currency, rememberSearch, track } = useApp();
+  const { t, locale, currency: browsingCurrency, rememberSearch, track } = useApp();
+  const currency = currencyOverride ?? browsingCurrency;
   const router = useRouter();
 
   const [destination, setDestination] = useState<{ id: string; label: string; type: SearchIntent["destinationType"] } | null>(
@@ -76,8 +100,15 @@ export function SearchBar({
       currency: intent.currency,
       locale: intent.locale,
     });
-    rememberSearch(intent, `${intent.destinationDisplay} · ${intent.checkIn} → ${intent.checkOut}`);
     onSubmitted?.(intent);
+    if (onSearch) {
+      // A portal owns its own results and its own history. Remembering the
+      // search here too would put trade lookups in a traveller's recent
+      // searches on the consumer site, which is somebody else's screen.
+      onSearch(intent);
+      return;
+    }
+    rememberSearch(intent, `${intent.destinationDisplay} · ${intent.checkIn} → ${intent.checkOut}`);
     router.push(searchHref(locale, intent));
   }
 
@@ -87,8 +118,11 @@ export function SearchBar({
       className={cx(
         // The hero form is framed by the yellow outline its parent draws, so it
         // carries no border of its own — two edges 3px apart reads as a mistake.
-        "surface rounded-[6px]",
-        variant === "hero" ? "p-1.5" : "border p-2",
+        "rounded-[6px]",
+        variant === "hero" && "surface p-1.5",
+        variant === "compact" && "surface border p-2",
+        // Inside a console card the surface and border are already the card's.
+        variant === "panel" && "bg-transparent",
       )}
       role="search"
       aria-label={t("common.searchHotels")}
@@ -115,11 +149,12 @@ export function SearchBar({
         <div className="flex items-end">
           <Button
             type="submit"
-            variant={variant === "hero" ? "primary" : "primary"}
+            variant="primary"
             size={variant === "hero" ? "lg" : "md"}
+            loading={busy}
             className="h-full w-full lg:w-auto lg:px-8"
           >
-            {t("common.search")}
+            {submitLabel ?? t("common.search")}
           </Button>
         </div>
       </div>

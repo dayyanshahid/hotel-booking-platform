@@ -51,6 +51,40 @@ const MONTHS: Record<string, number> = {
   december: 11, dec: 11, ديسمبر: 11,
 };
 
+/**
+ * Numbers written as words.
+ *
+ * "Two rooms in Porto" read as one room and, worse, resolved the destination to
+ * a hotel called Two Seasons — the word was not a number to the parser, so it
+ * survived into the place lookup and matched a property name. People type
+ * numbers both ways, and a request for two rooms that quietly books one is the
+ * kind of confident wrong answer that makes the feature untrustworthy.
+ *
+ * Rewriting them to digits first fixes both halves at once: the counts parse,
+ * and the token stops looking like a place name.
+ */
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  واحد: 1, واحدة: 1,
+  اثنان: 2, اثنين: 2, اثنتين: 2, اثنتان: 2,
+  ثلاث: 3, ثلاثة: 3,
+  أربع: 4, اربع: 4, أربعة: 4, اربعة: 4,
+  خمس: 5, خمسة: 5,
+  ست: 6, ستة: 6,
+  سبع: 7, سبعة: 7,
+  ثماني: 8, ثمانية: 8,
+  تسع: 9, تسعة: 9,
+  عشر: 10, عشرة: 10,
+};
+
+function numeralise(text: string): string {
+  return text.replace(/[\p{L}]+/gu, (word) => {
+    const value = NUMBER_WORDS[word];
+    return value === undefined ? word : String(value);
+  });
+}
+
 function iso(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -123,7 +157,7 @@ export async function interpretTrip(
   currency: CurrencyCode,
   today = todayIso(),
 ): Promise<Interpretation> {
-  const lower = text.toLowerCase().trim();
+  const lower = numeralise(text.toLowerCase().trim());
   const understood: string[] = [];
   const assumed: string[] = [];
   const missing: string[] = [];
@@ -131,8 +165,16 @@ export async function interpretTrip(
 
   /* ------------------------------------------------------------ occupancy */
 
-  const adults = Number(lower.match(/(\d+)\s*(adults?|people|guests?|بالغ|أشخاص|اشخاص)/)?.[1] ?? 0);
+  /*
+   * "Family of four" is how people say four guests — and it is the example we
+   * print in the field's own placeholder, so it had better work. Read as a
+   * party size rather than an adult count: any children stated separately come
+   * out of it, and what remains are the adults.
+   */
+  const party = Number(lower.match(/(?:family|party|group)\s+of\s+(\d+)|(?:عائلة|مجموعة)\s+من\s+(\d+)/)?.slice(1).find(Boolean) ?? 0);
+  const statedAdults = Number(lower.match(/(\d+)\s*(adults?|people|guests?|بالغ|أشخاص|اشخاص)/)?.[1] ?? 0);
   const childCount = Number(lower.match(/(\d+)\s*(child|children|kids?|طفل|أطفال|اطفال)/)?.[1] ?? 0);
+  const adults = statedAdults || Math.max(0, party - childCount);
   const roomCount = Number(lower.match(/(\d+)\s*(rooms?|غرف|غرفة)/)?.[1] ?? 0);
 
   // Ages matter: a child without one cannot be priced, so they are assumed at
@@ -245,15 +287,33 @@ export async function interpretTrip(
     ...words,
   ];
 
+  /*
+   * A place anywhere in the sentence beats a hotel anywhere in it.
+   *
+   * Stopping at the first word that matched *anything* meant an early word
+   * hitting a property name won outright, and the city named two words later
+   * was never looked at — "two rooms in Porto" searched a hotel called Two
+   * Seasons in Dubai. Hotels are still resolvable, but only when nothing in the
+   * sentence names a place.
+   */
+  let fallback: Awaited<ReturnType<typeof suggestAll>>[number] | null = null;
   for (const candidate of candidates) {
     const matches = await suggestAll(candidate, locale, 3);
-    const place = matches.find((match) => match.type !== "hotel") ?? matches[0];
-    if (!place) continue;
-    understood.push(place.label);
+    const place = matches.find((match) => match.type !== "hotel");
+    if (!place) {
+      fallback ??= matches[0] ?? null;
+      continue;
+    }
+    fallback = place;
+    break;
+  }
+
+  if (fallback) {
+    understood.push(fallback.label);
     intent = {
-      destinationId: place.id,
-      destinationDisplay: place.label,
-      destinationType: place.type,
+      destinationId: fallback.id,
+      destinationDisplay: fallback.label,
+      destinationType: fallback.type,
       checkIn: start,
       checkOut: addDays(start, stay),
       flexibility: checkIn ? "exact" : "p3",
@@ -261,7 +321,6 @@ export async function interpretTrip(
       locale,
       currency: isCurrencyCode(currency) ? currency : "USD",
     };
-    break;
   }
 
   if (!intent) missing.push("destination");

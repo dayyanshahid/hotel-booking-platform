@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { ConsoleShell } from "@/components/admin/console-shell";
 import { Alert, Badge, Button, Card, Modal, SectionHeading, Select, Field, Input, Skeleton, cx } from "@/components/ui";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { SearchBar } from "@/components/search/search-bar";
+import { searchParamsFromIntent } from "@/lib/nav";
+import { TripPrompt } from "@/components/search/trip-prompt";
+import { addDays, formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
 import type { AuditEntry } from "@/lib/admin/store";
-import type { CurrencyCode, Locale } from "@/lib/types";
+import type { CurrencyCode, HotelResultCard, Locale, SearchFilters, SearchIntent, SearchResponse } from "@/lib/types";
 
 /* ---------------------------------------------------------- catalogue */
 
@@ -130,6 +133,8 @@ function Catalogue() {
       <SectionHeading title={t("admin.catalogue")} description={t("admin.catalogueBody")} />
       {notice && <Alert tone="success">{notice}</Alert>}
       {error && <Alert tone="critical">{error}</Alert>}
+
+      <SupplyProbe />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Stat label={t("admin.cities")} value={String(data.geography.cities)} />
@@ -491,6 +496,250 @@ function Environment() {
 }
 
 /* ------------------------------------------------------------- shared */
+
+/* --------------------------------------------------------------- probe */
+
+interface ProbePayload {
+  results: HotelResultCard[];
+  totalCount: number;
+  completeness: SearchResponse["completeness"];
+  completenessMessage?: string;
+  recovery?: SearchResponse["recovery"];
+  intent: SearchIntent;
+  diagnostics: {
+    elapsedMs: number;
+    bySource: { hotelbeds: number; tourmind: number; platform: number };
+    suppliers: {
+      hotelbeds: { enabled: boolean; returned: number };
+      tourmind: { enabled: boolean; returned: number };
+    };
+    destination: {
+      id: string;
+      display: string;
+      city: string;
+      country: string;
+      seededProperties: number;
+    } | null;
+    filters: SearchFilters;
+  };
+}
+
+/**
+ * Run the search a guest is complaining about.
+ *
+ * Coverage numbers answer "is this city mapped". They do not answer the call
+ * that actually arrives — "there is nothing in Porto for August" — because the
+ * only way to know is to run it for those dates, with that party, and look.
+ * This runs the real search through the same code path the site uses, then
+ * shows the half the site never shows anyone: which source each result came
+ * from, how long it took, and whether a supplier that should have answered
+ * did.
+ *
+ * The same bar and the same sentence box as the other two surfaces, because an
+ * operator reproducing a guest's search should be able to type what the guest
+ * typed.
+ */
+function SupplyProbe() {
+  const { t, locale, currency } = useApp();
+  const [seed, setSeed] = useState<SearchIntent>(() => ({
+    destinationId: "",
+    destinationDisplay: "",
+    destinationType: "city",
+    checkIn: addDays(todayIso(), 21),
+    checkOut: addDays(todayIso(), 24),
+    flexibility: "exact",
+    rooms: [{ adults: 2, childrenAges: [] }],
+    locale,
+    currency,
+  }));
+  const [data, setData] = useState<ProbePayload | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  async function probe(intent: SearchIntent, filters: SearchFilters = {}) {
+    if (!intent.destinationId) return;
+    setBusy(true);
+    setFailure(null);
+    setSeed(intent);
+    const res = await fetch("/api/admin/probe", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-locale": locale },
+      credentials: "same-origin",
+      body: JSON.stringify({ intent, filters }),
+    });
+    const body = (await res.json()) as { ok: boolean; data?: ProbePayload; error?: { message: string } };
+    setBusy(false);
+    if (!body.ok || !body.data) {
+      setFailure(body.error?.message ?? t("error.temporaryService"));
+      setData(null);
+      return;
+    }
+    setData(body.data);
+  }
+
+  const diag = data?.diagnostics;
+
+  return (
+    <Card className="space-y-3 p-5">
+      <div>
+        <h2 className="font-semibold">{t("admin.probe")}</h2>
+        <p className="text-muted text-sm">{t("admin.probeBody")}</p>
+      </div>
+
+      {/* Keyed on the search so a described trip rewrites the controls too. */}
+      <SearchBar
+        key={searchParamsFromIntent(seed).toString()}
+        variant="panel"
+        initial={seed}
+        busy={busy}
+        submitLabel={t("admin.runProbe")}
+        onSearch={probe}
+      />
+
+      <TripPrompt
+        className="max-w-none"
+        label={t("admin.probeDescribe")}
+        placeholder={t("admin.probeDescribePlaceholder")}
+        onRun={(intent, filters) => void probe(intent, filters)}
+      />
+
+      {failure && <Alert tone="critical">{failure}</Alert>}
+
+      {diag && data && (
+        <div className="space-y-3">
+          {/*
+            Supplier names, which appear nowhere on the consumer or trade
+            surfaces. An operator deciding whether to chase a supplier or fix a
+            mapping cannot do it against an anonymised page.
+          */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label={t("admin.probeResults")} value={String(data.totalCount)} />
+            <Stat label={t("admin.probeElapsed")} value={`${diag.elapsedMs} ms`} />
+            <Stat
+              label="Hotelbeds"
+              value={
+                diag.suppliers.hotelbeds.enabled
+                  ? String(diag.suppliers.hotelbeds.returned)
+                  : t("admin.notConfiguredShort")
+              }
+              tone={
+                diag.suppliers.hotelbeds.enabled && diag.suppliers.hotelbeds.returned === 0 ? "critical" : undefined
+              }
+            />
+            <Stat
+              label="TourMind"
+              value={
+                diag.suppliers.tourmind.enabled
+                  ? String(diag.suppliers.tourmind.returned)
+                  : t("admin.notConfiguredShort")
+              }
+              tone={diag.suppliers.tourmind.enabled && diag.suppliers.tourmind.returned === 0 ? "critical" : undefined}
+            />
+          </div>
+
+          <dl className="hairline space-y-1 rounded-[var(--radius-card)] border p-4 text-sm">
+            <Row
+              label={t("admin.probeStay")}
+              value={`${formatDate(data.intent.checkIn, locale)} → ${formatDate(data.intent.checkOut, locale)}`}
+            />
+            <Row label={t("admin.probeParty")} value={partyLabel(data.intent)} />
+            {diag.destination && (
+              <>
+                <Row
+                  label={t("admin.probeDestination")}
+                  value={`${diag.destination.display} (${diag.destination.id}) · ${diag.destination.country}`}
+                />
+                {/* Own inventory separated from supplier supply: the difference
+                    between "the suppliers were quiet" and "we never had any". */}
+                <Row label={t("admin.probeSeeded")} value={String(diag.destination.seededProperties)} />
+              </>
+            )}
+            <Row label={t("admin.probeOwnInventory")} value={String(diag.bySource.platform)} />
+            {Object.keys(diag.filters).length > 0 && (
+              <Row label={t("admin.probeFilters")} value={JSON.stringify(diag.filters)} />
+            )}
+          </dl>
+
+          {data.completeness !== "complete" && (
+            <Alert tone={data.completeness === "empty" ? "critical" : "warning"}>
+              {data.completenessMessage ?? t("results.partial")}
+            </Alert>
+          )}
+
+          {!diag.destination && (
+            // Not in our geography at all, which no amount of supplier syncing
+            // will fix and which the count above would otherwise hide.
+            <Alert tone="warning">{t("admin.probeUnknownDestination")}</Alert>
+          )}
+
+          {data.results.length === 0 ? (
+            <div className="space-y-2">
+              <Alert tone="warning">{t("admin.probeEmpty")}</Alert>
+              {data.recovery && data.recovery.nearbyDates.length > 0 && (
+                <p className="text-muted text-sm">
+                  {t("admin.probeNearbyDates")}:{" "}
+                  {data.recovery.nearbyDates
+                    .map((option) => `${formatDate(option.checkIn, locale)} → ${formatDate(option.checkOut, locale)}`)
+                    .join(" · ")}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[38rem] text-sm">
+                <thead className="text-muted text-start text-xs">
+                  <tr className="hairline border-b">
+                    <th className="py-2 text-start font-medium">{t("admin.probeProperty")}</th>
+                    <th className="py-2 text-start font-medium">{t("admin.probeSource")}</th>
+                    <th className="py-2 text-start font-medium">{t("rate.board")}</th>
+                    <th className="py-2 text-end font-medium">{t("common.total")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.results.slice(0, 25).map((card) => (
+                    <tr key={card.canonicalHotelId} className="hairline border-b last:border-0">
+                      <td className="py-2 pe-3">
+                        <p className="font-medium wrap-anywhere">{card.name}</p>
+                        <p className="text-muted text-xs wrap-anywhere">
+                          {card.neighborhood}, {card.locality}
+                          {card.category > 0 && ` · ${card.category}★`}
+                        </p>
+                      </td>
+                      <td className="py-2 pe-3">
+                        <Badge tone="neutral">{sourceLabel(card.slug)}</Badge>
+                      </td>
+                      <td className="py-2 pe-3 wrap-anywhere">{card.offerSummary.boardSummary}</td>
+                      <td className="py-2 text-end font-semibold whitespace-nowrap">
+                        {formatMoney(card.price.total, card.price.currency as CurrencyCode, locale)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {data.results.length > 25 && (
+                <p className="text-muted mt-2 text-xs">{t("admin.probeTruncated", { n: data.results.length - 25 })}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** The origin the adapters mint into the slug. Console-only, by design. */
+function sourceLabel(slug: string): string {
+  if (slug.startsWith("hb-")) return "Hotelbeds";
+  if (slug.startsWith("tm-")) return "TourMind";
+  return "Platform";
+}
+
+function partyLabel(intent: SearchIntent): string {
+  const adults = intent.rooms.reduce((sum, room) => sum + room.adults, 0);
+  const children = intent.rooms.reduce((sum, room) => sum + room.childrenAges.length, 0);
+  const ages = intent.rooms.flatMap((room) => room.childrenAges);
+  return `${intent.rooms.length} rooms · ${adults} adults${children ? ` · ${children} children (${ages.join(", ")})` : ""}`;
+}
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "critical" }) {
   return (
