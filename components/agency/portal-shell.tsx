@@ -68,6 +68,7 @@ export function PortalShell({
         { path: "/agency", label: t("agency.dashboard"), icon: "grid" },
         { path: "/agency/search", label: t("agency.searchStays"), icon: "search" },
         { path: "/agency/quotes", label: t("agency.quotes"), icon: "receipt" },
+        { path: "/agency/customers", label: t("agency.customers"), icon: "users" },
       ],
     },
     {

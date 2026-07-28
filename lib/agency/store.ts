@@ -8,6 +8,7 @@ import type {
   Agent,
   AgencyBalance,
   AgencyBooking,
+  AgencyCustomer,
   AgencyQuote,
   LedgerEntry,
   MarkupRule,
@@ -31,9 +32,10 @@ interface Shape {
   ledger: LedgerEntry[];
   bookings: AgencyBooking[];
   quotes: AgencyQuote[];
+  customers: AgencyCustomer[];
 }
 
-const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [], quotes: [] };
+const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [], quotes: [], customers: [] };
 let loaded = false;
 
 /**
@@ -124,6 +126,7 @@ export async function loadAgencies(): Promise<void> {
     state.ledger = parsed.ledger ?? [];
     state.bookings = parsed.bookings ?? [];
     state.quotes = parsed.quotes ?? [];
+    state.customers = parsed.customers ?? [];
     state.agencies = state.agencies.map(migrate);
   } catch {
     // No file yet.
@@ -317,6 +320,37 @@ export async function listQuotes(agencyId: string): Promise<AgencyQuote[]> {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/* ----------------------------------------------------------- customers */
+
+export async function saveCustomer(customer: AgencyCustomer): Promise<void> {
+  await loadAgencies();
+  const i = state.customers.findIndex((c) => c.id === customer.id);
+  if (i >= 0) state.customers[i] = customer;
+  else state.customers.push(customer);
+  await persist();
+}
+
+export async function listCustomers(agencyId: string): Promise<AgencyCustomer[]> {
+  await loadAgencies();
+  return state.customers
+    .filter((c) => c.agencyId === agencyId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function getCustomer(id: string): Promise<AgencyCustomer | undefined> {
+  await loadAgencies();
+  return state.customers.find((c) => c.id === id);
+}
+
+export async function removeCustomer(agencyId: string, id: string): Promise<boolean> {
+  await loadAgencies();
+  const i = state.customers.findIndex((c) => c.id === id && c.agencyId === agencyId);
+  if (i < 0) return false;
+  state.customers.splice(i, 1);
+  await persist();
+  return true;
+}
+
 /* ---------------------------------------------------------- statements */
 
 /**
@@ -369,6 +403,7 @@ export function __resetAgencies(next?: Partial<Shape>): void {
   state.ledger = next?.ledger ?? [];
   state.bookings = next?.bookings ?? [];
   state.quotes = next?.quotes ?? [];
+  state.customers = next?.customers ?? [];
   loaded = true;
   pinned = true;
 }

@@ -263,3 +263,24 @@ export interface AgencyQuote {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Someone the agency sells to.
+ *
+ * Agencies work the same names for years — a corporate account, a family that
+ * goes every Ramadan — and every quote and booking was retyping them. Held per
+ * agency and never shared: one agency's client list is not another's, and it is
+ * not ours either.
+ */
+export interface AgencyCustomer {
+  id: string;
+  agencyId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  /** The agency's own account code, when they keep one. */
+  reference?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}

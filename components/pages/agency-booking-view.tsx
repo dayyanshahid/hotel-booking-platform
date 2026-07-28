@@ -6,7 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { TradeVoucher } from "@/components/agency/trade-voucher";
 import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
-import { Alert, Badge, Button, Card, Modal, SectionHeading, Skeleton, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, Modal, SectionHeading, Select, Skeleton, cx } from "@/components/ui";
 import { formatDate, formatDateTime, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyBooking } from "@/lib/agency/types";
@@ -48,6 +48,9 @@ function Detail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [changeKind, setChangeKind] = useState("dates");
+  const [changeDetail, setChangeDetail] = useState("");
 
   async function load() {
     const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}`, {
@@ -144,9 +147,14 @@ function Detail({
           </p>
         </div>
         {cancellable && (
-          <Button variant="secondary" onClick={askQuote} loading={busy}>
-            {t("agency.cancelBooking")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setChangeOpen(true)}>
+              {t("agency.requestChange")}
+            </Button>
+            <Button variant="ghost" onClick={askQuote} loading={busy}>
+              {t("agency.cancelBooking")}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -202,6 +210,51 @@ function Detail({
           ))}
         </Card>
       </section>
+
+      <Modal open={changeOpen} onClose={() => setChangeOpen(false)} title={t("agency.requestChange")} size="sm">
+        <div className="space-y-3 text-sm">
+          <p className="text-muted">{t("agency.requestChangeBody")}</p>
+          {!booking.capabilities.modifyAllowed && (
+            <Alert tone="warning">{t("agency.notModifiable")}</Alert>
+          )}
+          <Field label={t("agency.changeKind")} htmlFor="ch-kind">
+            <Select id="ch-kind" value={changeKind} onChange={(e) => setChangeKind(e.target.value)}>
+              <option value="dates">{t("agency.changeDates")}</option>
+              <option value="names">{t("agency.changeNames")}</option>
+              <option value="occupancy">{t("agency.changeOccupancy")}</option>
+              <option value="requests">{t("agency.changeRequests")}</option>
+              <option value="other">{t("agency.changeOther")}</option>
+            </Select>
+          </Field>
+          <Field label={t("agency.changeDetail")} htmlFor="ch-detail">
+            <Input id="ch-detail" value={changeDetail} onChange={(e) => setChangeDetail(e.target.value)} />
+          </Field>
+          <Button
+            onClick={async () => {
+              setBusy(true);
+              const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/change`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ kind: changeKind, detail: changeDetail }),
+              });
+              const result = (await res.json()) as { ok: boolean; data?: { alreadyOpen: boolean } };
+              setBusy(false);
+              if (!result.ok) {
+                setError(t("error.validation"));
+                return;
+              }
+              setChangeOpen(false);
+              setChangeDetail("");
+              setNotice(result.data?.alreadyOpen ? t("agency.changeAlreadyOpen") : t("agency.changeSent"));
+            }}
+            loading={busy}
+            disabled={!changeDetail.trim()}
+          >
+            {t("agency.sendRequest")}
+          </Button>
+        </div>
+      </Modal>
 
       <Modal open={cancelOpen} onClose={() => setCancelOpen(false)} title={t("agency.cancelBooking")} size="sm">
         {quote && (

@@ -236,3 +236,44 @@ describe("supplier-agnostic trade pricing", () => {
     expect(viewOffer("of_tm", 1000, "USD", agency, "SA").sell).toBe(924);
   });
 });
+
+describe("naming every occupant", () => {
+  /**
+   * The bug this replaces: the trade checkout sent an empty guest list, so a
+   * two-room booking reached the supplier naming one person and the second
+   * room had no occupants at all.
+   */
+  const seed = (rooms: { adults: number; childrenAges: number[] }[]) => {
+    const fields: { roomIndex: number; type: "adult" | "child"; age?: number }[] = [];
+    rooms.forEach((room, roomIndex) => {
+      const adults = roomIndex === 0 ? room.adults - 1 : room.adults;
+      for (let i = 0; i < adults; i += 1) fields.push({ roomIndex, type: "adult" });
+      room.childrenAges.forEach((age) => fields.push({ roomIndex, type: "child", age }));
+    });
+    return fields;
+  };
+
+  it("asks for everyone the lead guest does not cover", () => {
+    // Two rooms, four adults, one child: the lead covers one seat, seven remain
+    // minus the lead → four others.
+    const fields = seed([
+      { adults: 2, childrenAges: [7] },
+      { adults: 2, childrenAges: [] },
+    ]);
+    expect(fields).toHaveLength(4);
+    expect(fields.filter((f) => f.roomIndex === 1)).toHaveLength(2);
+    expect(fields.find((f) => f.type === "child")?.age).toBe(7);
+  });
+
+  it("asks for nobody when the lead is the only guest", () => {
+    expect(seed([{ adults: 1, childrenAges: [] }])).toEqual([]);
+  });
+
+  it("keeps children in the room they were searched for", () => {
+    const fields = seed([
+      { adults: 1, childrenAges: [] },
+      { adults: 1, childrenAges: [4, 9] },
+    ]);
+    expect(fields.filter((f) => f.type === "child").every((f) => f.roomIndex === 1)).toBe(true);
+  });
+});

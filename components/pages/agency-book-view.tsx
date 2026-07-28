@@ -11,6 +11,35 @@ import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type { CheckoutSession, CurrencyCode, Locale, RecheckResult } from "@/lib/types";
 
+interface GuestField {
+  roomIndex: number;
+  type: "adult" | "child";
+  firstName: string;
+  surname: string;
+  age?: number;
+}
+
+/**
+ * One field per occupant the lead guest does not cover.
+ *
+ * The lead is the first adult of the first room, so that seat is skipped;
+ * everyone else — the second adult, the children, every occupant of every
+ * further room — needs a name of their own.
+ */
+function seedGuests(rooms: { adults: number; childrenAges: number[] }[]): GuestField[] {
+  const fields: GuestField[] = [];
+  rooms.forEach((room, roomIndex) => {
+    const adults = roomIndex === 0 ? room.adults - 1 : room.adults;
+    for (let i = 0; i < adults; i += 1) {
+      fields.push({ roomIndex, type: "adult", firstName: "", surname: "" });
+    }
+    room.childrenAges.forEach((age) => {
+      fields.push({ roomIndex, type: "child", firstName: "", surname: "", age });
+    });
+  });
+  return fields;
+}
+
 /**
  * Booking on account.
  *
@@ -45,6 +74,15 @@ function TradeCheckout({
   const [quote, setQuote] = useState<AgencyOfferView | null>(null);
   const [firstName, setFirstName] = useState("");
   const [surname, setSurname] = useState("");
+  /**
+   * Every occupant after the lead.
+   *
+   * This used to be sent as an empty array, which meant a two-room booking
+   * reached the supplier naming one person — the second room had no occupants
+   * at all. A property cannot check in a guest it has never been told about,
+   * and for some suppliers the order is simply rejected.
+   */
+  const [others, setOthers] = useState<GuestField[]>([]);
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [reference, setReference] = useState("");
@@ -77,6 +115,7 @@ function TradeCheckout({
         return;
       }
       setSession(body.data);
+      setOthers(seedGuests(body.data.rooms));
 
       const priced = await fetch("/api/agency/quote", {
         method: "POST",
@@ -181,7 +220,16 @@ function TradeCheckout({
           language: locale,
         },
         lead: { firstName, surname },
-        guests: [],
+        guests: others.map((guest) => ({
+          roomIndex: guest.roomIndex,
+          type: guest.type,
+          firstName: guest.firstName,
+          // A surname left blank follows the lead guest's, which is what a
+          // family booking almost always means and what the API already
+          // assumes if we say nothing.
+          surname: guest.surname || surname,
+          age: guest.type === "child" ? guest.age : undefined,
+        })),
         requests: {
           remarks: [reference && `${t("agency.agencyReference")}: ${reference}`, remarks, customerEmail]
             .filter(Boolean)
@@ -239,6 +287,64 @@ function TradeCheckout({
               </Field>
             </div>
           </Card>
+
+          {others.length > 0 && (
+            <Card className="space-y-3 p-5">
+              <h2 className="font-semibold">{t("agency.otherGuests")}</h2>
+              <p className="text-muted text-sm">{t("agency.otherGuestsBody")}</p>
+              <ul className="space-y-3">
+                {others.map((guest, index) => (
+                  <li key={index} className="grid items-end gap-3 sm:grid-cols-[auto_1fr_1fr_auto]">
+                    <p className="text-muted pb-2 text-xs">
+                      {t("agency.roomN", { n: guest.roomIndex + 1 })}
+                    </p>
+                    <Field label={t("agency.firstName")} htmlFor={`g-first-${index}`}>
+                      <Input
+                        id={`g-first-${index}`}
+                        value={guest.firstName}
+                        onChange={(e) =>
+                          setOthers((prev) =>
+                            prev.map((g, i) => (i === index ? { ...g, firstName: e.target.value } : g)),
+                          )
+                        }
+                      />
+                    </Field>
+                    <Field label={t("agency.surname")} htmlFor={`g-last-${index}`}>
+                      <Input
+                        id={`g-last-${index}`}
+                        placeholder={surname || undefined}
+                        value={guest.surname}
+                        onChange={(e) =>
+                          setOthers((prev) =>
+                            prev.map((g, i) => (i === index ? { ...g, surname: e.target.value } : g)),
+                          )
+                        }
+                      />
+                    </Field>
+                    {guest.type === "child" ? (
+                      <Field label={t("common.age")} htmlFor={`g-age-${index}`}>
+                        <Input
+                          id={`g-age-${index}`}
+                          type="number"
+                          min={0}
+                          max={17}
+                          className="w-20"
+                          value={String(guest.age ?? 0)}
+                          onChange={(e) =>
+                            setOthers((prev) =>
+                              prev.map((g, i) => (i === index ? { ...g, age: Number(e.target.value) } : g)),
+                            )
+                          }
+                        />
+                      </Field>
+                    ) : (
+                      <span className="text-muted pb-2 text-xs">{t("common.adults")}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           <Card className="space-y-3 p-5">
             <h2 className="font-semibold">{t("rate.conditions")}</h2>
@@ -361,6 +467,8 @@ function TradeCheckout({
                 !accepted ||
                 !firstName.trim() ||
                 !surname.trim() ||
+                // A property cannot check in a guest we never named.
+                others.some((guest) => !guest.firstName.trim()) ||
                 !affordable ||
                 rechecking ||
                 // A rate that has moved or vanished cannot be sold until the

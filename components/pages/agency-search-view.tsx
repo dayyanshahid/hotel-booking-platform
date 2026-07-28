@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
-import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Checkbox, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { Nothing, PageHeader, TableSkeleton, TradePrices } from "@/components/agency/ui";
 import Link from "next/link";
@@ -92,6 +92,15 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * would spend supplier quota to reorder rows we are holding.
    */
   const [sort, setSort] = useState<"recommended" | "marginDesc" | "priceAsc">("recommended");
+  /**
+   * Filters run over the page already fetched, not over a new supplier call.
+   * "Only refundable" is a question about results in hand; re-asking the
+   * supplier to answer it would spend quota to hide rows we are holding.
+   */
+  const [refundableOnly, setRefundableOnly] = useState(false);
+  const [minStars, setMinStars] = useState(0);
+  const [maxPrice, setMaxPrice] = useState("");
+  const [board, setBoard] = useState("all");
 
   useEffect(() => {
     if (query.trim().length < 2) return;
@@ -165,9 +174,28 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
 
-  const ordered = (() => {
+  const filtered = (() => {
     if (!results) return results;
-    const rows = [...results];
+    const ceiling = Number(maxPrice);
+    return results.filter((card) => {
+      if (refundableOnly && !card.offerSummary.refundable) return false;
+      if (minStars > 0 && card.category < minStars) return false;
+      if (maxPrice.trim() && Number.isFinite(ceiling) && card.price.total > ceiling) return false;
+      if (board !== "all") {
+        const summary = card.offerSummary.boardSummary.toLowerCase();
+        // Matched on the localised summary the card already carries rather than
+        // a board code: the code is not in the result contract, and this is the
+        // text the agent is reading anyway.
+        if (board === "breakfast" && !summary.includes("breakfast") && !summary.includes("إفطار")) return false;
+        if (board === "roomOnly" && !(summary.includes("room only") || summary.includes("الغرفة فقط"))) return false;
+      }
+      return true;
+    });
+  })();
+
+  const ordered = (() => {
+    if (!filtered) return filtered;
+    const rows = [...filtered];
     if (sort === "marginDesc") {
       // Rows we have not priced yet sink rather than sorting as zero margin.
       return rows.sort(
@@ -323,10 +351,73 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         <Nothing icon="search" title={t("results.empty")} body={t("agency.noResultsBody")} />
       )}
 
+      {results && results.length > 0 && ordered && !ordered.length && (
+        <Nothing
+          icon="filter"
+          title={t("agency.noneMatchFilters")}
+          body={t("agency.noneMatchFiltersBody")}
+          action={
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setRefundableOnly(false);
+                setMinStars(0);
+                setMaxPrice("");
+                setBoard("all");
+              }}
+            >
+              {t("common.clear")}
+            </Button>
+          }
+        />
+      )}
+
       {ordered && ordered.length > 0 && (
         <>
+          <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label={t("agency.filterBoard")} htmlFor="f-board">
+              <Select id="f-board" value={board} onChange={(e) => setBoard(e.target.value)}>
+                <option value="all">{t("agency.filterAnyBoard")}</option>
+                <option value="breakfast">{t("agency.filterBreakfast")}</option>
+                <option value="roomOnly">{t("agency.filterRoomOnly")}</option>
+              </Select>
+            </Field>
+            <Field label={t("agency.filterStars")} htmlFor="f-stars">
+              <Select id="f-stars" value={String(minStars)} onChange={(e) => setMinStars(Number(e.target.value))}>
+                <option value="0">{t("agency.filterAnyStars")}</option>
+                <option value="3">3★+</option>
+                <option value="4">4★+</option>
+                <option value="5">5★</option>
+              </Select>
+            </Field>
+            <Field label={t("agency.filterMaxPrice")} htmlFor="f-max">
+              <Input
+                id="f-max"
+                type="number"
+                min={0}
+                inputMode="numeric"
+                placeholder={t("agency.filterNoCeiling")}
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+              />
+            </Field>
+            <div className="flex items-end pb-1">
+              <Checkbox
+                checked={refundableOnly}
+                onChange={(e) => setRefundableOnly(e.target.checked)}
+                label={t("agency.filterRefundable")}
+              />
+            </div>
+          </Card>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted text-sm">{t("agency.resultCount", { n: ordered.length })}</p>
+            <p className="text-muted text-sm">
+              {t("agency.resultCount", { n: ordered.length })}
+              {results && ordered.length !== results.length && (
+                <span className="ms-1">{t("agency.filteredFrom", { total: results.length })}</span>
+              )}
+            </p>
             <label className="flex items-center gap-2 text-sm">
               <span className="text-muted">{t("agency.sortBy")}</span>
               <Select
@@ -475,6 +566,20 @@ function QuoteModal({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The agency's saved clients, offered rather than imposed: picking one fills
+   * the fields, and an agent quoting for someone new just types over them.
+   */
+  const [saved, setSaved] = useState<{ id: string; name: string; email?: string }[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      const res = await fetch("/api/agency/customers", { credentials: "same-origin" });
+      const body = (await res.json()) as { ok: boolean; data?: { customers: { id: string; name: string; email?: string }[] } };
+      if (body.ok && body.data) setSaved(body.data.customers);
+    })();
+  }, [open]);
 
   async function create() {
     setBusy(true);
@@ -505,6 +610,27 @@ function QuoteModal({
         <p className="text-muted text-sm">
           <Badge tone="neutral">{offerIds.length}</Badge> {t("agency.selectedRates")}
         </p>
+        {saved.length > 0 && (
+          <Field label={t("agency.pickCustomer")} htmlFor="q-saved">
+            <Select
+              id="q-saved"
+              value=""
+              onChange={(e) => {
+                const picked = saved.find((customer) => customer.id === e.target.value);
+                if (!picked) return;
+                setCustomerName(picked.name);
+                setCustomerEmail(picked.email ?? "");
+              }}
+            >
+              <option value="">{t("agency.pickCustomerNone")}</option>
+              {saved.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label={t("agency.customerName")} htmlFor="q-name">
           <Input id="q-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
         </Field>
