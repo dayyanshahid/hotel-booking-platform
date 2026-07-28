@@ -20,17 +20,41 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ caseId: strin
   const supportCase = getCase(caseId);
   if (!supportCase) return fail("validation", "error.notFound", locale, { status: 404 });
 
-  const body = await readJson<{ reply?: string; status?: SupportCase["status"] }>(req);
+  const body = await readJson<{
+    reply?: string;
+    status?: SupportCase["status"];
+    /** "" releases the case back to the queue; "me" claims it. */
+    assignee?: string;
+  }>(req);
   const reply = sanitize(body?.reply, 1200);
   const status = body?.status;
-  if (!reply && !status) return fail("validation", "error.validation", locale, { status: 422 });
+  const assignee = body?.assignee;
+  if (!reply && !status && assignee === undefined) {
+    return fail("validation", "error.validation", locale, { status: 422 });
+  }
   if (status && !["open", "inProgress", "resolved"].includes(status)) {
     return fail("validation", "error.validation", locale, { status: 422 });
   }
 
+  const nextAssignee =
+    assignee === undefined
+      ? supportCase.assignee
+      : assignee === "me"
+        ? session.email
+        : assignee || undefined;
+
+  /*
+   * Replying takes ownership if nobody holds it.
+   *
+   * An operator who has answered a customer is, in every practical sense, the
+   * person handling that case — making them also click "assign to me" is a
+   * step they will skip, and the queue then shows an answered case as
+   * unclaimed.
+   */
   const updated: SupportCase = {
     ...supportCase,
     status: status ?? supportCase.status,
+    assignee: reply && !nextAssignee ? session.email : nextAssignee,
     messages: reply
       ? [...supportCase.messages, { at: new Date().toISOString(), from: "agent" as const, body: reply }]
       : supportCase.messages,
@@ -41,7 +65,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ caseId: strin
     actor: session.email,
     action: "case.update",
     subject: caseId,
-    detail: reply ? `Replied${status ? ` and set ${status}` : ""}` : `Set ${status}`,
+    detail: reply
+      ? `Replied${status ? ` and set ${status}` : ""}`
+      : status
+        ? `Set ${status}`
+        : `Assigned to ${updated.assignee ?? "nobody"}`,
     before: supportCase.status,
     after: updated.status,
   });

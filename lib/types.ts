@@ -561,6 +561,14 @@ export interface SupportCase {
   status: "open" | "inProgress" | "resolved";
   slaHours: number;
   createdAt: string;
+  /**
+   * The operator who owns it, by email.
+   *
+   * A queue with no ownership is a queue two people answer at once and a third
+   * assumes someone else has. Optional because a case starts unowned and
+   * because every case written before this existed is still valid.
+   */
+  assignee?: string;
   messages: { at: string; from: "customer" | "agent"; body: string }[];
 }
 

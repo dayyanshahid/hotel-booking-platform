@@ -17,10 +17,18 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const status = url.searchParams.get("status") ?? "open";
+  // "mine" and "unassigned" are the two views an operator working a shared
+  // queue actually wants; everything else is a report.
+  const owner = url.searchParams.get("owner") ?? "all";
   const now = Date.now();
 
   const cases = listCases()
     .filter((item) => (status === "all" ? true : status === "open" ? item.status !== "resolved" : item.status === status))
+    .filter((item) => {
+      if (owner === "mine") return item.assignee === session.email;
+      if (owner === "unassigned") return !item.assignee;
+      return true;
+    })
     .map((item) => {
       const dueAt = new Date(item.createdAt).getTime() + item.slaHours * 3_600_000;
       return {
@@ -32,5 +40,9 @@ export async function GET(req: Request) {
     })
     .sort((a, b) => a.minutesToDue - b.minutesToDue);
 
-  return ok({ cases, open: cases.filter((c) => c.status !== "resolved").length });
+  return ok({
+    cases,
+    open: cases.filter((c) => c.status !== "resolved").length,
+    you: session.email,
+  });
 }

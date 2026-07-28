@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { ConsoleShell } from "@/components/admin/console-shell";
-import { Alert, Badge, Button, Card, SectionHeading, Select, Field, Input, Skeleton, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Modal, SectionHeading, Select, Field, Input, Skeleton, cx } from "@/components/ui";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import type { AuditEntry } from "@/lib/admin/store";
 import type { CurrencyCode, Locale } from "@/lib/types";
@@ -29,9 +29,28 @@ export function AdminCatalogueView({ locale }: { locale: Locale }) {
   return <ConsoleShell locale={locale}>{() => <Catalogue />}</ConsoleShell>;
 }
 
+interface CityRow {
+  slug: string;
+  name: string;
+  tier: string;
+  demo: number;
+  tourmind: number;
+  editorial: boolean;
+}
+
+interface MatchRow {
+  slug: string;
+  code: string;
+  source: string;
+  city: string;
+}
+
 function Catalogue() {
   const { t } = useApp();
   const [data, setData] = useState<CataloguePayload | null>(null);
+  const [country, setCountry] = useState<{ name: string; cities: CityRow[] } | null>(null);
+  const [lookup, setLookup] = useState("");
+  const [matches, setMatches] = useState<MatchRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +64,35 @@ function Catalogue() {
   useEffect(() => {
     void load();
   }, []);
+
+  // The property lookup answers "is this hotel mapped at all", which is the
+  // other half of "why did this search come back empty".
+  useEffect(() => {
+    if (lookup.trim().length < 2) {
+      setMatches(null);
+      return;
+    }
+    let alive = true;
+    const id = window.setTimeout(async () => {
+      const res = await fetch(`/api/admin/catalogue/lookup?q=${encodeURIComponent(lookup)}`, {
+        credentials: "same-origin",
+      });
+      const body = (await res.json()) as { ok: boolean; data?: { matches: MatchRow[] } };
+      if (alive && body.ok && body.data) setMatches(body.data.matches);
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+  }, [lookup]);
+
+  async function openCountry(code: string) {
+    const res = await fetch(`/api/admin/catalogue/lookup?country=${encodeURIComponent(code)}`, {
+      credentials: "same-origin",
+    });
+    const body = (await res.json()) as { ok: boolean; data?: { country: string; cities: CityRow[] } };
+    if (body.ok && body.data) setCountry({ name: body.data.country, cities: body.data.cities });
+  }
 
   if (!data) return <Skeleton className="h-64 w-full" />;
 
@@ -141,6 +189,33 @@ function Catalogue() {
         </Card>
       </div>
 
+      <Card className="space-y-3 p-4">
+        <h2 className="font-semibold">{t("admin.findProperty")}</h2>
+        <p className="text-muted text-sm">{t("admin.findPropertyBody")}</p>
+        <Field label={t("admin.search")} htmlFor="cat-lookup">
+          <Input
+            id="cat-lookup"
+            value={lookup}
+            placeholder={t("admin.findPropertyPlaceholder")}
+            onChange={(e) => setLookup(e.target.value)}
+          />
+        </Field>
+        {matches && !matches.length && <p className="text-muted text-sm">{t("admin.notMapped")}</p>}
+        {matches && matches.length > 0 && (
+          <ul className="divide-ink-100 divide-y text-sm">
+            {matches.map((match) => (
+              <li key={`${match.source}-${match.slug}`} className="flex items-center justify-between gap-2 py-2">
+                <span className="font-mono text-xs wrap-anywhere">{match.slug}</span>
+                <span className="flex items-center gap-2">
+                  {match.city && <span className="text-muted text-xs">{match.city}</span>}
+                  <Badge tone={match.source === "demo" ? "neutral" : "positive"}>{match.source}</Badge>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
       <section className="space-y-2">
         <h2 className="font-semibold">{t("admin.coverageByCountry")}</h2>
         <p className="text-muted text-sm">{t("admin.coverageBody")}</p>
@@ -159,7 +234,10 @@ function Catalogue() {
               {data.countries.map((row) => (
                 <tr key={row.code}>
                   <td className="p-3 wrap-anywhere">
-                    {row.name} <span className="text-muted text-xs">{row.code}</span>
+                    <button type="button" className="font-medium underline" onClick={() => openCountry(row.code)}>
+                      {row.name}
+                    </button>{" "}
+                    <span className="text-muted text-xs">{row.code}</span>
                   </td>
                   <td className="p-3 text-end tabular-nums">{row.cities}</td>
                   <td className="p-3 text-end tabular-nums">{row.demo}</td>
@@ -173,6 +251,31 @@ function Catalogue() {
           </table>
         </Card>
       </section>
+
+      <Modal open={Boolean(country)} onClose={() => setCountry(null)} title={country?.name ?? ""} size="md">
+        <p className="text-muted mb-3 text-sm">{t("admin.cityCoverageBody")}</p>
+        <ul className="divide-ink-100 divide-y text-sm">
+          {(country?.cities ?? []).map((city) => {
+            const sellable = city.demo + city.tourmind > 0;
+            return (
+              <li key={city.slug} className="flex items-center justify-between gap-2 py-2.5">
+                <span className="min-w-0">
+                  <span className="font-medium wrap-anywhere">{city.name}</span>
+                  <span className="text-muted ms-2 text-xs">{city.tier}</span>
+                </span>
+                <span className="flex items-center gap-2 text-xs">
+                  <span className="text-muted">
+                    {city.demo} {t("admin.demoShort")}
+                  </span>
+                  {city.tourmind > 0 && <span className="text-muted">{city.tourmind} TM</span>}
+                  {city.editorial && <Badge tone="neutral">{t("admin.editorial")}</Badge>}
+                  {!sellable && <Badge tone="caution">{t("admin.noInventory")}</Badge>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </Modal>
     </div>
   );
 }

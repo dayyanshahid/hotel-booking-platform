@@ -495,46 +495,64 @@ function CaseQueue({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [cases, setCases] = useState<QueuedCase[] | null>(null);
   const [status, setStatus] = useState("open");
+  const [owner, setOwner] = useState("all");
+  const [you, setYou] = useState("");
   const [active, setActive] = useState<QueuedCase | null>(null);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function load(next = status) {
-    const res = await fetch(`/api/admin/cases?status=${next}`, { credentials: "same-origin" });
-    const body = (await res.json()) as { ok: boolean; data?: { cases: QueuedCase[] } };
+  async function load(nextStatus = status, nextOwner = owner) {
+    const res = await fetch(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`, {
+      credentials: "same-origin",
+    });
+    const body = (await res.json()) as { ok: boolean; data?: { cases: QueuedCase[]; you: string } };
     setCases(body.ok && body.data ? body.data.cases : []);
+    if (body.ok && body.data) setYou(body.data.you);
   }
 
   useEffect(() => {
-    void load(status);
+    void load(status, owner);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, owner]);
 
-  async function send(nextStatus?: SupportCase["status"]) {
+  async function patch(body: Record<string, unknown>, close = true) {
     if (!active) return;
     setBusy(true);
     await fetch(`/api/admin/cases/${encodeURIComponent(active.caseId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ reply: reply || undefined, status: nextStatus }),
+      body: JSON.stringify(body),
     });
     setBusy(false);
-    setReply("");
-    setActive(null);
+    if (close) {
+      setReply("");
+      setActive(null);
+    }
     await load();
+  }
+
+  async function send(nextStatus?: SupportCase["status"]) {
+    await patch({ reply: reply || undefined, status: nextStatus });
   }
 
   return (
     <div className="space-y-4">
       <SectionHeading title={t("admin.cases")} description={t("admin.casesBody")} />
 
-      <Card className="p-4 sm:max-w-xs">
+      <Card className="grid gap-3 p-4 sm:max-w-lg sm:grid-cols-2">
         <Field label={t("admin.statusFilter")} htmlFor="ac-status">
           <Select id="ac-status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="open">{t("admin.casesOpen")}</option>
             <option value="resolved">{t("admin.casesResolved")}</option>
             <option value="all">{t("admin.allStatuses")}</option>
+          </Select>
+        </Field>
+        <Field label={t("admin.owner")} htmlFor="ac-owner">
+          <Select id="ac-owner" value={owner} onChange={(e) => setOwner(e.target.value)}>
+            <option value="all">{t("admin.ownerAny")}</option>
+            <option value="mine">{t("admin.ownerMine")}</option>
+            <option value="unassigned">{t("admin.ownerUnassigned")}</option>
           </Select>
         </Field>
       </Card>
@@ -553,6 +571,13 @@ function CaseQueue({ locale }: { locale: Locale }) {
                       {item.status}
                     </Badge>
                     <Badge tone="neutral">{item.channel}</Badge>
+                    {item.assignee ? (
+                      <Badge tone={item.assignee === you ? "brand" : "neutral"}>
+                        {item.assignee === you ? t("admin.ownerYou") : item.assignee}
+                      </Badge>
+                    ) : (
+                      <Badge tone="caution">{t("admin.ownerUnassigned")}</Badge>
+                    )}
                     {item.bookingReference && (
                       <Link
                         href={href(locale, `/admin/bookings/${item.bookingReference}`)}
@@ -610,7 +635,19 @@ function CaseQueue({ locale }: { locale: Locale }) {
               <Button variant="secondary" onClick={() => send("resolved")} loading={busy}>
                 {t("admin.resolveCase")}
               </Button>
+              {active.assignee !== you ? (
+                <Button variant="ghost" onClick={() => patch({ assignee: "me" }, false)} loading={busy}>
+                  {t("admin.claimCase")}
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={() => patch({ assignee: "" }, false)} loading={busy}>
+                  {t("admin.releaseCase")}
+                </Button>
+              )}
             </div>
+            {/* Replying claims an unowned case, so the queue never shows an
+                answered case as waiting for someone. */}
+            {!active.assignee && <p className="text-muted text-xs">{t("admin.replyClaims")}</p>}
           </div>
         )}
       </Modal>
