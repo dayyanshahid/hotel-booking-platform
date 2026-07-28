@@ -193,15 +193,25 @@ export function FiltersPanel({
   );
 }
 
-export function SortControl({
+/**
+ * One sort control, with room for a sort that only one audience has.
+ *
+ * The trade portal ranks by margin, which is not a thing the public site can
+ * offer and not a thing the server knows how to order by. Rather than the
+ * portal growing a second select beside this one — two controls answering the
+ * same question — extra options are appended here and handled by the caller.
+ */
+export function SortControl<T extends string = SortKey>({
   value,
   onChange,
+  extra = [],
 }: {
-  value: SortKey;
-  onChange: (next: SortKey) => void;
+  value: T;
+  onChange: (next: T) => void;
+  extra?: { id: T; label: string }[];
 }) {
   const { t } = useApp();
-  const options: { id: SortKey; label: string }[] = [
+  const options: { id: string; label: string }[] = [
     { id: "recommended", label: t("results.sortRecommended") },
     { id: "priceAsc", label: t("results.sortPriceAsc") },
     { id: "priceDesc", label: t("results.sortPriceDesc") },
@@ -209,11 +219,12 @@ export function SortControl({
     { id: "distance", label: t("results.sortDistance") },
     { id: "flexible", label: t("results.sortFlexible") },
     { id: "bestValue", label: t("results.sortBestValue") },
+    ...extra,
   ];
   return (
     <label className="flex items-center gap-2 text-sm">
       <span className="whitespace-nowrap">{t("common.sort")}</span>
-      <Select value={value} onChange={(e) => onChange(e.target.value as SortKey)} className="!min-h-10">
+      <Select value={value} onChange={(e) => onChange(e.target.value as T)} className="!min-h-10">
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.label}

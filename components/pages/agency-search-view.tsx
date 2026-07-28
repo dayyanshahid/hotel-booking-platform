@@ -5,25 +5,42 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
-import { Alert, Badge, Button, Card, Checkbox, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Drawer, EmptyState, Field, Input, Modal, SectionHeading, Select, cx } from "@/components/ui";
+import { NoResultsArt } from "@/components/ui/illustrations";
 import { SearchBar } from "@/components/search/search-bar";
 import { TripPrompt } from "@/components/search/trip-prompt";
 import { Icon } from "@/components/ui/icons";
-import { Nothing, PageHeader, TableSkeleton, TradePrices } from "@/components/agency/ui";
+import { HotelCard, HotelCardSkeleton } from "@/components/commerce/hotel-card";
+import { ResultsMap } from "@/components/commerce/results-map";
+import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/commerce/filters-panel";
+import { PageHeader, TradePrices } from "@/components/agency/ui";
 import Link from "next/link";
-import { addDays, formatDate, nightsBetween, todayIso } from "@/lib/format";
+import { addDays, formatDate, formatMoney, guestCount, nightsBetween, todayIso } from "@/lib/format";
+import { countLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
-import type { CurrencyCode, HotelResultCard, Locale, SearchIntent } from "@/lib/types";
+import type {
+  CurrencyCode,
+  Locale,
+  SearchFilters,
+  SearchIntent,
+  SearchResponse,
+  SortKey,
+} from "@/lib/types";
 
 /**
  * Searching from inside the portal.
  *
- * An agent could use the consumer site — the trade figures show up there too —
- * but a counter does not work like a traveller browsing. They know the city,
- * they are on the phone, and they need cost and margin on every line without
- * scrolling past photography. So this is a table, not a gallery: the same
- * inventory, ranked the same way, with the three numbers that decide the sale.
+ * It is the same inventory, ranked the same way, so it is the same page — the
+ * consumer card, the consumer facets, the same map and the same recovery when
+ * nothing comes back. This used to be a text-only table on the theory that a
+ * counter wants density rather than photography. In practice the agent is on
+ * the phone to someone who is looking at our public site, describing a property
+ * from a worse picture of our own stock than the caller has.
+ *
+ * What differs is the money and what you can do with it: the price rail carries
+ * cost, sell and margin against the struck public price, and every row can go
+ * into a quote or straight onto the agency's credit line.
  */
 export function AgencySearchView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <TradeSearch locale={locale} context={context} />}</PortalShell>;
@@ -39,6 +56,9 @@ export function AgencySearchView({ locale }: { locale: Locale }) {
 function propertyQuery(intent: SearchIntent): string {
   return searchParamsFromIntent(intent).toString();
 }
+
+/** Server sorts, plus the one only a trade screen can offer. */
+type TradeSort = SortKey | "marginDesc";
 
 function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
@@ -63,57 +83,89 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     currency: context.agency.credit.currency as SearchIntent["currency"],
   }));
 
-  const [results, setResults] = useState<HotelResultCard[] | null>(null);
+  const [data, setData] = useState<SearchResponse | null>(null);
   /**
-   * The criteria the visible results were fetched with — not the ones in the
-   * form, which the agent may have started editing. A property link built from
-   * the form would price a different stay from the one on screen.
+   * The intent the visible results were fetched with — not the one in the bar,
+   * which the agent may have started editing. A property link built from the
+   * bar would price a different stay from the one on screen.
    */
   const [applied, setApplied] = useState<SearchIntent | null>(null);
   const [quotes, setQuotes] = useState<Record<string, AgencyOfferView>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [partial, setPartial] = useState(false);
+
+  /**
+   * Filters and sorting go to the server, as they do on the public site.
+   *
+   * They used to run over whichever page had already been fetched, which made
+   * the count on screen a count of one page rather than of the search — "3
+   * properties" when there were forty, because the other thirty-seven had not
+   * been asked for. Facet counts come back with the results, so the number
+   * beside a filter is the number the filter will actually give.
+   */
+  const [filters, setFilters] = useState<SearchFilters>({});
+  const [sort, setSort] = useState<TradeSort>("recommended");
+  const [page, setPage] = useState(1);
+  const [view, setView] = useState<"list" | "map">("list");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   /** Offers the agent has set aside for a quote, in the order they picked them. */
   const [basket, setBasket] = useState<string[]>([]);
   const [quoteOpen, setQuoteOpen] = useState(false);
-  /**
-   * Sorting is client-side on purpose. The supplier's own ranking is the
-   * default and stays authoritative; margin and price are the two questions an
-   * agent asks of a page they already have, and re-searching to answer them
-   * would spend supplier quota to reorder rows we are holding.
-   */
-  const [sort, setSort] = useState<"recommended" | "marginDesc" | "priceAsc">("recommended");
-  /**
-   * Filters run over the page already fetched, not over a new supplier call.
-   * "Only refundable" is a question about results in hand; re-asking the
-   * supplier to answer it would spend quota to hide rows we are holding.
-   */
-  const [refundableOnly, setRefundableOnly] = useState(false);
-  const [minStars, setMinStars] = useState(0);
-  const [maxPrice, setMaxPrice] = useState("");
-  const [board, setBoard] = useState("all");
 
-  async function run(intent: SearchIntent) {
+  /**
+   * One entry point for every way the page can change.
+   *
+   * Filters, sort, paging and a new search all go through here with the state
+   * they are changing passed in, rather than each setting state and an effect
+   * chasing it. An effect per control is how a filter change and a page change
+   * end up racing, and the loser wins the screen.
+   */
+  async function run(
+    next: {
+      intent?: SearchIntent;
+      filters?: SearchFilters;
+      sort?: TradeSort;
+      page?: number;
+    } = {},
+  ) {
+    const intent = next.intent ?? applied ?? seed;
     if (!intent.destinationId) {
       setError(t("agency.pickDestination"));
       return;
     }
+    const nextFilters = next.filters ?? filters;
+    const nextSort = next.sort ?? sort;
+    // A new search, filter or sort starts at the first page; only "load more"
+    // asks for a later one.
+    const nextPage = next.page ?? 1;
+
     setBusy(true);
     setError(null);
-    setResults(null);
-    setSeed(intent);
+    if (nextPage === 1) setData(null);
+    if (next.intent) setSeed(next.intent);
+    setFilters(nextFilters);
+    setSort(nextSort);
+    setPage(nextPage);
 
     const res = await fetch("/api/hotels/search", {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ intent }),
+      body: JSON.stringify({
+        intent,
+        filters: nextFilters,
+        // Margin is ours, not the supplier's: the server has no concept of it,
+        // so it ranks by its own default and we reorder what comes back.
+        sort: nextSort === "marginDesc" ? "recommended" : nextSort,
+        page: nextPage,
+        pageSize: 12,
+      }),
     });
     const body = (await res.json()) as {
       ok: boolean;
-      data?: { results: HotelResultCard[]; partial: boolean };
+      data?: SearchResponse;
       error?: { message: string };
     };
     setBusy(false);
@@ -121,9 +173,8 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       setError(body.error?.message ?? t("error.temporaryService"));
       return;
     }
-    setResults(body.data.results);
+    setData(body.data);
     setApplied(intent);
-    setPartial(body.data.partial);
 
     // One quote call for the whole page rather than one per row.
     const offerIds = body.data.results.map((r) => r.offerSummary.offerId);
@@ -136,44 +187,24 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
       if (pricedBody.ok && pricedBody.data) {
-        setQuotes(Object.fromEntries(pricedBody.data.quotes.map((q) => [q.offerId, q])));
+        setQuotes((held) => ({
+          ...held,
+          ...Object.fromEntries(pricedBody.data!.quotes.map((q) => [q.offerId, q])),
+        }));
       }
     }
   }
 
   const nights = nightsBetween(seed.checkIn, seed.checkOut);
+  const cards = data?.results ?? [];
 
-  const filtered = (() => {
-    if (!results) return results;
-    const ceiling = Number(maxPrice);
-    return results.filter((card) => {
-      if (refundableOnly && !card.offerSummary.refundable) return false;
-      if (minStars > 0 && card.category < minStars) return false;
-      if (maxPrice.trim() && Number.isFinite(ceiling) && card.price.total > ceiling) return false;
-      if (board !== "all") {
-        const summary = card.offerSummary.boardSummary.toLowerCase();
-        // Matched on the localised summary the card already carries rather than
-        // a board code: the code is not in the result contract, and this is the
-        // text the agent is reading anyway.
-        if (board === "breakfast" && !summary.includes("breakfast") && !summary.includes("إفطار")) return false;
-        if (board === "roomOnly" && !(summary.includes("room only") || summary.includes("الغرفة فقط"))) return false;
-      }
-      return true;
-    });
-  })();
-
-  const ordered = (() => {
-    if (!filtered) return filtered;
-    const rows = [...filtered];
-    if (sort === "marginDesc") {
-      // Rows we have not priced yet sink rather than sorting as zero margin.
-      return rows.sort(
-        (a, b) => (quotes[b.offerSummary.offerId]?.margin ?? -1) - (quotes[a.offerSummary.offerId]?.margin ?? -1),
-      );
-    }
-    if (sort === "priceAsc") return rows.sort((a, b) => a.price.total - b.price.total);
-    return rows;
-  })();
+  const ordered =
+    sort === "marginDesc"
+      ? // Rows we have not priced yet sink rather than sorting as zero margin.
+        [...cards].sort(
+          (a, b) => (quotes[b.offerSummary.offerId]?.margin ?? -1) - (quotes[a.offerSummary.offerId]?.margin ?? -1),
+        )
+      : cards;
 
   return (
     <div className="space-y-5">
@@ -202,7 +233,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           initial={seed}
           currency={seed.currency}
           busy={busy}
-          onSearch={run}
+          onSearch={(intent) => void run({ intent, filters: {} })}
         />
         <div className="hairline flex flex-wrap items-center justify-between gap-3 border-t pt-3">
           <p className="text-muted text-sm">
@@ -223,21 +254,80 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           currency={seed.currency as CurrencyCode}
           label={t("agency.describeTrip")}
           placeholder={t("agency.describeTripPlaceholder")}
-          onRun={(intent, filters) => {
-            // Filters the sentence asked for are applied to the results we are
-            // about to fetch, so "free cancellation" narrows the page rather
-            // than being read aloud and forgotten.
-            setRefundableOnly(Boolean(filters.refundableOnly));
-            setMinStars(filters.categories?.[0] ?? 0);
-            setMaxPrice(filters.maxPrice ? String(filters.maxPrice) : "");
-            setBoard(filters.boards?.includes("BB") ? "breakfast" : "all");
-            void run(intent);
-          }}
+          // Filters the sentence asked for go with the search, so "free
+          // cancellation" narrows the page rather than being read aloud and
+          // forgotten.
+          onRun={(intent, asked) => void run({ intent, filters: asked })}
         />
       </Card>
 
       {error && <Alert tone="critical">{error}</Alert>}
-      {partial && <Alert tone="warning">{t("results.partial")}</Alert>}
+
+      {data && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold wrap-anywhere">
+                {data.totalCount} {countLabel(t, data.totalCount)}
+                {applied?.destinationDisplay && ` · ${applied.destinationDisplay}`}
+              </h2>
+              <p className="text-muted text-sm">
+                {applied && (
+                  <>
+                    {formatDate(applied.checkIn, locale)} → {formatDate(applied.checkOut, locale)} ·{" "}
+                    {applied.rooms.length} {t("common.rooms")} · {guestCount(applied.rooms)} {t("common.guests")}
+                  </>
+                )}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
+                {t("common.filters")}
+              </Button>
+              <SortControl<TradeSort>
+                value={sort}
+                onChange={(next) => void run({ sort: next })}
+                // The one question only this side of the platform can ask.
+                extra={[{ id: "marginDesc", label: t("agency.sortMargin") }]}
+              />
+              <div
+                className="surface-sunken inline-flex gap-1 rounded-[var(--radius-pill)] p-1"
+                role="group"
+                aria-label={`${t("common.list")} / ${t("common.map")}`}
+              >
+                {[
+                  { id: "list" as const, label: t("common.list") },
+                  { id: "map" as const, label: t("common.map") },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setView(option.id)}
+                    aria-pressed={view === option.id}
+                    className={cx(
+                      "min-h-9 rounded-[var(--radius-pill)] px-4 text-sm font-medium",
+                      "transition-[background-color,color,box-shadow] duration-200 ease-[var(--ease-out)]",
+                      view === option.id
+                        ? "surface text-[var(--text)] shadow-[var(--shadow-card)]"
+                        : "text-muted hover:text-[var(--text)]",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <ActiveFilterChips filters={filters} onChange={(next) => void run({ filters: next })} />
+        </>
+      )}
+
+      {data?.completeness === "partial" && (
+        <Alert tone="warning" title={t("results.partial")}>
+          {data.completenessMessage}
+        </Alert>
+      )}
 
       {/*
         The basket follows the page down. An agent adding a fifth rate should
@@ -265,156 +355,58 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         </div>
       )}
 
-      {busy && <TableSkeleton rows={4} />}
-
-      {/*
-        An empty page says "nothing available", never which supplier came back
-        empty. Agents are customers of ours, not partners in our supply
-        arrangements, and the canonical contract (§9.4) keeps supplier identity
-        off every client response — the trade ones included. An operator who
-        does need to know sees it on the console's catalogue screen, where an
-        unmapped supplier is named outright.
-      */}
-      {results && !results.length && !busy && (
-        <Nothing icon="search" title={t("results.empty")} body={t("agency.noResultsBody")} />
-      )}
-
-      {results && results.length > 0 && ordered && !ordered.length && (
-        <Nothing
-          icon="filter"
-          title={t("agency.noneMatchFilters")}
-          body={t("agency.noneMatchFiltersBody")}
-          action={
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setRefundableOnly(false);
-                setMinStars(0);
-                setMaxPrice("");
-                setBoard("all");
-              }}
-            >
-              {t("common.clear")}
-            </Button>
-          }
-        />
-      )}
-
-      {ordered && ordered.length > 0 && (
-        <>
-          <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label={t("agency.filterBoard")} htmlFor="f-board">
-              <Select id="f-board" value={board} onChange={(e) => setBoard(e.target.value)}>
-                <option value="all">{t("agency.filterAnyBoard")}</option>
-                <option value="breakfast">{t("agency.filterBreakfast")}</option>
-                <option value="roomOnly">{t("agency.filterRoomOnly")}</option>
-              </Select>
-            </Field>
-            <Field label={t("agency.filterStars")} htmlFor="f-stars">
-              <Select id="f-stars" value={String(minStars)} onChange={(e) => setMinStars(Number(e.target.value))}>
-                <option value="0">{t("agency.filterAnyStars")}</option>
-                <option value="3">3★+</option>
-                <option value="4">4★+</option>
-                <option value="5">5★</option>
-              </Select>
-            </Field>
-            <Field label={t("agency.filterMaxPrice")} htmlFor="f-max">
-              <Input
-                id="f-max"
-                type="number"
-                min={0}
-                inputMode="numeric"
-                placeholder={t("agency.filterNoCeiling")}
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
+      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+        <aside className="hidden lg:block">
+          {data && (
+            <Card className="sticky top-4 max-h-[calc(100vh-8rem)] overflow-y-auto p-4">
+              <FiltersPanel
+                facets={data.facets}
+                filters={filters}
+                onChange={(next) => void run({ filters: next })}
+                currency={(applied?.currency ?? seed.currency) as CurrencyCode}
               />
-            </Field>
-            <div className="flex items-end pb-1">
-              <Checkbox
-                checked={refundableOnly}
-                onChange={(e) => setRefundableOnly(e.target.checked)}
-                label={t("agency.filterRefundable")}
-              />
-            </div>
-          </Card>
+            </Card>
+          )}
+        </aside>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted text-sm">
-              {t("agency.resultCount", { n: ordered.length })}
-              {results && ordered.length !== results.length && (
-                <span className="ms-1">{t("agency.filteredFrom", { total: results.length })}</span>
-              )}
-            </p>
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-muted">{t("agency.sortBy")}</span>
-              <Select
-                value={sort}
-                aria-label={t("agency.sortBy")}
-                onChange={(e) => setSort(e.target.value as typeof sort)}
-                className="w-auto"
-              >
-                <option value="recommended">{t("agency.sortRecommended")}</option>
-                <option value="marginDesc">{t("agency.sortMargin")}</option>
-                <option value="priceAsc">{t("agency.sortPrice")}</option>
-              </Select>
-            </label>
-          </div>
+        <div>
+          {busy && !data && (
+            <ul className="space-y-4">
+              {Array.from({ length: 3 }, (_, i) => (
+                <HotelCardSkeleton key={i} />
+              ))}
+            </ul>
+          )}
 
-          <ul className="space-y-2">
-            {ordered.map((card) => {
-              const quote = quotes[card.offerSummary.offerId];
-              const picked = basket.includes(card.offerSummary.offerId);
-              const currency = card.price.currency as CurrencyCode;
-              return (
-                <li key={card.canonicalHotelId}>
-                  <Card
-                    className={cx(
-                      "p-4 transition-colors",
-                      picked && "border-brand-400 bg-brand-50/30",
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          {/* The name opens every rate; "Book" stays the fast
-                              path for the one the row already shows. */}
-                          <p className="font-semibold wrap-anywhere">
-                            {applied ? (
-                              <Link
-                                href={`${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied)}`}
-                                className="hover:underline"
-                              >
-                                {card.name}
-                              </Link>
-                            ) : (
-                              card.name
-                            )}
-                          </p>
-                          {card.category > 0 && (
-                            <span className="text-caution-700 text-xs" aria-label={`${card.category} stars`}>
-                              {"★".repeat(Math.round(card.category))}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-muted mt-0.5 flex items-center gap-1 text-xs wrap-anywhere">
-                          <Icon name="pin" size={13} />
-                          {card.neighborhood}, {card.locality}
-                        </p>
-                        <p className="mt-1.5 text-sm wrap-anywhere">
-                          {card.offerSummary.roomSummary}
-                          <span className="text-muted"> · {card.offerSummary.boardSummary}</span>
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <Badge tone={card.offerSummary.refundable ? "positive" : "neutral"}>
-                            {card.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
-                          </Badge>
-                          {card.remainingLabel && <Badge tone="caution">{card.remainingLabel}</Badge>}
-                        </div>
-                      </div>
+          {data && data.totalCount === 0 && !busy && (
+            <TradeZeroResults
+              data={data}
+              intent={applied ?? seed}
+              onClearFilters={() => void run({ filters: {} })}
+              onDates={(checkIn, checkOut) => void run({ intent: { ...(applied ?? seed), checkIn, checkOut }, filters: {} })}
+              onDestination={(destinationId, destinationDisplay) =>
+                void run({ intent: { ...(applied ?? seed), destinationId, destinationDisplay }, filters: {} })
+              }
+            />
+          )}
 
-                      <div className="flex flex-col items-end gap-2.5">
-                        {quote ? (
+          {data && data.totalCount > 0 && view === "list" && applied && (
+            <>
+              <ul className="space-y-4">
+                {ordered.map((card, index) => {
+                  const quote = quotes[card.offerSummary.offerId];
+                  const picked = basket.includes(card.offerSummary.offerId);
+                  const currency = card.price.currency as CurrencyCode;
+                  const property = `${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied)}`;
+                  return (
+                    <HotelCard
+                      key={card.canonicalHotelId}
+                      card={card}
+                      intent={applied}
+                      rank={index + 1}
+                      href={property}
+                      priceRail={
+                        quote ? (
                           <TradePrices
                             cost={quote.cost}
                             sell={quote.sell}
@@ -424,44 +416,98 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             publicPrice={card.price.total}
                           />
                         ) : (
+                          // Priced a moment behind the card: the rate is real,
+                          // the agency's cost is a second call. Showing the
+                          // public price as if it were theirs would be worse.
                           <div className="space-y-1.5 text-end">
-                            <Skeleton className="ms-auto h-3 w-24" />
-                            <Skeleton className="ms-auto h-6 w-28" />
-                            <Skeleton className="ms-auto h-3 w-36" />
+                            <div className="surface-sunken shimmer ms-auto h-3 w-24 rounded" />
+                            <div className="surface-sunken shimmer ms-auto h-6 w-28 rounded" />
+                            <div className="surface-sunken shimmer ms-auto h-3 w-36 rounded" />
                           </div>
-                        )}
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant={picked ? "ghost" : "secondary"}
-                            onClick={() =>
-                              setBasket((prev) =>
-                                picked
-                                  ? prev.filter((id) => id !== card.offerSummary.offerId)
-                                  : [...prev, card.offerSummary.offerId],
-                              )
-                            }
-                          >
-                            {picked && <Icon name="check" size={14} />}
-                            {picked ? t("agency.inQuote") : t("agency.addToQuote")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="action"
-                            onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
-                          >
-                            {t("agency.book")}
-                          </Button>
+                        )
+                      }
+                      actions={
+                        <div className="mt-2 flex flex-col gap-2 lg:items-end">
+                          <Link href={property} className="block w-full">
+                            <Button variant="action" size="md" className="w-full">
+                              {t("agency.allRates")}
+                            </Button>
+                          </Link>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant={picked ? "ghost" : "secondary"}
+                              onClick={() =>
+                                setBasket((prev) =>
+                                  picked
+                                    ? prev.filter((id) => id !== card.offerSummary.offerId)
+                                    : [...prev, card.offerSummary.offerId],
+                                )
+                              }
+                            >
+                              {picked && <Icon name="check" size={14} />}
+                              {picked ? t("agency.inQuote") : t("agency.addToQuote")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
+                            >
+                              {t("agency.book")}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </Card>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+                      }
+                    />
+                  );
+                })}
+              </ul>
+
+              {busy && (
+                <ul className="mt-4 space-y-4">
+                  <HotelCardSkeleton />
+                </ul>
+              )}
+
+              {cards.length < data.totalCount && (
+                <div className="mt-6 flex justify-center">
+                  <Button variant="secondary" loading={busy} onClick={() => void run({ page: page + 1 })}>
+                    {t("results.loadMore")} ({cards.length}/{data.totalCount})
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+
+          {data && data.totalCount > 0 && view === "map" && applied && (
+            <ResultsMap
+              cards={ordered}
+              intent={applied}
+              selected={selected}
+              onSelect={setSelected}
+              onSearchArea={(bounds) => void run({ filters: { ...filters, bounds } })}
+              // A pin must not walk an agent out of the portal and onto the
+              // public price.
+              hrefFor={(slug) => `${href(locale, `/agency/hotel/${slug}`)}?${propertyQuery(applied)}`}
+            />
+          )}
+        </div>
+      </div>
+
+      <Drawer open={filtersOpen} onClose={() => setFiltersOpen(false)} title={t("common.filters")}>
+        {data && (
+          <FiltersPanel
+            facets={data.facets}
+            filters={filters}
+            onChange={(next) => void run({ filters: next })}
+            currency={(applied?.currency ?? seed.currency) as CurrencyCode}
+          />
+        )}
+        <div className="mt-4">
+          <Button className="w-full" onClick={() => setFiltersOpen(false)}>
+            {t("filters.showResults", { count: data?.totalCount ?? 0 })}
+          </Button>
+        </div>
+      </Drawer>
 
       <QuoteModal
         open={quoteOpen}
@@ -472,6 +518,88 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           router.push(href(locale, `/agency/quotes/${id}`));
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Nothing came back.
+ *
+ * The same recovery the public site offers, because the agent has the customer
+ * on the phone and "no availability" is the moment the call is either saved or
+ * lost. Dates and nearby places re-run the search here rather than linking out.
+ */
+function TradeZeroResults({
+  data,
+  intent,
+  onClearFilters,
+  onDates,
+  onDestination,
+}: {
+  data: SearchResponse;
+  intent: SearchIntent;
+  onClearFilters: () => void;
+  onDates: (checkIn: string, checkOut: string) => void;
+  onDestination: (id: string, label: string) => void;
+}) {
+  const { t, locale } = useApp();
+  const recovery = data.recovery;
+
+  return (
+    <div className="space-y-4">
+      <EmptyState
+        art={<NoResultsArt />}
+        title={t("results.empty")}
+        body={t("agency.noResultsBody")}
+        actions={<Button onClick={onClearFilters}>{t("results.relaxFilters")}</Button>}
+      />
+
+      {recovery && recovery.nearbyDates.length > 0 && (
+        <section>
+          <SectionHeading title={t("results.nearbyDates")} />
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {recovery.nearbyDates.map((option) => (
+              <li key={option.checkIn}>
+                <button type="button" className="w-full text-start" onClick={() => onDates(option.checkIn, option.checkOut)}>
+                  <Card className="hover:surface-sunken p-3">
+                    <p className="text-sm font-medium">
+                      {formatDate(option.checkIn, locale, { day: "numeric", month: "short" })} →{" "}
+                      {formatDate(option.checkOut, locale, { day: "numeric", month: "short" })}
+                    </p>
+                    <p className="text-muted mt-1 text-xs">
+                      {t("common.from")} {formatMoney(option.fromTotal, intent.currency, locale)}
+                    </p>
+                  </Card>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {recovery && recovery.nearbyDestinations.length > 0 && (
+        <section>
+          <SectionHeading title={t("results.nearbyAreas")} />
+          <ul className="grid gap-3 sm:grid-cols-3">
+            {recovery.nearbyDestinations.map((destination) => (
+              <li key={destination.id}>
+                <button
+                  type="button"
+                  className="w-full text-start"
+                  onClick={() => onDestination(destination.id, destination.label)}
+                >
+                  <Card className="hover:surface-sunken p-3">
+                    <p className="text-sm font-medium">{destination.label}</p>
+                    <p className="text-muted text-xs">
+                      {destination.propertyCount} {countLabel(t, destination.propertyCount ?? 0)}
+                    </p>
+                  </Card>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

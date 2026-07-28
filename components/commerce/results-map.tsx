@@ -22,12 +22,15 @@ export function ResultsMap({
   selected,
   onSelect,
   onSearchArea,
+  hrefFor,
 }: {
   cards: HotelResultCard[];
   intent: SearchIntent;
   selected: string | null;
   onSelect: (slug: string | null) => void;
   onSearchArea: (bounds: NonNullable<SearchFilters["bounds"]>) => void;
+  /** Where a pin opens. The trade portal keeps agents inside the portal. */
+  hrefFor?: (slug: string) => string;
 }) {
   const { t, locale, track } = useApp();
   const [zoom, setZoom] = useState(1);
@@ -186,7 +189,7 @@ export function ResultsMap({
                   <Badge tone={selectedCard.offerSummary.refundable ? "positive" : "critical"}>
                     {selectedCard.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
                   </Badge>
-                  <Link href={hotelHref(locale, selectedCard.slug, intent)}>
+                  <Link href={hrefFor?.(selectedCard.slug) ?? hotelHref(locale, selectedCard.slug, intent)}>
                     <Button size="sm">{t("common.viewDetails")}</Button>
                   </Link>
                 </div>

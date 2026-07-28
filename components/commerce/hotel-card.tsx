@@ -9,22 +9,39 @@ import { PriceBlock } from "./price";
 import { distanceLabel, formatDeadline } from "@/lib/format";
 import { hotelHref } from "@/lib/nav";
 import type { HotelResultCard, SearchIntent } from "@/lib/types";
+import type { ReactNode } from "react";
 
 /**
  * F-031 result card. One canonical card per property regardless of how many
  * internal sources listed it (E-04); total price is primary and the
  * cancellation label sits beside it (§5.4).
+ *
+ * The trade portal renders the same card. It is the same inventory, ranked the
+ * same way, and an agent on the phone is describing the property to a customer
+ * who is looking at our public site — a text-only row made them work from a
+ * worse picture of our own stock than the caller had. What differs is the
+ * money and the actions: the price rail becomes cost, sell and margin, and
+ * saving and comparing (which belong to a traveller's own account) come off.
  */
 export function HotelCard({
   card,
   intent,
   rank,
   recommendationCriteria,
+  href: hrefOverride,
+  priceRail,
+  actions,
 }: {
   card: HotelResultCard;
   intent: SearchIntent;
   rank: number;
   recommendationCriteria?: string[];
+  /** Where the property opens. Defaults to the consumer property page. */
+  href?: string;
+  /** Replaces the public price block — the trade rail, when there is one. */
+  priceRail?: ReactNode;
+  /** Replaces "Show prices", save and compare. */
+  actions?: ReactNode;
 }) {
   const { t, locale, isSaved, toggleSaved, compare, toggleCompare, toast, track } = useApp();
   const [whyOpen, setWhyOpen] = useState(false);
@@ -58,7 +75,7 @@ export function HotelCard({
     return () => observer.disconnect();
   }, [card, rank, track]);
   const inCompare = compare.includes(card.slug);
-  const href = hotelHref(locale, card.slug, intent);
+  const href = hrefOverride ?? hotelHref(locale, card.slug, intent);
 
   return (
     /*
@@ -142,9 +159,12 @@ export function HotelCard({
                   />
                 </div>
               )}
+              {/* A saved list belongs to a traveller's own account, not to a
+                  counter working someone else's trip. */}
               <Button
                 variant="ghost"
                 size="sm"
+                hidden={Boolean(actions)}
                 aria-pressed={saved}
                 aria-label={saved ? t("results.savedHotel") : t("results.saveHotel")}
                 onClick={() =>
@@ -228,35 +248,37 @@ export function HotelCard({
                 <p className="text-critical-700 mt-0.5 text-xs font-bold">{card.remainingLabel}</p>
               )}
 
-              <div className="mt-2">
-                <PriceBlock price={card.price} size="sm" />
-              </div>
+              <div className="mt-2">{priceRail ?? <PriceBlock price={card.price} size="sm" />}</div>
 
-              {/* The one yellow control on the row. */}
-              <Link href={href} className="mt-2 block">
-                <Button variant="action" size="md" className="w-full">
-                  {t("results.showPrices")}
-                </Button>
-              </Link>
+              {actions ?? (
+                <>
+                  {/* The one yellow control on the row. */}
+                  <Link href={href} className="mt-2 block">
+                    <Button variant="action" size="md" className="w-full">
+                      {t("results.showPrices")}
+                    </Button>
+                  </Link>
 
-              <div className="mt-2 flex flex-wrap gap-2 lg:justify-end">
-                <Button
-                  size="sm"
-                  variant={inCompare ? "primary" : "secondary"}
-                  aria-pressed={inCompare}
-                  onClick={() => {
-                    const okToAdd = toggleCompare(card.slug);
-                    if (!okToAdd) toast(t("results.compareFull"), "critical");
-                  }}
-                >
-                  {t("results.compareAdd")}
-                </Button>
-                {card.badges.some((b) => b.kind === "recommendation") && recommendationCriteria && (
-                  <Button size="sm" variant="quiet" onClick={() => setWhyOpen(true)}>
-                    {t("results.whyRecommended")}
-                  </Button>
-                )}
-              </div>
+                  <div className="mt-2 flex flex-wrap gap-2 lg:justify-end">
+                    <Button
+                      size="sm"
+                      variant={inCompare ? "primary" : "secondary"}
+                      aria-pressed={inCompare}
+                      onClick={() => {
+                        const okToAdd = toggleCompare(card.slug);
+                        if (!okToAdd) toast(t("results.compareFull"), "critical");
+                      }}
+                    >
+                      {t("results.compareAdd")}
+                    </Button>
+                    {card.badges.some((b) => b.kind === "recommendation") && recommendationCriteria && (
+                      <Button size="sm" variant="quiet" onClick={() => setWhyOpen(true)}>
+                        {t("results.whyRecommended")}
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
