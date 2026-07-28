@@ -4,6 +4,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Checkbox, Select, cx } from "@/components/ui";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/types";
+import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 
 /** Filter set from §5.4, rendered as a sidebar on desktop and a sheet on mobile. */
 export function FiltersPanel({
@@ -231,7 +232,7 @@ export function ActiveFilterChips({
   filters: SearchFilters;
   onChange: (next: SearchFilters) => void;
 }) {
-  const { t } = useApp();
+  const { t, locale } = useApp();
   const chips: { key: string; label: string; clear: () => void }[] = [];
 
   if (filters.maxPrice) {
@@ -264,6 +265,33 @@ export function ActiveFilterChips({
       key: `am-${amenity}`,
       label: amenity,
       clear: () => onChange({ ...filters, amenities: filters.amenities?.filter((a) => a !== amenity) }),
+    });
+  }
+  /*
+   * Board and a lower price bound had no chip, so applying either — which the
+   * trip interpreter does whenever someone says "with breakfast" — left a
+   * filter narrowing the results with nothing on screen to say so and no way
+   * to lift it. A filter you cannot see is a filter you cannot remove.
+   */
+  for (const board of filters.boards ?? []) {
+    chips.push({
+      key: `board-${board}`,
+      label: localized(BOARD_CATALOG[board]?.label, locale) || board,
+      clear: () => onChange({ ...filters, boards: filters.boards?.filter((b) => b !== board) }),
+    });
+  }
+  if (filters.minPrice) {
+    chips.push({
+      key: "minPrice",
+      label: `≥ ${filters.minPrice}`,
+      clear: () => onChange({ ...filters, minPrice: undefined }),
+    });
+  }
+  if (filters.minRating) {
+    chips.push({
+      key: "minRating",
+      label: `${filters.minRating}+`,
+      clear: () => onChange({ ...filters, minRating: undefined }),
     });
   }
   if (filters.refundableOnly) {

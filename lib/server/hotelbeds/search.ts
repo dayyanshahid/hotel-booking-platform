@@ -1,6 +1,7 @@
 import type { Locale, SearchIntent, Suggestion } from "@/lib/types";
 import { hotelbeds, HotelbedsError } from "./client";
 import { isHotelbedsEnabled } from "./config";
+import { fold } from "../../text";
 import { getDestination } from "@/lib/data/destinations";
 import { getCachedDestinations, getHotelBySlug, getIndex, getTypes } from "./content";
 import { adaptAvailability, buildCanonicalHotelFromContent, type AdaptedHotel } from "./adapter";
@@ -199,7 +200,7 @@ export async function searchHotelbedsHotel(
 /** Cached-content suggestions, so autocomplete never spends a live request. */
 export async function hotelbedsSuggestions(query: string, locale: Locale, limit = 6): Promise<Suggestion[]> {
   if (!isHotelbedsEnabled()) return [];
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
   if (q.length < 2) return [];
 
   const [destinations, index, types] = await Promise.all([getCachedDestinations(), getIndex(), getTypes()]);
@@ -207,7 +208,8 @@ export async function hotelbedsSuggestions(query: string, locale: Locale, limit 
 
   for (const destination of destinations) {
     const label = destination.name?.content ?? "";
-    if (!label || !label.toLowerCase().includes(q)) continue;
+    // Folded, so an accented supplier destination is found by the plain spelling.
+    if (!label || !fold(label).includes(q)) continue;
     if (!destination.code) continue;
     out.push({
       id: `hbd-${destination.code}`,

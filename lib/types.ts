@@ -286,7 +286,17 @@ export interface HotelResultCard {
   offerSummary: {
     offerId: string;
     roomSummary: string;
+    /** Display text, localised. Never matched on — see `boardCode`. */
     boardSummary: string;
+    /**
+     * The canonical board this rate is, independent of supplier or language.
+     *
+     * Filtering and faceting use this. Matching on the label instead made the
+     * same board appear as two unrelated values — our own "Breakfast included"
+     * and a supplier's "BED AND BREAKFAST" — which split the counts and made
+     * the filter miss most of what it should have matched.
+     */
+    boardCode: string;
     refundable: boolean;
     freeCancellationUntil?: string;
     paymentTiming: Offer["paymentTiming"];

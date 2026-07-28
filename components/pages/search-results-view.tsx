@@ -25,12 +25,15 @@ export function SearchResultsView({
   locale,
   initialIntent,
   initialPropertyType,
+  initialFilters,
   recommendationCriteria,
 }: {
   locale: Locale;
   initialIntent: SearchIntent;
   /** Localized property-type label from the URL, when arriving from a type tile. */
   initialPropertyType?: string;
+  /** Filters carried in the URL — from the trip interpreter or a shared link. */
+  initialFilters?: SearchFilters;
   recommendationCriteria: string[];
 }) {
   const { t, currency, track, announce, compare, toast } = useApp();
@@ -39,9 +42,10 @@ export function SearchResultsView({
   const [intent, setIntent] = useState<SearchIntent>({ ...initialIntent, currency });
   // Seeded from the URL so a "browse by type" link lands on real results
   // rather than on an unfiltered list that ignores what was clicked.
-  const [filters, setFilters] = useState<SearchFilters>(
-    initialPropertyType ? { propertyTypes: [initialPropertyType] } : {},
-  );
+  const [filters, setFilters] = useState<SearchFilters>({
+    ...initialFilters,
+    ...(initialPropertyType ? { propertyTypes: [initialPropertyType] } : {}),
+  });
   const [sort, setSort] = useState<SortKey>("recommended");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<SearchResponse | null>(null);

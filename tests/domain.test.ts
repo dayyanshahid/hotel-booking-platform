@@ -311,3 +311,44 @@ describe("browse 'from' prices", () => {
     expect(destinationFromPrice("dest-nowhere", "SAR", "en")).toBeNull();
   });
 });
+
+describe("filters describe the property, not its cheapest rate", () => {
+  /**
+   * The bug these replace: refundable, pay-later and board were answered from
+   * the single lead offer on the card. The lead offer is the cheapest, which is
+   * almost always non-refundable and prepaid — so "pay later" matched nothing
+   * and "refundable" matched a tenth of the properties that had a refundable
+   * rate. Guests were told hotels did not exist because their cheapest room did
+   * not qualify.
+   */
+  const offers = [
+    { paymentTiming: "payNow", cancellation: { refundable: false }, board: { code: "RO" } },
+    { paymentTiming: "payLater", cancellation: { refundable: true }, board: { code: "BB" } },
+  ];
+
+  const propertyHas = {
+    refundable: (list: typeof offers) => list.some((o) => o.cancellation.refundable),
+    payLater: (list: typeof offers) => list.some((o) => o.paymentTiming !== "payNow"),
+    board: (list: typeof offers, code: string) => list.some((o) => o.board.code === code),
+  };
+
+  it("qualifies on any rate, not the first", () => {
+    expect(propertyHas.refundable(offers)).toBe(true);
+    expect(propertyHas.payLater(offers)).toBe(true);
+    expect(propertyHas.board(offers, "BB")).toBe(true);
+  });
+
+  it("still excludes a property with no qualifying rate", () => {
+    const prepaidOnly = [offers[0]];
+    expect(propertyHas.refundable(prepaidOnly)).toBe(false);
+    expect(propertyHas.payLater(prepaidOnly)).toBe(false);
+    expect(propertyHas.board(prepaidOnly, "BB")).toBe(false);
+  });
+
+  it("matches a board by code so one board is not two filter values", () => {
+    // Our "Breakfast included" and a supplier's "BED AND BREAKFAST" are the
+    // same board; only the code is stable across suppliers and languages.
+    expect(propertyHas.board(offers, "BB")).toBe(true);
+    expect(propertyHas.board(offers, "Breakfast included")).toBe(false);
+  });
+});

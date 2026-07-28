@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
@@ -8,9 +9,9 @@ import { Accordion, Badge, Button, Card, Photo, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { formatMoney } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { countLabel } from "@/lib/i18n";
-import { href, searchHref, typedSearchHref } from "@/lib/nav";
+import { href, searchHref, searchParamsFromIntent, typedSearchHref } from "@/lib/nav";
 import type { CurrencyCode, Locale, SearchIntent } from "@/lib/types";
 
 interface DestinationSummary {
@@ -630,35 +631,63 @@ function PillRow({
     </div>
   );
 }
+interface Interpretation {
+  intent: SearchIntent | null;
+  filters: Record<string, unknown>;
+  understood: string[];
+  assumed: string[];
+  missing: string[];
+}
+
+/**
+ * Describe your trip.
+ *
+ * The point is that it *runs the search*. The previous version parsed a
+ * sentence in the browser against six hard-coded city names, produced no dates
+ * and no destination id, showed what it thought and then told the reader to go
+ * and fill the form in themselves — a demonstration of understanding with
+ * nowhere to go.
+ *
+ * Interpretation now happens on the server against the real suggestion index,
+ * so it knows every city we sell in both languages. What it read and what it
+ * had to assume are shown separately, because a guess presented as an
+ * understanding is how someone ends up on the wrong dates.
+ */
 function AiPrompt() {
   const { t, locale, currency, track } = useApp();
+  const router = useRouter();
   const [prompt, setPrompt] = useState("");
-  const [parsed, setParsed] = useState<Partial<SearchIntent> & { needs: string[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<Interpretation | null>(null);
 
-  function interpret() {
-    const text = prompt.toLowerCase();
-    const needs: string[] = [];
-    if (/(family|kids|أطفال|عائل)/.test(text)) needs.push(locale === "ar" ? "غرف عائلية" : "family rooms");
-    if (/(beach|sea|شاطئ|بحر)/.test(text)) needs.push(locale === "ar" ? "قرب الشاطئ" : "near the beach");
-    if (/(free cancel|refundable|إلغاء مجاني)/.test(text)) needs.push(locale === "ar" ? "إلغاء مجاني" : "free cancellation");
-    if (/(business|work|أعمال)/.test(text)) needs.push(locale === "ar" ? "مناسب للأعمال" : "business ready");
-
-    const adults = Number(text.match(/(\d+)\s*(adults?|بالغ)/)?.[1] ?? 2);
-    const nights = Number(text.match(/(\d+)\s*(nights?|ليال|ليلة)/)?.[1] ?? 3);
-
-    setParsed({
-      destinationDisplay: prompt.match(/(riyadh|jeddah|makkah|dubai|doha|istanbul|الرياض|جدة|مكة|دبي|الدوحة|إسطنبول)/i)?.[0] ?? "",
-      rooms: [{ adults, childrenAges: [] }],
-      currency,
-      locale,
-      needs,
-      flexibility: "p3",
-      checkIn: "",
-      checkOut: "",
-      destinationId: "",
-      destinationType: "city",
+  async function interpret() {
+    setBusy(true);
+    const res = await fetch("/api/search/interpret", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-locale": locale },
+      body: JSON.stringify({ text: prompt, currency }),
     });
-    track("ai_prompt_interpreted", { needs: needs.join(","), adults, nights });
+    const body = (await res.json()) as { ok: boolean; data?: Interpretation };
+    setBusy(false);
+    if (!body.ok || !body.data) return;
+    setResult(body.data);
+    track("ai_prompt_interpreted", {
+      resolved: body.data.intent ? "yes" : "no",
+      assumed: body.data.assumed.length,
+    });
+  }
+
+  function run() {
+    if (!result?.intent) return;
+    // Filters travel in the URL alongside the intent, so the search page opens
+    // already narrowed to what was asked for rather than showing everything and
+    // making the guest re-apply it.
+    const params = searchParamsFromIntent(result.intent);
+    for (const [key, value] of Object.entries(result.filters)) {
+      params.set(key, Array.isArray(value) ? value.join(",") : String(value));
+    }
+    track("ai_prompt_searched", {});
+    router.push(`${href(locale, "/search")}?${params.toString()}`);
   }
 
   return (
@@ -676,36 +705,51 @@ function AiPrompt() {
           id="ai-prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && prompt.trim()) void interpret();
+          }}
           placeholder={t("home.aiPlaceholder")}
           className="min-h-10 w-full min-w-0 flex-1 bg-transparent px-4 text-sm outline-none placeholder:text-[var(--text-muted)]"
         />
-        <Button
-          type="button"
-          onClick={interpret}
-          disabled={!prompt.trim()}
-          className="shrink-0"
-        >
+        <Button type="button" onClick={interpret} loading={busy} disabled={!prompt.trim()} className="shrink-0">
           {t("home.aiInterpret")}
         </Button>
       </div>
-      {parsed && (
-        <Card className="rise mt-3 p-4 text-sm">
-          <p className="font-medium">{t("home.aiInterpreted")}</p>
-          <ul className="text-muted mt-1 space-y-0.5 text-xs">
-            <li>
-              {t("common.destination")}: {parsed.destinationDisplay || "—"}
-            </li>
-            <li>
-              {t("common.adults")}: {parsed.rooms?.[0].adults}
-            </li>
-            <li>
-              {t("search.flexible")}: ±3
-            </li>
-            {parsed.needs.length > 0 && <li>{parsed.needs.join(" · ")}</li>}
-          </ul>
-          <p className={cx("text-muted mt-2 text-xs")}>{t("home.aiEdit")}</p>
+
+      {result && (
+        <Card className="rise mt-3 space-y-2 p-4 text-sm">
+          {result.intent ? (
+            <>
+              <p className="font-medium">{t("home.aiInterpreted")}</p>
+              <p className="wrap-anywhere">
+                <strong>{result.intent.destinationDisplay}</strong> ·{" "}
+                {formatDate(result.intent.checkIn, locale)} → {formatDate(result.intent.checkOut, locale)} ·{" "}
+                {result.intent.rooms.length} {t("common.rooms")} ·{" "}
+                {result.intent.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0)}{" "}
+                {t("common.guests")}
+              </p>
+              {result.understood.length > 0 && (
+                <p className="text-muted text-xs">{result.understood.join(" · ")}</p>
+              )}
+              {/* Assumptions are set apart, not blended into what was read. */}
+              {result.assumed.length > 0 && (
+                <p className="text-caution-700 text-xs">
+                  {t("home.aiAssumed")}: {result.assumed.join(", ")}
+                </p>
+              )}
+              <Button size="sm" onClick={run}>
+                {t("home.aiSearch")}
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="font-medium">{t("home.aiNoDestination")}</p>
+              <p className="text-muted text-xs">{t("home.aiNoDestinationBody")}</p>
+            </>
+          )}
         </Card>
       )}
     </div>
   );
 }
+

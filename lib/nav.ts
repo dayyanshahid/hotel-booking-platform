@@ -1,4 +1,4 @@
-import type { Locale, SearchIntent } from "./types";
+import type { Locale, SearchFilters, SearchIntent } from "./types";
 
 /** Locale-prefixed href helper — every internal link keeps the language. */
 export function href(locale: Locale, path: string): string {
@@ -102,6 +102,44 @@ export function typedSearchHref(
   const params = searchParamsFromIntent(intent);
   params.set(PROPERTY_TYPE_PARAM, propertyType);
   return `${href(locale, "/search")}?${params.toString()}`;
+}
+
+/**
+ * Reads filters back out of a search URL.
+ *
+ * The trip interpreter puts what it understood into the link it navigates to,
+ * so the results page opens already narrowed rather than showing everything and
+ * asking the guest to re-apply what they just described. Only the filters that
+ * survive a paste into a chat window are here — anything unrecognised is
+ * ignored rather than trusted.
+ */
+export function filtersFromSearchParams(
+  query: Record<string, string | string[] | undefined>,
+): SearchFilters {
+  const one = (key: string): string | undefined => {
+    const value = query[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const filters: SearchFilters = {};
+
+  if (one("refundableOnly") === "true") filters.refundableOnly = true;
+  if (one("payLaterOnly") === "true") filters.payLaterOnly = true;
+  if (one("accessibleOnly") === "true") filters.accessibleOnly = true;
+  if (one("dealsOnly") === "true") filters.dealsOnly = true;
+
+  const maxPrice = Number(one("maxPrice"));
+  if (Number.isFinite(maxPrice) && maxPrice > 0) filters.maxPrice = maxPrice;
+
+  const boards = one("boards");
+  if (boards) filters.boards = boards.split(",").filter(Boolean);
+
+  const categories = (one("categories") ?? "")
+    .split(",")
+    .map((value) => Number(value))
+    .filter((value) => value >= 1 && value <= 5);
+  if (categories.length) filters.categories = categories;
+
+  return filters;
 }
 
 /** Reads the addressable property-type filter back out of a query. */

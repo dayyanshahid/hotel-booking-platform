@@ -5,6 +5,7 @@ import { isTourmindEnabled } from "./config";
 import { tourmindHotelsInCity, type TourmindHotelRecord } from "./catalogue";
 import { tourmindAvailability, type TourmindOffer } from "./operations";
 import type { Locale, SearchIntent, Suggestion } from "@/lib/types";
+import { fold } from "../../text";
 
 /**
  * TourMind's contribution to a search.
@@ -117,14 +118,15 @@ export async function tourmindSuggestions(
   limit = 5,
 ): Promise<Suggestion[]> {
   if (!isTourmindEnabled()) return [];
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
   if (q.length < 2) return [];
 
   const out: Suggestion[] = [];
   const { tourmindHotels } = await import("./catalogue");
   for (const record of await tourmindHotels()) {
     if (out.length >= limit) break;
-    if (!record.name.toLowerCase().includes(q)) continue;
+    // Folded, for the same reason as everywhere else: accents are not typed.
+    if (!fold(record.name).includes(q)) continue;
     const destination = record.citySlug ? getDestination(record.citySlug) : undefined;
     out.push({
       id: `tm-${record.hotelId}`,

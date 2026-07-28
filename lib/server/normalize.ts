@@ -437,6 +437,7 @@ export function buildResultCard(n: NormalizedHotel, intent: SearchIntent, locale
       offerId: best.offerId,
       roomSummary: room?.name ?? "",
       boardSummary: best.board.label,
+      boardCode: best.board.code,
       refundable: best.cancellation.refundable,
       freeCancellationUntil: best.cancellation.freeUntil,
       paymentTiming: best.paymentTiming,

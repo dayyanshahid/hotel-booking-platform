@@ -39,19 +39,19 @@ import {
 } from "./hotelbeds/search";
 import type { ScenarioId } from "./scenarios";
 import { hash01 } from "./pricing";
+import { fold, foldedIncludes as matches } from "../text";
 
 /* ------------------------------------------------------- suggestions */
 
 export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] {
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
   if (!q) return [];
   const t = createTranslator(locale);
   const out: Suggestion[] = [];
 
   for (const d of DESTINATIONS) {
     const label = localized(d.name, locale);
-    const en = d.name.en.toLowerCase();
-    if (label.toLowerCase().includes(q) || en.includes(q)) {
+        if (matches(label, q) || matches(d.name.en, q)) {
       out.push({
         id: d.id,
         type: "city",
@@ -64,7 +64,7 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
     }
     for (const n of d.neighborhoods) {
       const nLabel = localized(n.name, locale);
-      if (nLabel.toLowerCase().includes(q) || n.name.en.toLowerCase().includes(q)) {
+      if (matches(nLabel, q) || matches(n.name.en, q)) {
         out.push({
           id: `${d.id}::${n.key}`,
           type: "neighborhood",
@@ -82,7 +82,7 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
   // one it is often the first thing they type, and it should land somewhere.
   for (const country of bookableCountryList()) {
     const label = locale === "ar" ? (country.nameAr ?? country.name) : country.name;
-    if (label.toLowerCase().includes(q) || country.name.toLowerCase().includes(q)) {
+    if (matches(label, q) || matches(country.name, q)) {
       const cities = destinationsInCountry(country.code);
       out.push({
         id: `country-${country.code}`,
@@ -98,7 +98,7 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
 
   for (const p of EXTRA_PLACES) {
     const label = localized(p.name, locale);
-    if (label.toLowerCase().includes(q) || p.name.en.toLowerCase().includes(q)) {
+    if (matches(label, q) || matches(p.name.en, q)) {
       const d = getDestination(p.destinationId)!;
       out.push({
         id: p.id,
@@ -118,7 +118,7 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
   for (const h of HOTEL_SEEDS) {
     if (hotelMatches >= limit) break;
     const label = localized(h.name, locale);
-    if (label.toLowerCase().includes(q) || h.name.en.toLowerCase().includes(q)) {
+    if (matches(label, q) || matches(h.name.en, q)) {
       hotelMatches += 1;
       const d = getDestination(h.destinationId)!;
       out.push({
@@ -136,8 +136,8 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
   const weight: Record<string, number> = { city: 0, country: 1, neighborhood: 2, airport: 3, landmark: 4, region: 2, hotel: 5 };
   return out
     .sort((a, b) => {
-      const ap = a.label.toLowerCase().startsWith(q) ? 0 : 1;
-      const bp = b.label.toLowerCase().startsWith(q) ? 0 : 1;
+      const ap = fold(a.label).startsWith(q) ? 0 : 1;
+      const bp = fold(b.label).startsWith(q) ? 0 : 1;
       if (ap !== bp) return ap - bp;
       const aw = weight[a.type] ?? 5;
       const bw = weight[b.type] ?? 5;
@@ -305,7 +305,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const centre = dest?.coordinates ?? cards[0]?.coordinates ?? { lat: 0, lng: 0 };
   const withDistance = cards.map((c) => ({ card: c, distance: distanceKm(centre, c.coordinates) }));
 
-  const facets = buildFacets(cards, locale);
+  const facets = buildFacets(cards, locale, normalized);
   const filtered = applyFilters(withDistance, options.filters ?? {}, normalized);
   const sorted = applySort(filtered, options.sort ?? "recommended");
 
@@ -348,7 +348,19 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   return response;
 }
 
-function buildFacets(cards: HotelResultCard[], locale: Locale): SearchFacets {
+/**
+ * Facet counts must count what the filter matches.
+ *
+ * Counting the lead offer said "10 properties with breakfast" while the filter
+ * — which now looks at every rate — returned 54. A count that disagrees with
+ * its own filter is worse than no count: it tells the guest the choice is
+ * narrow and then contradicts itself the moment they take it.
+ *
+ * So board and payment count *properties having at least one such rate*, which
+ * is the question the filter asks. Price and category still come from the card,
+ * because those describe the property or its lead price rather than its rates.
+ */
+function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: NormalizedHotel[]): SearchFacets {
   const prices = cards.map((c) => c.price.total);
   const count = <T extends string | number>(values: T[]) => {
     const map = new Map<T, number>();
@@ -361,8 +373,21 @@ function buildFacets(cards: HotelResultCard[], locale: Locale): SearchFacets {
   const typeCount = count(cards.map((c) => c.propertyType));
   const amenityCount = new Map<string, number>();
   for (const c of cards) for (const a of c.topAmenities) amenityCount.set(a.code, (amenityCount.get(a.code) ?? 0) + 1);
-  const boardCount = count(cards.map((c) => c.offerSummary.boardSummary));
-  const payCount = count(cards.map((c) => c.offerSummary.paymentTiming));
+  const bySlug = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
+  const boardCount = new Map<string, number>();
+  const payCount = new Map<string, number>();
+  for (const card of cards) {
+    const offers = bySlug.get(card.slug)?.offers ?? [];
+    const boards = offers.length
+      ? new Set(offers.map((offer) => offer.board.code))
+      : new Set([card.offerSummary.boardCode]);
+    for (const code of boards) boardCount.set(code, (boardCount.get(code) ?? 0) + 1);
+
+    const timings = offers.length
+      ? new Set(offers.map((offer) => offer.paymentTiming))
+      : new Set([card.offerSummary.paymentTiming]);
+    for (const timing of timings) payCount.set(timing, (payCount.get(timing) ?? 0) + 1);
+  }
 
   return {
     priceRange: { min: prices.length ? Math.min(...prices) : 0, max: prices.length ? Math.max(...prices) : 0 },
@@ -372,15 +397,34 @@ function buildFacets(cards: HotelResultCard[], locale: Locale): SearchFacets {
       .map(([code, c]) => ({ code, label: localized(AMENITY_CATALOG[code]?.label, locale) || code, count: c }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 12),
-    boards: [...boardCount.entries()].map(([value, c]) => ({ code: value, label: value, count: c })),
+    boards: [...boardCount.entries()]
+      .map(([code, c]) => ({ code, label: localized(BOARD_CATALOG[code]?.label, locale) || code, count: c }))
+      .sort((a, b) => b.count - a.count),
     propertyTypes: [...typeCount.entries()].map(([value, c]) => ({ value, count: c })),
-    paymentTiming: [...payCount.entries()].map(([value, c]) => ({ value, count: c })),
+    paymentTiming: [...payCount.entries()].map(([value, c]) => ({ value: value as HotelResultCard["offerSummary"]["paymentTiming"], count: c })),
   };
 }
 
 type Entry = { card: HotelResultCard; distance: number };
 
+/**
+ * Filtering a property by its rates.
+ *
+ * "Refundable", "pay later" and board are questions about the *property* — does
+ * it have such a rate — but they were answered from the single lead offer on
+ * the card, which is the cheapest one. The cheapest rate is almost always
+ * non-refundable and prepaid, so "pay later" matched nothing at all and
+ * "refundable" matched a tenth of the properties that actually had a
+ * refundable rate. A guest was being told hotels did not exist because their
+ * *cheapest* room did not qualify.
+ *
+ * These now look at every rate the property returned. The card still shows the
+ * lead offer, which is correct — it is the "from" price — but the filter no
+ * longer mistakes it for the whole inventory.
+ */
 function applyFilters(entries: Entry[], f: SearchFilters, normalized: NormalizedHotel[]): Entry[] {
+  const byHotel = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
+
   return entries.filter(({ card, distance }) => {
     if (f.minPrice != null && card.price.total < f.minPrice) return false;
     if (f.maxPrice != null && card.price.total > f.maxPrice) return false;
@@ -389,19 +433,36 @@ function applyFilters(entries: Entry[], f: SearchFilters, normalized: Normalized
     if (f.neighborhoods?.length && !f.neighborhoods.includes(card.neighborhood)) return false;
     if (f.propertyTypes?.length && !f.propertyTypes.includes(card.propertyType)) return false;
     if (f.maxDistanceKm != null && distance > f.maxDistanceKm) return false;
-    if (f.refundableOnly && !card.offerSummary.refundable) return false;
-    if (f.payLaterOnly && card.offerSummary.paymentTiming === "payNow") return false;
     if (f.dealsOnly && !card.price.strikeTotal) return false;
     if (f.accessibleOnly && !card.accessibilityHighlights.length) return false;
+
+    const offers = byHotel.get(card.slug)?.offers ?? [];
+    // Falling back to the card keeps a property filterable even if its
+    // normalised entry is missing, rather than silently dropping it.
+    if (f.refundableOnly) {
+      const any = offers.length
+        ? offers.some((offer) => offer.cancellation.refundable)
+        : card.offerSummary.refundable;
+      if (!any) return false;
+    }
+    if (f.payLaterOnly) {
+      const any = offers.length
+        ? offers.some((offer) => offer.paymentTiming !== "payNow")
+        : card.offerSummary.paymentTiming !== "payNow";
+      if (!any) return false;
+    }
+
     if (f.amenities?.length) {
-      const n = normalized.find((x) => x.hotel.slug === card.slug);
-      const codes = new Set(n?.hotel.amenities.map((a) => a.code));
+      const codes = new Set(byHotel.get(card.slug)?.hotel.amenities.map((a) => a.code));
       if (!f.amenities.every((a) => codes.has(a))) return false;
     }
     if (f.boards?.length) {
-      const n = normalized.find((x) => x.hotel.slug === card.slug);
-      const labels = new Set(n?.offers.map((o) => o.board.label));
-      if (!f.boards.some((b) => labels.has(b))) return false;
+      // Matched on the board *code*, not its label: a label is display text
+      // that differs by locale and by supplier, and matching on it is how the
+      // same board became two unrelated filter values.
+      const codes = new Set(offers.map((offer) => offer.board.code));
+      const labels = new Set(offers.map((offer) => offer.board.label));
+      if (!f.boards.some((b) => codes.has(b) || labels.has(b))) return false;
     }
     if (f.bounds) {
       const { north, south, east, west } = f.bounds;

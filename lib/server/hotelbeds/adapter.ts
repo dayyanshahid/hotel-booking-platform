@@ -14,6 +14,7 @@ import type {
 } from "@/lib/types";
 import { addDays, convertCurrency, isSupportedCurrency, nightsBetween } from "@/lib/format";
 import { sceneUrl } from "@/lib/illustration/scenes";
+import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 import { applyMarkup } from "../markup";
 import { timezoneForCountry } from "../timezones";
 import { getHotelContent, getTypes, slugify, type TypeDictionaries } from "./content";
@@ -538,10 +539,24 @@ export async function adaptAvailability(
       const offer: Offer = {
         offerId,
         canonicalRoomId: `${canonical.slug}::${room.code ?? "ROOM"}`,
+        /*
+         * Our board vocabulary, not the supplier's.
+         *
+         * Passing their wording through put "BED AND BREAKFAST" next to our own
+         * "Breakfast included" for the same board: two facets for one thing,
+         * splitting the counts and making the filter miss most of what it
+         * should match — and untranslated, so an Arabic page showed English
+         * shouting. The supplier's dictionary is the fallback for codes we do
+         * not carry, which is better than a bare code.
+         */
         board: {
           code: boardCode,
-          label: types.boards[boardCode] ?? rate.boardName ?? boardCode,
-          detail: rate.boardName ?? "",
+          label:
+            localized(BOARD_CATALOG[boardCode]?.label, locale) ||
+            types.boards[boardCode] ||
+            rate.boardName ||
+            boardCode,
+          detail: localized(BOARD_CATALOG[boardCode]?.detail, locale) || rate.boardName || "",
         },
         paymentTiming: rate.paymentType === "AT_WEB" ? "payNow" : "payLater",
         cancellation,
