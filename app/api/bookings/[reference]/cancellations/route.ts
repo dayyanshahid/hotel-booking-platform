@@ -14,6 +14,8 @@ import { scenarioFromRequest } from "@/lib/server/scenarios";
 import { performCancellation } from "@/lib/server/hotelbeds/operations";
 import { HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/errors";
+import { tourmindCancel } from "@/lib/server/tourmind/operations";
+import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import type { Booking } from "@/lib/types";
 
 interface Body {
@@ -84,6 +86,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
         return fail(mapped.category, mapped.messageKey, locale, {
           status: mapped.status,
           action: mapped.action,
+          retryable: mapped.retryable,
+          message: mapped.message,
+        });
+      }
+    }
+  }
+
+  /*
+   * TourMind cancels on the AgentRefID we supplied, not on their reservation
+   * id — that is the only key we can be certain we hold, since a create that
+   * timed out may have succeeded without us ever seeing their id.
+   */
+  if (linked?.source === "tourmind" && !uncertain) {
+    try {
+      const cancelled = await tourmindCancel(linked.reference);
+      if (!cancelled) uncertain = true;
+    } catch (error) {
+      logTourmindError("bookings.cancel", error, booking.reference);
+      if (isIndeterminate(error)) {
+        uncertain = true;
+      } else {
+        const mapped = mapTourmindError(error, locale);
+        return fail(mapped.category, mapped.messageKey, locale, {
+          status: mapped.status,
           retryable: mapped.retryable,
           message: mapped.message,
         });

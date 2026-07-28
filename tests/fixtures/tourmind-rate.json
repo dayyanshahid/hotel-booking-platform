@@ -1,0 +1,24 @@
+{
+  "_comment": "Captured verbatim from the TourMind test API (HotelDetail, hotel 8268393). Kept as a fixture because the published spec and the live response disagree about MealInfo, and a fixture is the only thing that notices when that drifts again.",
+  "bedTypeDesc": "1 QueenBed and 1 TwinBed",
+  "bedTypeDescCN": "",
+  "RateCode": "v2082038155062292481_105_2|PK",
+  "Name": "Family Triple Room (1 QueenBed and 1 TwinBed )",
+  "NameCN": "",
+  "Allotment": 3,
+  "CurrencyCode": "CNY",
+  "TotalPrice": 691.38,
+  "MealInfo": { "MealType": "1", "MealCount": 0 },
+  "Refundable": true,
+  "CancelPolicyInfos": [
+    {
+      "StartDateTime": "2026-08-24",
+      "EndDateTime": "2026-08-27",
+      "Amount": 691.38,
+      "CurrencyCode": "CNY",
+      "From": "2026-08-24 11:00:00",
+      "To": "2026-08-27 23:59:59"
+    }
+  ],
+  "InvoiceInfo": 2
+}

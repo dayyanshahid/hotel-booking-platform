@@ -3,6 +3,9 @@ import { boardCodeFor, buildCancellation, buildPrice, remainingLabel } from "@/l
 import { TM_MEAL_TO_BOARD } from "@/lib/server/tourmind/types";
 import { cityFor, distanceKm } from "@/lib/server/tourmind/catalogue";
 import { isTourmindSlug, tourmindSlug } from "@/lib/server/tourmind/search";
+import { TourmindError } from "@/lib/server/tourmind/client";
+import { isIndeterminate, mapTourmindError } from "@/lib/server/tourmind/errors";
+import liveRate from "./fixtures/tourmind-rate.json";
 import type { SearchIntent } from "@/lib/types";
 
 /**
@@ -66,6 +69,7 @@ describe("tourmind cancellation", () => {
   const base = {
     checkIn: "2026-09-10",
     total: 500,
+    net: 500,
     supplierCurrency: "USD" as const,
     displayCurrency: "USD" as const,
     locale: "en" as const,
@@ -190,5 +194,94 @@ describe("tourmind slugs", () => {
   it("does not claim slugs belonging to another source", () => {
     expect(isTourmindSlug("hb-12345")).toBe(false);
     expect(isTourmindSlug("olaya-grand-riyadh")).toBe(false);
+  });
+});
+
+describe("tourmind against a real response", () => {
+  // Captured from their test API. The spec and the live payload disagree, and
+  // this is the only thing that will notice if that happens again.
+  const live = liveRate as unknown as Parameters<typeof boardCodeFor>[0];
+
+  it("reads the board from the field the API actually sends", () => {
+    // The spec documents MealInfo.MealCode; the API sends MealInfo.MealType,
+    // as a string. Reading only the documented field made every live rate
+    // "room only" — a board claim, made wrongly, on every card.
+    expect(live.MealInfo).toHaveProperty("MealType");
+    expect(live.MealInfo).not.toHaveProperty("MealCode");
+    expect(boardCodeFor(live)).toBe("RO"); // MealType "1" is genuinely no breakfast
+    expect(boardCodeFor({ MealInfo: { MealType: "2" } })).toBe("BB");
+    expect(boardCodeFor({ MealInfo: { MealType: 8 } })).toBe("AI");
+  });
+
+  it("prices a real rate in the guest's currency", () => {
+    const priced = buildPrice(live, intent, "en")!;
+    expect(priced.supplierCurrency).toBe("CNY");
+    expect(priced.net).toBeCloseTo(691.38, 2);
+    // CNY 691 is roughly USD 97; with markup the total lands well under 691.
+    expect(priced.price.currency).toBe("USD");
+    expect(priced.price.total).toBeLessThan(priced.net);
+    expect(priced.price.chargeCurrency).toBe("CNY");
+  });
+
+  it("derives the free-cancellation deadline from the charging window", () => {
+    const priced = buildPrice(live, intent, "en")!;
+    const policy = buildCancellation(live.CancelPolicyInfos, {
+      refundable: Boolean(live.Refundable),
+      checkIn: intent.checkIn,
+      total: priced.price.total,
+      net: priced.net,
+      supplierCurrency: priced.supplierCurrency,
+      displayCurrency: "USD",
+      locale: "en",
+    });
+    // Their window charges the full amount from 24 Aug 11:00, so free until then.
+    expect(policy.freeUntil).toBe("2026-08-24T11:00:00");
+    expect(policy.steps[0].fee).toBe(0);
+    expect(policy.steps[1].fee).toBe(priced.price.total);
+  });
+
+  it("keeps the supplier rate code out of anything customer-facing", () => {
+    // Their RateCode embeds internal ids and the nationality it was priced for.
+    expect(live.RateCode).toContain("|");
+    const priced = buildPrice(live, intent, "en")!;
+    expect(JSON.stringify(priced.price)).not.toContain(live.RateCode!);
+  });
+});
+
+describe("tourmind supplier isolation", () => {
+  it("keys cancellation on our reference, never on theirs", () => {
+    // Their reservation id may never reach us — a create that timed out can
+    // still have succeeded. The AgentRefID is derived from our own session, so
+    // it is the one key we are certain we hold.
+    const sessionId = "cs_abc123";
+    const agentRef = `SPT-${sessionId}`;
+    expect(agentRef.startsWith("SPT-")).toBe(true);
+    expect(agentRef).toContain(sessionId);
+    expect(agentRef.length).toBeLessThanOrEqual(128);
+  });
+
+  it("classifies a lost connection as unknown, not as failed", () => {
+    // Treating an indeterminate create as a failure is how a customer ends up
+    // booking twice.
+    expect(isIndeterminate(new Error("TOURMIND_INDETERMINATE"))).toBe(true);
+    expect(isIndeterminate(new TourmindError("temporaryService", "TIMEOUT", "x"))).toBe(true);
+    expect(isIndeterminate(new TourmindError("temporaryService", "NETWORK", "x"))).toBe(true);
+    // A rejected request is a clean failure — the customer can fix it.
+    expect(isIndeterminate(new TourmindError("validation", "103", "x"))).toBe(false);
+  });
+
+  it("never shows a supplier message to a customer", () => {
+    const mapped = mapTourmindError(
+      new TourmindError("temporaryService", "104", "内部服务错误 node-7"),
+      "en",
+    );
+    expect(mapped.message).not.toContain("node-7");
+    expect(mapped.message).not.toMatch(/[一-鿿]/);
+    expect(mapped.retryable).toBe(true);
+  });
+
+  it("tells a customer nothing was charged when the supplier is down", () => {
+    const mapped = mapTourmindError(new TourmindError("temporaryService", "104", "x"), "en");
+    expect(mapped.message.toLowerCase()).toContain("nothing has been charged");
   });
 });

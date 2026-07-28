@@ -221,6 +221,23 @@ route, screen or test — can tell which one an offer came from.
 | Errors | HTTP status | HTTP 200 with an `Error` object |
 | Cancellation | charge-from windows | charge-window start = free-until |
 
+**Verified against their live test API.** Availability, prebook and the whole
+adapter chain were run against `developers.tourmind.cn` with the published test
+credentials: 54 real offers for one property, priced CNY→USD with the charge
+currency disclosed, refundable and non-refundable rates correctly separated, and
+no supplier rate code reaching a response. Two things their sandbox does not
+grant that account: `HotelStaticList` returns HTTP 500 for any country, so the
+catalogue sync cannot be exercised without commercial keys, and no booking was
+created — `CreateOrder` is wired and covered by tests but has never been run
+against a real order.
+
+**Spec drift.** The published OpenAPI document says `MealInfo.MealCode: integer`.
+The live API sends `MealInfo.MealType` as a *string*. Reading only the documented
+field made every live rate "room only" — a board claim, made wrongly, on every
+card. Both names are accepted now, and `tests/fixtures/tourmind-rate.json` holds
+a captured response so the next drift is caught by a test rather than in
+production.
+
 **Mapping.** TourMind's hotel ids mean nothing outside their system, so
 `npm run tourmind:sync -- --countries=PK,AE,SA` pulls their static catalogue and
 matches each property to one of our cities **by coordinate**, not by city name —

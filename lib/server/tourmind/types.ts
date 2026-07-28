@@ -42,9 +42,21 @@ export interface TmCancelPolicyInfo {
   To?: string;
 }
 
+/**
+ * Meal information.
+ *
+ * The published spec documents `MealCode: integer`. The live API returns
+ * `MealType` as a *string* — `{ "MealType": "1", "MealCount": 0 }` — so both
+ * names and both types are accepted here. Reading only the documented field
+ * meant every rate fell through to "room only" regardless of what it included,
+ * which is a board claim we would have been making wrongly on every card.
+ */
 export interface TmMealInfo {
   /** 1 none · 2 breakfast · 3 lunch · 4 dinner · 5 lunch+dinner · 6 HB · 7 FB · 8 AI · 9 self-catering */
-  MealCode?: number;
+  MealType?: string | number;
+  /** As documented; not observed in live responses. */
+  MealCode?: string | number;
+  MealCount?: number;
   Description?: string;
 }
 

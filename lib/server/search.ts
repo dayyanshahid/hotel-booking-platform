@@ -22,7 +22,13 @@ import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
-import { isTourmindSlug, searchTourmindHotel, tourmindSuggestions } from "./tourmind/search";
+import {
+  isTourmindSlug,
+  searchTourmind,
+  searchTourmindHotel,
+  tourmindSuggestions,
+} from "./tourmind/search";
+import { isTourmindEnabled } from "./tourmind/config";
 import { normalizeTourmind } from "./tourmind/normalize";
 import {
   hotelbedsSuggestions,
@@ -245,6 +251,29 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    */
   let liveStatus: "ok" | "unavailable" | "skipped" = "skipped";
   const supplierOutageForced = scenario === "allSuppliersFail" || scenario === "zeroResults";
+
+  /*
+   * TourMind, merged the same way. It is a no-op until credentials are set and
+   * the catalogue has been synced, so an unconfigured supplier costs a search
+   * nothing — and a forced outage suppresses it alongside the others, or the
+   * edge case could not be demonstrated.
+   */
+  if (isTourmindEnabled() && !supplierOutageForced) {
+    try {
+      const results = await searchTourmind(effectiveIntent, locale);
+      for (const result of results) {
+        const adapted = normalizeTourmind(result, effectiveIntent, locale);
+        if (adapted.offers.length) {
+          normalized.push({ ...adapted, sourceCount: 1 });
+          liveStatus = "ok";
+        }
+      }
+    } catch {
+      // A live source failing degrades the page; it never empties it. The
+      // simulated and Hotelbeds results above still stand.
+      liveStatus = "unavailable";
+    }
+  }
   if (isHotelbedsEnabled() && !supplierOutageForced) {
     const destinationCode = await resolveHotelbedsDestination(resolved.destinationId);
     if (destinationCode) {

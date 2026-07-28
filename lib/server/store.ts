@@ -38,6 +38,20 @@ export interface HotelbedsOfferBinding {
   supplierCurrency: string;
 }
 
+/**
+ * What a TourMind offer needs to survive from availability to booking.
+ *
+ * `net` is here because their prebook and create calls both require the price
+ * we last saw — it is how they detect the rate moved — and because their
+ * cancellation fees are a share of net, not of what the customer paid.
+ */
+export interface TourmindOfferBinding {
+  rateCode: string;
+  hotelCode: string;
+  net: number;
+  supplierCurrency: string;
+}
+
 export interface StoredOffer {
   offerId: string;
   hotelSlug: string;
@@ -59,6 +73,7 @@ export interface StoredOffer {
   supplierRoomLabel: string;
   /** Present only for offers that came from the live supplier. */
   hotelbeds?: HotelbedsOfferBinding;
+  tourmind?: TourmindOfferBinding;
   /**
    * Canonical labels captured at availability time, so checkout never has to
    * re-derive them from a catalogue that may not be synced yet.

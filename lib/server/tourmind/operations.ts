@@ -122,6 +122,7 @@ function toOffer(
       refundable: Boolean(rate.Refundable),
       checkIn: ctx.intent.checkIn,
       total: pricing.price.total,
+      net: pricing.net,
       supplierCurrency: pricing.supplierCurrency,
       displayCurrency: ctx.intent.currency,
       countryCode: ctx.countryCode,

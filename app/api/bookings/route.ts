@@ -18,6 +18,8 @@ import { confirmBooking } from "@/lib/server/hotelbeds/operations";
 import { HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/errors";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
+import { tourmindBook } from "@/lib/server/tourmind/operations";
+import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import type { Booking, BookingGuest, Locale, RoomAllocation, ServiceEvent } from "@/lib/types";
 
 interface Body {
@@ -221,6 +223,63 @@ export async function POST(req: Request) {
     }
   }
 
+  /*
+   * TourMind, on the same terms. Their create call is idempotent on our own
+   * AgentRefID, so a retry after a timeout returns the original order rather
+   * than making a second one — but the outcome is still unknown to us at that
+   * moment, so it becomes pending and reconciliation resolves it.
+   */
+  let tourmindAgentRef: string | null = null;
+  if (offer?.tourmind && !pending && !rejected) {
+    const guests = guestList(session.rooms, body);
+    try {
+      const result = await tourmindBook({
+        sessionId: session.checkoutSessionId,
+        hotelCode: offer.tourmind.hotelCode,
+        rateCode: offer.tourmind.rateCode,
+        net: offer.tourmind.net,
+        supplierCurrency: offer.tourmind.supplierCurrency,
+        // The session holds the stay, not the original intent; rebuild the
+        // shape the supplier call needs from what checkout actually captured.
+        intent: {
+          destinationId: "",
+          destinationDisplay: "",
+          destinationType: "city" as const,
+          checkIn: session.checkIn,
+          checkOut: session.checkOut,
+          flexibility: "exact" as const,
+          rooms: session.rooms,
+          nationality: body.lead.nationality,
+          locale,
+          currency: session.price.currency,
+        },
+        contact: {
+          name: guests[0].firstName,
+          surname: guests[0].surname,
+          email: body.contact.email,
+          phone: body.contact.phone,
+        },
+        specialRequest: requests.join(" | ") || undefined,
+      });
+      supplierReference = result.reservationId;
+      // Cancellation keys on our own AgentRefID, not their reservation id: a
+      // create that timed out may have succeeded without us ever seeing theirs.
+      tourmindAgentRef = result.agentRefId;
+    } catch (error) {
+      logTourmindError("bookings.create", error, ref);
+      if (isIndeterminate(error)) {
+        pending = true;
+      } else {
+        const mapped = mapTourmindError(error, locale);
+        return fail(mapped.category, mapped.messageKey, locale, {
+          status: mapped.status,
+          retryable: mapped.retryable,
+          message: mapped.message,
+        });
+      }
+    }
+  }
+
   const payNow = session.paymentTiming === "payNow";
   const dueAtProperty = session.price.payAtProperty.reduce((s, c) => s + c.amount, 0);
 
@@ -282,10 +341,17 @@ export async function POST(req: Request) {
   };
 
   await saveBooking(booking, booking.contact.email);
-  if (supplierReference) {
+  if (supplierReference && offer?.hotelbeds) {
     // Held apart from the customer record: the platform reference is the only
     // identifier the customer ever sees (§8.5).
+    //
+    // Guarded by supplier now that there is more than one. Writing "hotelbeds"
+    // unconditionally overwrote the TourMind link recorded above, which would
+    // have sent every TourMind cancellation to the wrong API.
     linkSupplierReference(booking.reference, supplierReference, "hotelbeds");
+  }
+  if (tourmindAgentRef) {
+    linkSupplierReference(booking.reference, tourmindAgentRef, "tourmind");
   }
   saveSession({ ...session, idempotencyKeys: [...session.idempotencyKeys, body.idempotencyKey] });
 

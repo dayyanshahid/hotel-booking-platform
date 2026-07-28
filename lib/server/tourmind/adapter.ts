@@ -120,7 +120,10 @@ export function buildCancellation(
   options: {
     refundable: boolean;
     checkIn: string;
+    /** The customer's total, markup included. */
     total: number;
+    /** The supplier's net for the same stay, which their fees are a share of. */
+    net: number;
     supplierCurrency: CurrencyCode;
     displayCurrency: CurrencyCode;
     countryCode?: string;
@@ -159,12 +162,18 @@ export function buildCancellation(
   const freeUntil = windows[0].from;
   const stillFree = new Date(freeUntil).getTime() > Date.now();
 
+  /*
+   * Their fee is a share of the supplier net, so it is applied as a share of
+   * the customer's total rather than converted straight across.
+   *
+   * Converting directly understates it: a 100% penalty on a CNY 691 net came
+   * out as $97 against a $108 total, which reads as an $11 refund the guest
+   * would never receive. A full penalty must forfeit the full amount paid.
+   */
   const steps = windows.map((window, index) => {
-    const feeRaw = Number.isFinite(window.fee) ? window.fee : options.total;
-    const currency: CurrencyCode = isSupportedCurrency(window.currency)
-      ? window.currency
-      : options.supplierCurrency;
-    const fee = Math.min(convertCurrency(feeRaw, currency, options.displayCurrency), options.total);
+    const feeRaw = Number.isFinite(window.fee) ? window.fee : options.net;
+    const share = options.net > 0 ? Math.min(1, feeRaw / options.net) : 1;
+    const fee = Math.min(Math.round(options.total * share), options.total);
     const next = windows[index + 1]?.from;
     return {
       until: next ?? `${addDays(options.checkIn, 1)}T12:00:00`,
@@ -190,9 +199,18 @@ export function buildCancellation(
   };
 }
 
-/** Their numeric meal enum to the board vocabulary the UI already speaks. */
+/**
+ * Their meal enum to the board vocabulary the UI already speaks.
+ *
+ * Reads `MealType` first because that is what the live API sends, and falls
+ * back to the documented `MealCode`. Both arrive as strings in practice, so the
+ * value is coerced rather than compared — `"2"` and `2` must mean breakfast.
+ */
 export function boardCodeFor(rate: TmRateInfo): string {
-  return TM_MEAL_TO_BOARD[rate.MealInfo?.MealCode ?? 1] ?? "RO";
+  const raw = rate.MealInfo?.MealType ?? rate.MealInfo?.MealCode;
+  const code = Number(raw);
+  if (!Number.isFinite(code)) return "RO";
+  return TM_MEAL_TO_BOARD[code] ?? "RO";
 }
 
 /**
