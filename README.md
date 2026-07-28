@@ -1,4 +1,4 @@
-# Spatay — Hotel Booking Platform (frontend)
+# Travel & More — Hotel Booking Platform (frontend)
 
 An implementation of **Hotel Booking Platform — Frontend Scope v1.0** (27 July 2026): a
 responsive, supplier-agnostic hotel booking experience with a normalized

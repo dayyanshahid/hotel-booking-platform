@@ -64,19 +64,19 @@ function seed(): void {
   const now = new Date().toISOString();
   const agency: Agency = {
     id: "agc_demo",
-    name: "Matchless Travel",
-    slug: "matchless",
+    name: "Skyline Travel",
+    slug: "skyline",
     countryCode: "PK",
     status: "active",
     commissionPercent: 12,
     markup: { default: { mode: "percent", value: 10 }, overrides: [{ countryCode: "SA", rule: { mode: "percent", value: 6 } }] },
     credit: { limit: 25_000, currency: "USD", paymentDays: 30 },
     profile: {
-      legalName: "Matchless Tours and Travels",
+      legalName: "Skyline Tours and Travels",
       address: "Shahrah-e-Faisal",
       city: "Karachi",
       taxNumber: "",
-      email: "hotels@matchless.example",
+      email: "hotels@skyline.example",
       phone: "+92 21 111 000 000",
     },
     createdAt: now,
@@ -86,7 +86,7 @@ function seed(): void {
     {
       id: "agt_demo_admin",
       agencyId: agency.id,
-      email: "admin@matchless.example",
+      email: "admin@skyline.example",
       name: "Agency admin",
       role: "admin",
       active: true,
@@ -95,7 +95,7 @@ function seed(): void {
     {
       id: "agt_demo_agent",
       agencyId: agency.id,
-      email: "agent@matchless.example",
+      email: "agent@skyline.example",
       name: "Counter agent",
       role: "agent",
       active: true,

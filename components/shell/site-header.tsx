@@ -52,8 +52,15 @@ export function SiteHeader() {
     */
     <header className="chrome sticky top-0 z-40">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
-        <Link href={href(locale, "/")} className="flex items-center gap-2 font-bold">
-          <Wordmark tone="inverse" />
+        {/*
+          The full lockup is two lines of caps beside a globe, which is more
+          horizontal room than a sticky header can spare on a phone. Below `sm`
+          the mark stands in for it — it is the part that survives at that size
+          anyway — and the accessible name comes with it.
+        */}
+        <Link href={href(locale, "/")} className="flex items-center font-bold">
+          <Wordmark tone="inverse" markOnly className="sm:hidden" />
+          <Wordmark tone="inverse" className="hidden sm:inline-flex" />
         </Link>
 
         <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">

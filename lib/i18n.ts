@@ -11,9 +11,10 @@ export const LOCALE_META: Record<Locale, { label: string; dir: "ltr" | "rtl"; ht
 type Dict = Record<string, string>;
 
 const en: Dict = {
-  "brand.name": "Spatay",
+  "brand.name": "Travel & More",
+  "brand.legalName": "Travel & More Private Limited",
   "brand.since": "Serving since 1984",
-  "brand.parent": "by Matchless",
+  "brand.parent": "Private Limited",
   "stat.years": "Years of experience",
   "stat.travellers": "Happy travellers",
   "stat.iata": "Certified agency",
@@ -591,7 +592,7 @@ const en: Dict = {
   "footer.terms": "Terms of use",
   "footer.security": "Secure payment",
   "footer.rights": "All rights reserved.",
-  "footer.disclaimer": "Pakistan\u2019s trusted travel agency since 1984. Part of Matchless Tours and Travels, IATA certified. This hotel platform is a demonstration environment \u2014 inventory, prices and bookings are simulated.",
+  "footer.disclaimer": "Travel & More Private Limited \u2014 a trusted travel agency since 1984, IATA certified. This hotel platform is a demonstration environment \u2014 inventory, prices and bookings are simulated.",
 
   "admin.bookingsBody": "Every booking, direct and trade. Filter to what needs attention, or search a reference, guest or property.",
   "admin.search": "Search",
@@ -706,7 +707,7 @@ const en: Dict = {
 
   "agency.portal": "Agent portal",
   "agency.signIn": "Agent sign-in",
-  "agency.signInBody": "For travel agencies trading on account with Spatay. We send a one-time code to your work email — no password to share around the counter.",
+  "agency.signInBody": "For travel agencies trading on account with Travel & More. We send a one-time code to your work email — no password to share around the counter.",
   "agency.signInRequired": "Sign in to your agency account to continue.",
   "agency.workEmail": "Work email",
   "agency.sendCode": "Send code",
@@ -861,9 +862,10 @@ const en: Dict = {
 };
 
 const ar: Dict = {
-  "brand.name": "سباتاي",
+  "brand.name": "ترافل آند مور",
+  "brand.legalName": "ترافل آند مور برايفت ليمتد",
   "brand.since": "نخدمكم منذ ١٩٨٤",
-  "brand.parent": "من ماتشلس",
+  "brand.parent": "شركة خاصة محدودة",
   "stat.years": "سنة من الخبرة",
   "stat.travellers": "مسافر سعيد",
   "stat.iata": "وكالة معتمدة",
@@ -1441,7 +1443,7 @@ const ar: Dict = {
   "footer.terms": "شروط الاستخدام",
   "footer.security": "الدفع الآمن",
   "footer.rights": "جميع الحقوق محفوظة.",
-  "footer.disclaimer": "وكالة سفر باكستانية موثوقة منذ ١٩٨٤، وجزء من ماتشلس للسياحة والسفر، معتمدة من IATA. منصة الفنادق هذه بيئة عرض توضيحي — المخزون والأسعار والحجوزات محاكاة.",
+  "footer.disclaimer": "ترافل آند مور برايفت ليمتد — وكالة سفر موثوقة منذ ١٩٨٤، معتمدة من IATA. منصة الفنادق هذه بيئة عرض توضيحي — المخزون والأسعار والحجوزات محاكاة.",
 
   "admin.bookingsBody": "كل الحجوزات، المباشرة وعبر الوكالات. صفِّ ما يحتاج انتباهًا، أو ابحث برقم الحجز أو اسم الضيف أو العقار.",
   "admin.search": "بحث",
@@ -1556,7 +1558,7 @@ const ar: Dict = {
 
   "agency.portal": "بوابة الوكلاء",
   "agency.signIn": "دخول الوكلاء",
-  "agency.signInBody": "لوكالات السفر المتعاملة بالحساب الآجل مع سباتاي. نرسل رمزًا لمرة واحدة إلى بريد العمل — دون كلمة مرور متداولة في المكتب.",
+  "agency.signInBody": "لوكالات السفر المتعاملة بالحساب الآجل مع ترافل آند مور. نرسل رمزًا لمرة واحدة إلى بريد العمل — دون كلمة مرور متداولة في المكتب.",
   "agency.signInRequired": "سجّل الدخول بحساب وكالتك للمتابعة.",
   "agency.workEmail": "بريد العمل",
   "agency.sendCode": "إرسال الرمز",
