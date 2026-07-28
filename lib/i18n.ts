@@ -83,7 +83,8 @@ const en: Dict = {
   "common.and": "and",
 
   "home.heroTitle": "The real total. Before you pay.",
-  "home.heroSubtitle": "Compare rooms across our supply partners as one clear choice — taxes, fees and cancellation shown up front.",
+  "home.heroSubtitle": "{properties} places to stay in {cities} cities. Every price is the full total for your dates — taxes and fees in, cancellation terms on the card.",
+  "home.heroSearchHint": "Enter a city, a landmark or a property name.",
   "home.collections": "Browse by travel style",
   "home.recent": "Pick up where you left off",
   "home.saved": "Your saved hotels",
@@ -120,7 +121,7 @@ const en: Dict = {
   "home.trustLocal": "English and العربية, priced in your currency",
 
   "home.proofTitle": "What you actually pay",
-  "home.proofBody": "Most sites show a nightly rate and add the rest at the last step. This is the same stay, opened up — every line we know about, before you choose.",
+  "home.proofBody": "A nightly rate is not a price. Here is a real stay from the catalogue with every line we know about — what we charge, and what the property will collect when you arrive.",
   "home.proofExample": "Worked example · {hotel}, 3 nights, 2 guests",
   "home.proofRoom": "Room for 3 nights",
   "home.proofIncluded": "Included taxes and charges",
@@ -130,9 +131,15 @@ const en: Dict = {
   "home.proofSearch": "See it on a real search",
 
   "home.featuredTitle": "Stays to start with",
-  "home.featuredBody": "A cross-section of the catalogue, priced the same way everything else is.",
+  "home.featuredBody": "The best-reviewed stay in each of our busiest cities.",
   "home.fromPerNight": "from {amount} / night",
-  "home.catalogueSize": "{count} properties across six cities.",
+  "home.catalogueSize": "{properties} properties · {cities} cities · {countries} countries",
+  "home.browseTitle": "Where to next?",
+  "home.browseBody": "Three ways in: the kind of place, the part of the world, or the kind of trip.",
+  "home.byType": "By property type",
+  "home.byRegion": "By region",
+  "home.byStyle": "By travel style",
+  "home.destinationsBody": "Prices are the lowest total we currently hold, per night.",
 
   "home.faqTitle": "Before you book",
   "home.faqQ1": "Is the price I see the price I pay?",
@@ -646,7 +653,8 @@ const ar: Dict = {
   "common.and": "و",
 
   "home.heroTitle": "الإجمالي الحقيقي. قبل الدفع.",
-  "home.heroSubtitle": "قارن الغرف من جميع مصادرنا كخيار واحد واضح — الضرائب والرسوم وسياسة الإلغاء ظاهرة مسبقًا.",
+  "home.heroSubtitle": "{properties} مكان إقامة في {cities} مدينة. كل سعر هو الإجمالي الكامل لتواريخك — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
+  "home.heroSearchHint": "أدخل مدينة أو معلمًا أو اسم عقار.",
   "home.collections": "تصفَّح حسب أسلوب السفر",
   "home.recent": "أكمل من حيث توقفت",
   "home.saved": "فنادقك المحفوظة",
@@ -656,7 +664,7 @@ const ar: Dict = {
   "home.trustLocal": "العربية والإنجليزية، بعملتك",
 
   "home.proofTitle": "ما تدفعه فعلًا",
-  "home.proofBody": "معظم المواقع تعرض سعر الليلة وتضيف الباقي في الخطوة الأخيرة. هذه هي الإقامة نفسها مفصَّلة — كل بند نعرفه، قبل أن تختار.",
+  "home.proofBody": "سعر الليلة ليس السعر. هذه إقامة حقيقية من الكتالوج بكل بند نعرفه — ما نحصّله نحن، وما سيحصّله العقار عند وصولك.",
   "home.proofExample": "مثال تطبيقي · {hotel}، 3 ليالٍ، ضيفان",
   "home.proofRoom": "الغرفة لـ 3 ليالٍ",
   "home.proofIncluded": "الضرائب والرسوم المشمولة",
@@ -666,9 +674,15 @@ const ar: Dict = {
   "home.proofSearch": "شاهدها في بحث حقيقي",
 
   "home.featuredTitle": "إقامات للبداية",
-  "home.featuredBody": "مقطع عرضي من الكتالوج، مُسعَّر بالطريقة نفسها التي يُسعَّر بها كل شيء.",
+  "home.featuredBody": "أفضل إقامة من حيث التقييم في كل مدينة من أكثر مدننا ازدحامًا.",
   "home.fromPerNight": "من {amount} / الليلة",
-  "home.catalogueSize": "{count} عقارًا في ست مدن.",
+  "home.catalogueSize": "{properties} عقار · {cities} مدينة · {countries} دولة",
+  "home.browseTitle": "إلى أين بعد ذلك؟",
+  "home.browseBody": "ثلاث طرق للدخول: نوع المكان، أو جزء العالم، أو نوع الرحلة.",
+  "home.byType": "حسب نوع العقار",
+  "home.byRegion": "حسب المنطقة",
+  "home.byStyle": "حسب أسلوب السفر",
+  "home.destinationsBody": "الأسعار هي أقل إجمالي متاح لدينا حاليًا، لكل ليلة.",
 
   "home.faqTitle": "قبل أن تحجز",
   "home.faqQ1": "هل السعر الظاهر هو ما سأدفعه؟",

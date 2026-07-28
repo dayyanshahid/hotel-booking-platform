@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { HomeView, type FeaturedStay, type PriceProof } from "@/components/pages/home-view";
 import {
+  bookableCountryList,
+  DESTINATIONS,
   destinationsInRegion,
   featuredDestinations,
   getDestination,
@@ -197,6 +199,8 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         proof={buildProof(locale)}
         fromPriceBasis={FROM_PRICE_BASIS[locale]}
         totalProperties={HOTEL_SEEDS.length}
+        totalCities={DESTINATIONS.length}
+        totalCountries={bookableCountryList().length}
       />
     </>
   );
