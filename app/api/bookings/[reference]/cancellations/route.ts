@@ -16,6 +16,8 @@ import { HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/errors";
 import { tourmindCancel } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
+import { releaseBooking } from "@/lib/agency/bookings";
+import { getAgencyBooking, saveAgencyBooking } from "@/lib/agency/store";
 import type { Booking } from "@/lib/types";
 
 interface Body {
@@ -168,6 +170,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
           },
     ],
   };
+
+  /*
+   * Give the agency its credit back.
+   *
+   * Only the part actually recovered: the cancellation fee is money the
+   * supplier keeps, so releasing the full cost would hand back headroom the
+   * agency has not got. Skipped while the outcome is uncertain — releasing
+   * credit against a cancellation that may not have happened would let the same
+   * money be spent twice.
+   */
+  const trade = await getAgencyBooking(updated.reference);
+  if (trade && !uncertain) {
+    const retained = Math.round(trade.cost * (quote.fee / Math.max(1, booking.price.total)));
+    await releaseBooking(trade.agencyId, trade.reference, trade.cost, retained, trade.currency, now);
+    await saveAgencyBooking({ ...trade, status: "cancelled" });
+  }
 
   await saveBooking(updated, updated.contact.email);
   pushNotification(updated.contact.email, {

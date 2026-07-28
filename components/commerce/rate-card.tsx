@@ -5,6 +5,9 @@ import { useApp } from "@/components/providers/app-provider";
 import { Accordion, Badge, Button, Card, Modal, Photo, cx } from "@/components/ui";
 import { Icon, amenityIcon } from "@/components/ui/icons";
 import { CancellationTimeline, PriceBlock } from "./price";
+import { TradeStrip } from "@/components/agency/trade-strip";
+import { useAgencyQuotes } from "@/components/agency/use-agency";
+import type { AgencyOfferView } from "@/lib/agency/types";
 import { formatDeadline } from "@/lib/format";
 import type { CanonicalRoom, Offer } from "@/lib/types";
 
@@ -30,6 +33,9 @@ export function RoomBlock({
 }) {
   const { t, locale } = useApp();
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // Quoted per room block rather than per rate: one request covers every rate
+  // on the room, and a signed-out visitor never issues it at all.
+  const quotes = useAgencyQuotes(offers.map((offer) => offer.offerId));
 
   return (
     <Card as="li" className="overflow-hidden">
@@ -93,6 +99,7 @@ export function RoomBlock({
                 onSelect={onSelect}
                 selected={selectedOfferId === offer.offerId}
                 busy={busyOfferId === offer.offerId}
+                quote={quotes[offer.offerId]}
               />
             ))}
           </ul>
@@ -135,11 +142,13 @@ function RateRow({
   onSelect,
   selected,
   busy,
+  quote,
 }: {
   offer: Offer;
   onSelect: (offer: Offer) => void;
   selected: boolean;
   busy: boolean;
+  quote?: AgencyOfferView;
 }) {
   const { t, locale } = useApp();
   const [whyOpen, setWhyOpen] = useState<null | { label: string; reason: string }>(null);
@@ -233,8 +242,9 @@ function RateRow({
           )}
         </div>
 
-        <div className="flex flex-col items-start gap-2 sm:items-end">
+        <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
           <PriceBlock price={offer.price} size="md" />
+          <TradeStrip quote={quote} className="w-full text-start sm:min-w-[260px]" />
           <Button variant="action" onClick={() => onSelect(offer)} loading={busy} className="w-full sm:w-auto">
             {t("room.selectRate")}
           </Button>

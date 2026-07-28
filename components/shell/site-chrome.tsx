@@ -63,6 +63,9 @@ export function SiteFooter() {
       title: t("footer.company"),
       links: [
         { href: "/legal/about", label: t("footer.about") },
+        // The way an agency finds the portal. Nothing else links to it, and an
+        // agent who cannot find their own sign-in calls the office instead.
+        { href: "/agency/signin", label: t("agency.portal") },
         { href: "/legal/price-promise", label: t("footer.priceProm") },
         { href: "/legal/guarantee", label: t("footer.guarantee") },
       ],

@@ -20,6 +20,9 @@ import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/error
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
 import { tourmindBook } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
+import { activeAgent } from "@/lib/agency/session";
+import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
+import { saveAgencyBooking } from "@/lib/agency/store";
 import type { Booking, BookingGuest, Locale, RoomAllocation, ServiceEvent } from "@/lib/types";
 
 interface Body {
@@ -157,6 +160,33 @@ export async function POST(req: Request) {
     lat: liveContent?.coordinates?.latitude ?? 0,
     lng: liveContent?.coordinates?.longitude ?? 0,
   };
+
+  /*
+   * Trade bookings pay on account, not by card.
+   *
+   * The gate has to close here — after validation, before any supplier order
+   * exists. An agency told "insufficient credit" once the room is already held
+   * has promised a stay it now has to cancel, in front of the customer who
+   * asked for it. Checking first costs nothing and makes the refusal honest.
+   */
+  const agent = await activeAgent();
+  let agencyCommit: AgencyCommit | null = null;
+  if (agent) {
+    agencyCommit = await priceForAgency(session.price.total, session.price.currency, agent.agencyId);
+    if (!agencyCommit) {
+      return fail("policyRestriction", "agency.suspended", locale, { status: 403, action: "contactSupport" });
+    }
+    if (!(await hasHeadroom(agent.agencyId, agencyCommit.cost))) {
+      return fail("policyRestriction", "agency.creditExceeded", locale, {
+        status: 402,
+        action: "contactSupport",
+        message:
+          locale === "ar"
+            ? "هذا الحجز يتجاوز حد الائتمان المتاح لوكالتك. لم يُنشأ أي حجز."
+            : "This booking would exceed your agency's available credit. Nothing was booked.",
+      });
+    }
+  }
 
   const ref = reference();
   setIdempotency(body.idempotencyKey, ref);
@@ -341,6 +371,34 @@ export async function POST(req: Request) {
   };
 
   await saveBooking(booking, booking.contact.email);
+
+  /*
+   * The commercial record and the credit movement.
+   *
+   * Written after the booking exists, so credit is only ever committed against
+   * something real — and skipped for a rejection, where nothing was sold. Both
+   * writes key on the platform reference, so a replayed request lands on the
+   * same rows rather than charging the agency twice.
+   */
+  if (agent && agencyCommit && !rejected) {
+    const commit = { ...agencyCommit, reference: booking.reference };
+    await commitBooking(agent, commit, booking.hotelName, now);
+    await saveAgencyBooking({
+      reference: booking.reference,
+      agencyId: agent.agencyId,
+      agentId: agent.agentId,
+      agentName: agent.name,
+      hotelName: booking.hotelName,
+      checkIn: booking.checkIn,
+      checkOut: booking.checkOut,
+      leadGuest: `${booking.guests[0].firstName} ${booking.guests[0].surname}`.trim(),
+      cost: commit.cost,
+      sell: commit.sell,
+      currency: commit.currency,
+      status: pending ? "pending" : "confirmed",
+      createdAt: now,
+    });
+  }
   if (supplierReference && offer?.hotelbeds) {
     // Held apart from the customer record: the platform reference is the only
     // identifier the customer ever sees (§8.5).

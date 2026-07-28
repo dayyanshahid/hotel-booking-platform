@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import "../globals.css";
 import { AppProvider } from "@/components/providers/app-provider";
 import { SiteHeader } from "@/components/shell/site-header";
+import { ConsumerChrome } from "@/components/shell/consumer-chrome";
 import {
   AssistantDrawer,
   BottomNav,
@@ -85,12 +86,16 @@ export default async function LocaleLayout({
           <a href="#main" className="skip-link">
             {t("nav.skipToContent")}
           </a>
-          <SiteHeader />
+          <ConsumerChrome>
+            <SiteHeader />
+          </ConsumerChrome>
           <main id="main" className="mx-auto min-h-[60vh] w-full max-w-7xl px-4 pb-10 pt-6 sm:pt-8">
             {children}
           </main>
-          <SiteFooter />
-          <BottomNav />
+          <ConsumerChrome>
+            <SiteFooter />
+            <BottomNav />
+          </ConsumerChrome>
           <ConsentBanner />
           <AssistantDrawer />
           <ScenarioBar />

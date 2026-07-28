@@ -7,6 +7,16 @@ export function href(locale: Locale, path: string): string {
 }
 
 /**
+ * The trade portal, which is the one part of the app that does not wear the
+ * consumer chrome. An agent working a counter needs their own navigation, not
+ * a traveller's — and the guest header would put "Saved" and "Trips" next to a
+ * credit balance.
+ */
+export function isPortalPath(pathname: string): boolean {
+  return /^\/(en|ar)\/agency(\/|$)/.test(pathname);
+}
+
+/**
  * Readable, shareable search URLs (§5.3). Canonical destination ID plus display
  * name; no member, promo or eligibility flags are ever placed in the URL.
  */
