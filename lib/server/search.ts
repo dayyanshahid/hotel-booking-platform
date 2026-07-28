@@ -22,6 +22,8 @@ import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
+import { isTourmindSlug, searchTourmindHotel, tourmindSuggestions } from "./tourmind/search";
+import { normalizeTourmind } from "./tourmind/normalize";
 import {
   hotelbedsSuggestions,
   resolveHotelbedsDestination,
@@ -145,11 +147,17 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
  */
 export async function suggestAll(query: string, locale: Locale, limit = 8): Promise<Suggestion[]> {
   const local = suggest(query, locale, limit);
-  if (!isHotelbedsEnabled()) return local;
+
+  // Both live suppliers read their own local caches here, so typing never
+  // spends a supplier request no matter how many are configured.
+  const fromTourmind = await tourmindSuggestions(query, locale, limit);
+  const withTourmind = [...local, ...fromTourmind.filter((s) => !local.some((l) => l.id === s.id))];
+
+  if (!isHotelbedsEnabled()) return withTourmind.slice(0, limit);
 
   const live = await hotelbedsSuggestions(query, locale, limit);
-  const seen = new Set(local.map((item) => item.id));
-  const merged = [...local];
+  const seen = new Set(withTourmind.map((item) => item.id));
+  const merged = [...withTourmind];
   for (const item of live) {
     if (seen.has(item.id)) continue;
     merged.push(item);
@@ -466,6 +474,13 @@ export async function runHotelAvailability(
 ): Promise<NormalizedHotel | null> {
   // Live properties resolve through the supplier adapter; demo properties keep
   // using the simulated sources. Both return the same canonical shape.
+  if (isTourmindSlug(slug)) {
+    const result = await searchTourmindHotel(slug, intent, locale);
+    if (!result) return null;
+    const adapted = normalizeTourmind(result, intent, locale);
+    return { hotel: adapted.hotel, rooms: adapted.rooms, offers: adapted.offers, sourceCount: 1 };
+  }
+
   if (slug.startsWith("hb-") && isHotelbedsEnabled()) {
     const adapted = await searchHotelbedsHotel(slug, intent, locale);
     if (!adapted) return null;

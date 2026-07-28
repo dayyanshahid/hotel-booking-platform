@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { boardCodeFor, buildCancellation, buildPrice, remainingLabel } from "@/lib/server/tourmind/adapter";
 import { TM_MEAL_TO_BOARD } from "@/lib/server/tourmind/types";
+import { cityFor, distanceKm } from "@/lib/server/tourmind/catalogue";
+import { isTourmindSlug, tourmindSlug } from "@/lib/server/tourmind/search";
 import type { SearchIntent } from "@/lib/types";
 
 /**
@@ -141,5 +143,52 @@ describe("tourmind vocabulary", () => {
     expect(remainingLabel({ Allotment: 40 }, "en")).toBeUndefined();
     expect(remainingLabel({ Allotment: 0 }, "en")).toBeUndefined();
     expect(remainingLabel({}, "en")).toBeUndefined();
+  });
+});
+
+describe("tourmind catalogue mapping", () => {
+  const tokyoish = { countryCode: "JP", lat: 35.68, lng: 139.65 };
+
+  it("places a property in the nearest city in its own country", () => {
+    expect(cityFor(tokyoish)?.slug).toBe("tokyo");
+  });
+
+  it("never places a property in a city across a border", () => {
+    // Two cities can be thirty kilometres apart across a frontier, and a hotel
+    // in one is not inventory for the other. Country is checked first.
+    const nearTokyoButWrongCountry = { ...tokyoish, countryCode: "KR" };
+    expect(cityFor(nearTokyoButWrongCountry)?.slug).not.toBe("tokyo");
+  });
+
+  it("drops a property that is nowhere near a city we list", () => {
+    // Mid-Pacific, correct country code, far from everything.
+    expect(cityFor({ countryCode: "JP", lat: 20, lng: 150 })).toBeNull();
+  });
+
+  it("measures distance well enough to separate neighbouring cities", () => {
+    const osaka = { lat: 34.6937, lng: 135.5023 };
+    const kyoto = { lat: 35.0116, lng: 135.7681 };
+    const km = distanceKm(osaka, kyoto);
+    // Real-world Osaka–Kyoto is about 43 km.
+    expect(km).toBeGreaterThan(35);
+    expect(km).toBeLessThan(55);
+  });
+
+  it("matches on coordinates, not on how a city name is spelled", () => {
+    // Their transliteration ("ShangHai") differs from ours, which is exactly
+    // why the mapping is geometric.
+    expect(cityFor({ countryCode: "CN", lat: 31.23, lng: 121.47 })?.slug).toBe("shanghai");
+  });
+});
+
+describe("tourmind slugs", () => {
+  it("round-trips a hotel id through its slug", () => {
+    expect(tourmindSlug(8268393)).toBe("tm-8268393");
+    expect(isTourmindSlug("tm-8268393")).toBe(true);
+  });
+
+  it("does not claim slugs belonging to another source", () => {
+    expect(isTourmindSlug("hb-12345")).toBe(false);
+    expect(isTourmindSlug("olaya-grand-riyadh")).toBe(false);
   });
 });

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "hotelbeds:sync": "tsx --conditions=react-server scripts/hotelbeds-sync.ts",
-    "hotelbeds:smoke": "tsx --conditions=react-server scripts/hotelbeds-smoke.ts"
+    "hotelbeds:smoke": "tsx --conditions=react-server scripts/hotelbeds-smoke.ts",
+    "tourmind:sync": "tsx --conditions=react-server scripts/tourmind-sync.ts"
   },
   "dependencies": {
     "next": "16.2.12",

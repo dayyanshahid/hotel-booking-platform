@@ -206,6 +206,31 @@ Enforced by `tests/hotelbeds.test.ts`, not by convention:
 
 ---
 
+## Suppliers
+
+Two live suppliers sit behind the same canonical contract, and a third set of
+simulated sources fills in when neither is configured. Nothing downstream — no
+route, screen or test — can tell which one an offer came from.
+
+| | Hotelbeds (APItude) | TourMind (TMS 2.0) |
+| --- | --- | --- |
+| Auth | `Api-key` + SHA256 `X-Signature` header | credentials in the request body |
+| Hotel id | string codes | integers |
+| Board | board codes (`BB`, `HB`) | numeric meal enum 1–9 |
+| Price | per-rate net | whole-stay total |
+| Errors | HTTP status | HTTP 200 with an `Error` object |
+| Cancellation | charge-from windows | charge-window start = free-until |
+
+**Mapping.** TourMind's hotel ids mean nothing outside their system, so
+`npm run tourmind:sync -- --countries=PK,AE,SA` pulls their static catalogue and
+matches each property to one of our cities **by coordinate**, not by city name —
+transliteration ("ShangHai" vs "Shanghai") breaks name matching, and city names
+repeat across countries. Country is checked first and is not negotiable: two
+cities can be 30 km apart across a border. Properties that fall outside every
+city we list are dropped rather than stored.
+
+---
+
 ## Demo data and simulation
 
 Everything is generated locally — no network calls, no API keys.
