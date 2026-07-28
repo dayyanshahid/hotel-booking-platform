@@ -320,9 +320,18 @@ export interface HbTypesResponse {
 export const HB_IMAGE_BASE = "https://photos.hotelbeds.com/giata";
 export type HbImageSize = "original" | "bigger" | "xl" | "big" | "medium" | "small";
 
+/**
+ * A supplier image, addressed through our own origin.
+ *
+ * The bytes still come from the supplier's CDN — this only hides which CDN that
+ * is. Naming the wholesaler in thirty image tags on every property page tells
+ * every visitor and every agency who we buy from, and the platform contract
+ * (§9.4) keeps supplier identity off client responses.
+ */
 export function hbImageUrl(path: string | undefined, size: HbImageSize = "bigger"): string | undefined {
   if (!path) return undefined;
-  return `${HB_IMAGE_BASE}/${size}/${path.replace(/^\//, "")}`;
+  const clean = `${size}/${path.replace(/^\//, "")}`;
+  return `/api/image/supplier?s=hb&p=${encodeURIComponent(clean)}`;
 }
 
 export function toNumber(value: string | number | undefined, fallback = 0): number {

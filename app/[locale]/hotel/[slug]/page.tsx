@@ -5,6 +5,7 @@ import { buildHotel, getHotelSeed, HOTEL_SEEDS } from "@/lib/data/hotels";
 import { getDestination } from "@/lib/data/destinations";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { intentFromSearchParams } from "@/lib/nav";
+import { liveHotelBySlug } from "@/lib/server/live-hotel";
 import type { Locale } from "@/lib/types";
 
 export function generateStaticParams() {
@@ -19,8 +20,10 @@ export async function generateMetadata({
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   const seed = getHotelSeed(slug);
-  if (!seed) return { title: "Not found" };
-  const hotel = buildHotel(seed, locale);
+  // A live property gets its real title and description too; leaving it as
+  // "Not found" was telling crawlers a page that renders does not exist.
+  const hotel = seed ? buildHotel(seed, locale) : await liveHotelBySlug(slug, locale);
+  if (!hotel) return { title: "Not found" };
   return {
     title: hotel.seo.metaTitle,
     description: hotel.seo.metaDescription,
@@ -47,15 +50,26 @@ export default async function HotelPage({
   const { locale: raw, slug } = await params;
   const query = await searchParams;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
+  /*
+   * Demo inventory first, then live supply.
+   *
+   * Search has always returned Hotelbeds and TourMind properties, and every one
+   * of them landed here on a "page not found" — the route only knew the seeded
+   * catalogue. A result a traveller cannot open is worse than one they never
+   * saw, because they have already chosen it.
+   */
   const seed = getHotelSeed(slug);
-  if (!seed) notFound();
+  const hotel = seed ? buildHotel(seed, locale) : await liveHotelBySlug(slug, locale);
+  if (!hotel) notFound();
 
-  const hotel = buildHotel(seed, locale);
-  const destination = getDestination(seed.destinationId)!;
+  const destination = getDestination(hotel.destinationId);
   const t = createTranslator(locale);
   const intent = intentFromSearchParams(query, locale);
 
-  const similar = HOTEL_SEEDS.filter((h) => h.destinationId === seed.destinationId && h.slug !== slug)
+  // "Similar" only means anything within a destination we hold. A live property
+  // in a city with no seeded inventory simply gets no suggestions rather than
+  // suggestions from somewhere else.
+  const similar = (destination ? HOTEL_SEEDS.filter((h) => h.destinationId === destination.id && h.slug !== slug) : [])
     .slice(0, 3)
     .map((h) => {
       const other = buildHotel(h, locale);

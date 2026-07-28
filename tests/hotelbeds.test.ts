@@ -14,6 +14,7 @@ import { timezoneForCountry } from "@/lib/server/timezones";
 import { convertCurrency } from "@/lib/format";
 import type { HbAvailabilityResponse, HbHotel } from "@/lib/server/hotelbeds/types";
 import type { SearchIntent } from "@/lib/types";
+import { hbImageUrl } from "@/lib/server/hotelbeds/types";
 
 /**
  * The integration is tested against a recorded payload rather than the live API:
@@ -274,5 +275,30 @@ describe("commercial policy", () => {
     const result = applyMarkup(100, { percent: 12 });
     expect(result.total).toBe(112);
     expect(result.net).toBe(100);
+  });
+});
+
+describe("supplier image addressing", () => {
+  /**
+   * A property page carrying `photos.hotelbeds.com` in thirty image tags names
+   * our wholesaler to every visitor, every agency and every competitor. The
+   * platform contract keeps supplier identity off client responses, and a CDN
+   * hostname is identity.
+   */
+  it("addresses supplier photography through our own origin", () => {
+    const url = hbImageUrl("41/419658/419658a_hb_a_001.jpg");
+    expect(url).toBeDefined();
+    expect(url).toMatch(/^\/api\/image\/supplier\?/);
+    expect(url).not.toContain("hotelbeds");
+    expect(url).not.toContain("http");
+  });
+
+  it("keeps the size prefix so the right rendition is fetched", () => {
+    expect(decodeURIComponent(hbImageUrl("41/x.jpg") ?? "")).toContain("bigger/41/x.jpg");
+    expect(decodeURIComponent(hbImageUrl("41/x.jpg", "original") ?? "")).toContain("original/41/x.jpg");
+  });
+
+  it("has nothing to address when the supplier gave no path", () => {
+    expect(hbImageUrl(undefined)).toBeUndefined();
   });
 });
