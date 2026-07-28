@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import { Card, SectionHeading, Skeleton } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { Money, PageHeader, Section, StatSkeleton, Stat, StatGrid } from "@/components/agency/ui";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
@@ -49,19 +50,28 @@ function Reports({ locale }: { locale: Locale }) {
     })();
   }, []);
 
-  if (!data) return <Skeleton className="h-64 w-full" />;
+  if (!data) return <StatSkeleton />;
   const currency = data.currency as CurrencyCode;
 
   return (
     <div className="space-y-5">
-      <SectionHeading title={t("agency.reports")} description={t("agency.reportsBody")} />
+      <PageHeader title={t("agency.reports")} description={t("agency.reportsBody")} />
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Stat label={t("agency.bookingsMade")} value={String(data.totals.bookings)} />
-        <Stat label={t("agency.sold")} value={formatMoney(data.totals.sell, currency, locale)} />
-        <Stat label={t("agency.margin")} value={formatMoney(data.totals.margin, currency, locale)} />
-        <Stat label={t("agency.cancelledCount")} value={String(data.totals.cancelled)} />
-      </div>
+      <StatGrid>
+        <Stat icon="plane" label={t("agency.bookingsMade")} value={String(data.totals.bookings)} />
+        <Stat
+          icon="receipt"
+          label={t("agency.sold")}
+          value={<Money amount={data.totals.sell} currency={currency} locale={locale} size="lg" className="text-xl" />}
+        />
+        <Stat
+          icon="star"
+          label={t("agency.margin")}
+          tone="positive"
+          value={<Money amount={data.totals.margin} currency={currency} locale={locale} size="lg" className="text-xl" />}
+        />
+        <Stat icon="close" label={t("agency.cancelledCount")} value={String(data.totals.cancelled)} />
+      </StatGrid>
 
       <Table
         title={t("agency.byMonth")}
@@ -88,15 +98,6 @@ function Reports({ locale }: { locale: Locale }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-muted text-xs">{label}</p>
-      <p className="mt-1 text-lg font-bold">{value}</p>
-    </Card>
-  );
-}
-
 function Table({
   title,
   rows,
@@ -113,16 +114,14 @@ function Table({
   const { t } = useApp();
   if (!rows.length) {
     return (
-      <section className="space-y-2">
-        <h2 className="font-semibold">{title}</h2>
+      <Section title={title}>
         <p className="text-muted text-sm">{empty}</p>
-      </section>
+      </Section>
     );
   }
 
   return (
-    <section className="space-y-2">
-      <h2 className="font-semibold">{title}</h2>
+    <Section title={title}>
       {/* Five money columns do not fit a phone; the table scrolls rather than wraps. */}
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[560px] text-sm">
@@ -157,6 +156,6 @@ function Table({
           </tbody>
         </table>
       </Card>
-    </section>
+    </Section>
   );
 }

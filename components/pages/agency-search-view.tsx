@@ -5,20 +5,10 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  Field,
-  Input,
-  Modal,
-  SectionHeading,
-  Select,
-  Skeleton,
-  cx,
-} from "@/components/ui";
-import { addDays, formatDate, formatMoney, nightsBetween, todayIso } from "@/lib/format";
+import { Alert, Badge, Button, Card, Field, Input, Modal, Select, Skeleton, cx } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
+import { Nothing, PageHeader, TableSkeleton, TradePrices } from "@/components/agency/ui";
+import { addDays, formatDate, nightsBetween, todayIso } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type { CurrencyCode, HotelResultCard, Locale, Suggestion } from "@/lib/types";
@@ -73,6 +63,13 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   /** Offers the agent has set aside for a quote, in the order they picked them. */
   const [basket, setBasket] = useState<string[]>([]);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  /**
+   * Sorting is client-side on purpose. The supplier's own ranking is the
+   * default and stays authoritative; margin and price are the two questions an
+   * agent asks of a page they already have, and re-searching to answer them
+   * would spend supplier quota to reorder rows we are holding.
+   */
+  const [sort, setSort] = useState<"recommended" | "marginDesc" | "priceAsc">("recommended");
 
   useEffect(() => {
     if (query.trim().length < 2) return;
@@ -145,9 +142,22 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
   const nights = nightsBetween(criteria.checkIn, criteria.checkOut);
 
+  const ordered = (() => {
+    if (!results) return results;
+    const rows = [...results];
+    if (sort === "marginDesc") {
+      // Rows we have not priced yet sink rather than sorting as zero margin.
+      return rows.sort(
+        (a, b) => (quotes[b.offerSummary.offerId]?.margin ?? -1) - (quotes[a.offerSummary.offerId]?.margin ?? -1),
+      );
+    }
+    if (sort === "priceAsc") return rows.sort((a, b) => a.price.total - b.price.total);
+    return rows;
+  })();
+
   return (
-    <div className="space-y-4">
-      <SectionHeading title={t("agency.searchStays")} description={t("agency.searchBody")} />
+    <div className="space-y-5">
+      <PageHeader title={t("agency.searchStays")} description={t("agency.searchBody")} />
 
       <Card className="space-y-3 p-4">
         <div className="grid gap-3 lg:grid-cols-[2fr_1fr_1fr_auto_auto]">
@@ -250,115 +260,144 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       {error && <Alert tone="critical">{error}</Alert>}
       {partial && <Alert tone="warning">{t("results.partial")}</Alert>}
 
+      {/*
+        The basket follows the page down. An agent adding a fifth rate should
+        not have to scroll back up to find out how many they have, or to act on
+        them — that scroll is where a half-built quote gets abandoned.
+      */}
       {basket.length > 0 && (
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <p className="text-sm">
-            <strong>{basket.length}</strong> {t("agency.selectedRates")}
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setQuoteOpen(true)}>
-              {t("agency.newQuote")}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setBasket([])}>
-              {t("common.clear")}
-            </Button>
-          </div>
-        </Card>
+        <div className="sticky top-2 z-20">
+          <Card className="border-brand-300 bg-brand-50/90 flex flex-wrap items-center justify-between gap-3 p-3 backdrop-blur">
+            <p className="flex items-center gap-2 text-sm">
+              <span className="bg-brand-600 grid size-6 place-items-center rounded-full text-xs font-bold text-white">
+                {basket.length}
+              </span>
+              {t("agency.selectedRates")}
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => setQuoteOpen(true)}>
+                {t("agency.newQuote")}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setBasket([])}>
+                {t("common.clear")}
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
-      {busy && <Skeleton className="h-40 w-full" />}
+      {busy && <TableSkeleton rows={4} />}
 
-      {results && !results.length && !busy && <Alert tone="info">{t("results.empty")}</Alert>}
+      {results && !results.length && !busy && (
+        <Nothing icon="search" title={t("results.empty")} body={t("agency.noResultsBody")} />
+      )}
 
-      {results && results.length > 0 && (
-        <ul className="space-y-2">
-          {results.map((card) => {
-            const quote = quotes[card.offerSummary.offerId];
-            const picked = basket.includes(card.offerSummary.offerId);
-            const currency = card.price.currency as CurrencyCode;
-            return (
-              <li key={card.canonicalHotelId}>
-                <Card className="p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold wrap-anywhere">{card.name}</p>
-                      <p className="text-muted text-sm wrap-anywhere">
-                        {"★".repeat(Math.max(0, Math.round(card.category)))} · {card.neighborhood}, {card.locality}
-                      </p>
-                      <p className="text-muted mt-1 text-sm wrap-anywhere">
-                        {card.offerSummary.roomSummary} · {card.offerSummary.boardSummary}
-                      </p>
-                      <p
-                        className={cx(
-                          "mt-1 text-xs",
-                          card.offerSummary.refundable ? "text-positive-700" : "text-critical-700",
-                        )}
-                      >
-                        {card.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
-                      </p>
-                      {card.remainingLabel && (
-                        <p className="text-caution-700 mt-1 text-xs font-medium">{card.remainingLabel}</p>
-                      )}
-                    </div>
+      {ordered && ordered.length > 0 && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted text-sm">{t("agency.resultCount", { n: ordered.length })}</p>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted">{t("agency.sortBy")}</span>
+              <Select
+                value={sort}
+                aria-label={t("agency.sortBy")}
+                onChange={(e) => setSort(e.target.value as typeof sort)}
+                className="w-auto"
+              >
+                <option value="recommended">{t("agency.sortRecommended")}</option>
+                <option value="marginDesc">{t("agency.sortMargin")}</option>
+                <option value="priceAsc">{t("agency.sortPrice")}</option>
+              </Select>
+            </label>
+          </div>
 
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="text-end">
-                        <p className="text-muted text-xs">{t("agency.public")}</p>
-                        <p className="text-sm line-through opacity-70">
-                          {formatMoney(card.price.total, currency, locale)}
+          <ul className="space-y-2">
+            {ordered.map((card) => {
+              const quote = quotes[card.offerSummary.offerId];
+              const picked = basket.includes(card.offerSummary.offerId);
+              const currency = card.price.currency as CurrencyCode;
+              return (
+                <li key={card.canonicalHotelId}>
+                  <Card
+                    className={cx(
+                      "p-4 transition-colors",
+                      picked && "border-brand-400 bg-brand-50/30",
+                    )}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <p className="font-semibold wrap-anywhere">{card.name}</p>
+                          {card.category > 0 && (
+                            <span className="text-caution-700 text-xs" aria-label={`${card.category} stars`}>
+                              {"★".repeat(Math.round(card.category))}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-muted mt-0.5 flex items-center gap-1 text-xs wrap-anywhere">
+                          <Icon name="pin" size={13} />
+                          {card.neighborhood}, {card.locality}
                         </p>
+                        <p className="mt-1.5 text-sm wrap-anywhere">
+                          {card.offerSummary.roomSummary}
+                          <span className="text-muted"> · {card.offerSummary.boardSummary}</span>
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Badge tone={card.offerSummary.refundable ? "positive" : "neutral"}>
+                            {card.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
+                          </Badge>
+                          {card.remainingLabel && <Badge tone="caution">{card.remainingLabel}</Badge>}
+                        </div>
                       </div>
-                      {quote ? (
-                        <dl className="bg-brand-50/60 hairline grid grid-cols-3 gap-3 rounded-[var(--radius-control)] border px-3 py-2 text-xs">
-                          <div>
-                            <dt className="text-muted">{t("agency.cost")}</dt>
-                            <dd className="font-semibold">{formatMoney(quote.cost, currency, locale)}</dd>
+
+                      <div className="flex flex-col items-end gap-2.5">
+                        {quote ? (
+                          <TradePrices
+                            cost={quote.cost}
+                            sell={quote.sell}
+                            margin={quote.margin}
+                            currency={currency}
+                            locale={locale}
+                            publicPrice={card.price.total}
+                          />
+                        ) : (
+                          <div className="space-y-1.5 text-end">
+                            <Skeleton className="ms-auto h-3 w-24" />
+                            <Skeleton className="ms-auto h-6 w-28" />
+                            <Skeleton className="ms-auto h-3 w-36" />
                           </div>
-                          <div>
-                            <dt className="text-muted">{t("agency.sell")}</dt>
-                            <dd className="font-semibold">{formatMoney(quote.sell, currency, locale)}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-muted">{t("agency.margin")}</dt>
-                            <dd className="text-positive-700 font-semibold">
-                              {formatMoney(quote.margin, currency, locale)}
-                            </dd>
-                          </div>
-                        </dl>
-                      ) : (
-                        <Skeleton className="h-12 w-56" />
-                      )}
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={picked ? "ghost" : "secondary"}
-                          onClick={() =>
-                            setBasket((prev) =>
-                              picked
-                                ? prev.filter((id) => id !== card.offerSummary.offerId)
-                                : [...prev, card.offerSummary.offerId],
-                            )
-                          }
-                        >
-                          {picked ? t("agency.inQuote") : t("agency.addToQuote")}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="action"
-                          onClick={() =>
-                            router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))
-                          }
-                        >
-                          {t("agency.book")}
-                        </Button>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant={picked ? "ghost" : "secondary"}
+                            onClick={() =>
+                              setBasket((prev) =>
+                                picked
+                                  ? prev.filter((id) => id !== card.offerSummary.offerId)
+                                  : [...prev, card.offerSummary.offerId],
+                              )
+                            }
+                          >
+                            {picked && <Icon name="check" size={14} />}
+                            {picked ? t("agency.inQuote") : t("agency.addToQuote")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="action"
+                            onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
+                          >
+                            {t("agency.book")}
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              </li>
-            );
-          })}
-        </ul>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       <QuoteModal

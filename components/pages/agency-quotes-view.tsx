@@ -5,15 +5,8 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  SectionHeading,
-  Skeleton,
-} from "@/components/ui";
+import { Alert, Badge, Button, Card, Skeleton } from "@/components/ui";
+import { Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyQuote } from "@/lib/agency/types";
@@ -46,10 +39,10 @@ function QuoteList({ locale }: { locale: Locale }) {
 
   return (
     <div className="space-y-4">
-      <SectionHeading
+      <PageHeader
         title={t("agency.quotes")}
         description={t("agency.quotesBody")}
-        action={
+        actions={
           <Link href={href(locale, "/agency/search")}>
             <Button variant="secondary" size="sm">
               {t("agency.searchStays")}
@@ -58,13 +51,13 @@ function QuoteList({ locale }: { locale: Locale }) {
         }
       />
 
-      {!quotes && <Skeleton className="h-32 w-full" />}
+      {!quotes && <TableSkeleton rows={3} />}
       {quotes && !quotes.length && (
-        <EmptyState
-          standalone
+        <Nothing
+          icon="receipt"
           title={t("agency.noQuotes")}
           body={t("agency.noQuotesBody")}
-          actions={
+          action={
             <Link href={href(locale, "/agency/search")}>
               <Button>{t("agency.searchStays")}</Button>
             </Link>
@@ -96,7 +89,7 @@ function QuoteList({ locale }: { locale: Locale }) {
                     <p className="text-muted font-mono text-xs">{quote.reference}</p>
                   </div>
                   <div className="text-end">
-                    <p className="font-bold">{formatMoney(total, quote.currency as CurrencyCode, locale)}</p>
+                    <Money amount={total} currency={quote.currency} locale={locale} size="lg" />
                     <p className="text-muted text-xs">
                       {t("agency.validUntil")} {formatDate(quote.validUntil.slice(0, 10), locale)}
                     </p>

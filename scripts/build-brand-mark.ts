@@ -16,7 +16,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const SIZE = 200;
 const R = 88;
 const CX = 100;
 const CY = 100;

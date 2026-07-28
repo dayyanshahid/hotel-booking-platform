@@ -5,19 +5,8 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Field,
-  Input,
-  SectionHeading,
-  Select,
-  Skeleton,
-  cx,
-} from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, cx } from "@/components/ui";
+import { DataTable, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
@@ -149,95 +138,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
   );
 }
 
-/* ----------------------------------------------------------- dashboard */
-
-export function AgencyDashboardView({ locale }: { locale: Locale }) {
-  return (
-    <PortalShell locale={locale}>
-      {(context) => <Dashboard locale={locale} context={context} />}
-    </PortalShell>
-  );
-}
-
-function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext }) {
-  const { t } = useApp();
-  const [bookings, setBookings] = useState<AgencyBooking[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/agency/bookings", { credentials: "same-origin" });
-      const body = (await res.json()) as { ok: boolean; data?: { bookings: AgencyBooking[] } };
-      setBookings(body.ok && body.data ? body.data.bookings : []);
-    })();
-  }, []);
-
-  const currency = (context.balance?.currency ?? context.agency.credit.currency) as CurrencyCode;
-  const live = (bookings ?? []).filter((b) => b.status === "confirmed" || b.status === "pending");
-  const margin = live.reduce((sum, b) => sum + (b.sell - b.cost), 0);
-
-  return (
-    <div className="space-y-5">
-      <CreditPanel locale={locale} context={context} />
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Figure label={t("agency.commission")} value={`${context.agency.commissionPercent}%`} />
-        <Figure
-          label={t("agency.markup")}
-          value={
-            context.agency.markup.default.mode === "percent"
-              ? `${context.agency.markup.default.value}%`
-              : formatMoney(context.agency.markup.default.value, currency, locale)
-          }
-          note={
-            context.agency.markup.overrides.length
-              ? t("agency.overrideCount", { n: context.agency.markup.overrides.length })
-              : undefined
-          }
-        />
-        <Figure label={t("agency.margin")} value={formatMoney(margin, currency, locale)} />
-      </div>
-
-      <section className="space-y-3">
-        <SectionHeading
-          title={t("agency.bookings")}
-          description={t("agency.bookingsBody")}
-          action={
-            <Link href={href(locale, "/agency/bookings")}>
-              <Button variant="secondary" size="sm">
-                {t("agency.viewAll")}
-              </Button>
-            </Link>
-          }
-        />
-        {!bookings && <Skeleton className="h-24 w-full" />}
-        {bookings && !bookings.length && (
-          <EmptyState
-            standalone
-            title={t("agency.noBookings")}
-            actions={
-              <Link href={href(locale, "/agency/search")}>
-                <Button>{t("agency.searchStays")}</Button>
-              </Link>
-            }
-          />
-        )}
-        {bookings && bookings.length > 0 && (
-          <BookingTable locale={locale} bookings={bookings.slice(0, 5)} />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <Card className="p-4">
-      <p className="text-muted text-xs">{label}</p>
-      <p className="mt-1 text-lg font-bold">{value}</p>
-      {note && <p className="text-muted mt-0.5 text-xs">{note}</p>}
-    </Card>
-  );
-}
+/* --------------------------------------------------------- credit panel */
 
 /**
  * The credit line, shown as a bar.
@@ -284,6 +185,8 @@ export function AgencyBookingsView({ locale }: { locale: Locale }) {
 function BookingsPanel({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [bookings, setBookings] = useState<AgencyBooking[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
 
   useEffect(() => {
     void (async () => {
@@ -293,22 +196,54 @@ function BookingsPanel({ locale }: { locale: Locale }) {
     })();
   }, []);
 
+  const rows = (bookings ?? []).filter((booking) => {
+    if (status !== "all" && booking.status !== status) return false;
+    if (!query.trim()) return true;
+    return `${booking.reference} ${booking.hotelName} ${booking.leadGuest}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
+  });
+
   return (
-    <div className="space-y-4">
-      <SectionHeading title={t("agency.bookings")} description={t("agency.bookingsBody")} />
-      {!bookings && <Skeleton className="h-32 w-full" />}
+    <div className="space-y-5">
+      <PageHeader title={t("agency.bookings")} description={t("agency.bookingsBody")} />
+
+      {/* Filters appear only once there is enough to be worth filtering. */}
+      {bookings && bookings.length > 3 && (
+        <Card className="grid gap-3 p-4 sm:grid-cols-[2fr_1fr]">
+          <Field label={t("admin.search")} htmlFor="bk-q">
+            <Input
+              id="bk-q"
+              value={query}
+              placeholder={t("agency.bookingSearch")}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </Field>
+          <Field label={t("agency.statusLabel")} htmlFor="bk-status">
+            <Select id="bk-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="all">{t("admin.allStatuses")}</option>
+              <option value="confirmed">{t("agency.statusConfirmed")}</option>
+              <option value="pending">{t("agency.statusPending")}</option>
+              <option value="cancelled">{t("agency.statusCancelled")}</option>
+            </Select>
+          </Field>
+        </Card>
+      )}
+
+      {!bookings && <TableSkeleton />}
       {bookings && !bookings.length && (
-        <EmptyState
-          standalone
+        <Nothing
+          icon="plane"
           title={t("agency.noBookings")}
-          actions={
+          body={t("agency.noBookingsBody")}
+          action={
             <Link href={href(locale, "/agency/search")}>
               <Button>{t("agency.searchStays")}</Button>
             </Link>
           }
         />
       )}
-      {bookings && bookings.length > 0 && <BookingTable locale={locale} bookings={bookings} />}
+      {bookings && bookings.length > 0 && <BookingTable locale={locale} bookings={rows} />}
     </div>
   );
 }
@@ -331,59 +266,83 @@ const BOOKING_STATUS: Record<AgencyBooking["status"], string> = {
 /**
  * The book of business.
  *
- * A real table on a wide screen and a stack of cards on a narrow one, because
- * five money columns squeezed into a phone are five columns nobody can read.
+ * A real table now rather than a stack of cards: five money columns are only
+ * comparable when they line up, and they only line up in a table. It scrolls
+ * inside its own box on a phone instead of collapsing into prose, and the two
+ * least load-bearing columns drop out below `sm`.
  */
 function BookingTable({ locale, bookings }: { locale: Locale; bookings: AgencyBooking[] }) {
   const { t } = useApp();
   return (
-    <ul className="space-y-2">
-      {bookings.map((booking) => {
-        const currency = booking.currency as CurrencyCode;
-        return (
-          <li key={booking.reference}>
-            <Card className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <Badge tone={BOOKING_TONE[booking.status]}>{t(BOOKING_STATUS[booking.status])}</Badge>
-                  <p className="mt-1 font-semibold wrap-anywhere">
-                    <Link
-                      href={href(locale, `/agency/bookings/${booking.reference}`)}
-                      className="hover:underline"
-                    >
-                      {booking.hotelName}
-                    </Link>
-                  </p>
-                  <p className="text-muted text-sm">
-                    {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)}
-                  </p>
-                  <p className="text-muted text-xs">
-                    {t("agency.leadGuest")}: {booking.leadGuest} · {t("agency.bookedBy")} {booking.agentName}
-                  </p>
-                  <p className="text-muted font-mono text-xs">{booking.reference}</p>
-                </div>
-                <dl className="grid grid-cols-3 gap-4 text-end text-sm">
-                  <div>
-                    <dt className="text-muted text-xs">{t("agency.cost")}</dt>
-                    <dd className="font-semibold">{formatMoney(booking.cost, currency, locale)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted text-xs">{t("agency.sell")}</dt>
-                    <dd className="font-semibold">{formatMoney(booking.sell, currency, locale)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted text-xs">{t("agency.margin")}</dt>
-                    <dd className="text-positive-700 font-semibold">
-                      {formatMoney(booking.sell - booking.cost, currency, locale)}
-                    </dd>
-                  </div>
-                </dl>
-              </div>
-            </Card>
-          </li>
-        );
-      })}
-    </ul>
+    <DataTable
+      rows={bookings}
+      rowKey={(booking) => booking.reference}
+      minWidth={720}
+      empty={<Nothing icon="search" title={t("agency.noMatches")} />}
+      columns={[
+        {
+          key: "property",
+          header: t("admin.property"),
+          render: (booking) => (
+            <div className="min-w-0">
+              <Link
+                href={href(locale, `/agency/bookings/${booking.reference}`)}
+                className="font-medium wrap-anywhere hover:underline"
+              >
+                {booking.hotelName}
+              </Link>
+              <p className="text-muted font-mono text-xs">{booking.reference}</p>
+            </div>
+          ),
+        },
+        {
+          key: "guest",
+          header: t("agency.leadGuest"),
+          secondary: true,
+          render: (booking) => (
+            <div className="min-w-0">
+              <p className="wrap-anywhere">{booking.leadGuest}</p>
+              <p className="text-muted text-xs wrap-anywhere">{booking.agentName}</p>
+            </div>
+          ),
+        },
+        {
+          key: "stay",
+          header: t("admin.stay"),
+          render: (booking) => (
+            <span className="whitespace-nowrap">
+              {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)}
+            </span>
+          ),
+        },
+        {
+          key: "status",
+          header: t("agency.statusLabel"),
+          render: (booking) => <Badge tone={BOOKING_TONE[booking.status]}>{t(BOOKING_STATUS[booking.status])}</Badge>,
+        },
+        {
+          key: "cost",
+          header: t("agency.cost"),
+          align: "end",
+          secondary: true,
+          render: (booking) => <Money amount={booking.cost} currency={booking.currency} locale={locale} />,
+        },
+        {
+          key: "sell",
+          header: t("agency.sell"),
+          align: "end",
+          render: (booking) => <Money amount={booking.sell} currency={booking.currency} locale={locale} />,
+        },
+        {
+          key: "margin",
+          header: t("agency.margin"),
+          align: "end",
+          render: (booking) => (
+            <Money amount={booking.sell - booking.cost} currency={booking.currency} locale={locale} tone="positive" />
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -431,51 +390,62 @@ function Periods({ locale }: { locale: Locale }) {
     })();
   }, []);
 
-  if (!periods) return <Skeleton className="h-24 w-full" />;
+  if (!periods) return <TableSkeleton rows={3} />;
   if (!periods.length) return null;
 
   return (
     <section className="space-y-2">
       <SectionHeading title={t("agency.periods")} description={t("agency.periodsBody")} />
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
-          <thead className="text-muted hairline border-b text-xs">
-            <tr>
-              <th className="p-3 text-start font-medium">{t("agency.month")}</th>
-              <th className="p-3 text-end font-medium">{t("agency.charged")}</th>
-              <th className="p-3 text-end font-medium">{t("agency.credited")}</th>
-              <th className="p-3 text-end font-medium">{t("agency.settled")}</th>
-              <th className="p-3 text-end font-medium">{t("agency.outstanding")}</th>
-              <th className="p-3 text-end font-medium" />
-            </tr>
-          </thead>
-          <tbody className="divide-ink-100 divide-y">
-            {periods.map((period) => {
-              const currency = period.currency as CurrencyCode;
-              const outstanding = period.charged - period.credited - period.settled;
-              return (
-                <tr key={period.month}>
-                  <td className="p-3 font-medium">{period.month}</td>
-                  <td className="p-3 text-end tabular-nums">{formatMoney(period.charged, currency, locale)}</td>
-                  <td className="p-3 text-end tabular-nums">{formatMoney(period.credited, currency, locale)}</td>
-                  <td className="p-3 text-end tabular-nums">{formatMoney(period.settled, currency, locale)}</td>
-                  <td className="p-3 text-end font-semibold tabular-nums">
-                    {formatMoney(Math.max(0, outstanding), currency, locale)}
-                  </td>
-                  <td className="p-3 text-end">
-                    <a
-                      className="text-brand-700 text-xs underline"
-                      href={`/api/agency/statements?format=csv&month=${period.month}`}
-                    >
-                      CSV
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </Card>
+      <DataTable
+        rows={periods}
+        rowKey={(period) => period.month}
+        minWidth={560}
+        columns={[
+          { key: "month", header: t("agency.month"), render: (p) => <span className="font-medium">{p.month}</span> },
+          {
+            key: "charged",
+            header: t("agency.charged"),
+            align: "end",
+            render: (p) => <Money amount={p.charged} currency={p.currency} locale={locale} />,
+          },
+          {
+            key: "credited",
+            header: t("agency.credited"),
+            align: "end",
+            secondary: true,
+            render: (p) => <Money amount={p.credited} currency={p.currency} locale={locale} tone="muted" />,
+          },
+          {
+            key: "settled",
+            header: t("agency.settled"),
+            align: "end",
+            render: (p) => <Money amount={p.settled} currency={p.currency} locale={locale} />,
+          },
+          {
+            key: "outstanding",
+            header: t("agency.outstanding"),
+            align: "end",
+            render: (p) => (
+              <Money
+                amount={Math.max(0, p.charged - p.credited - p.settled)}
+                currency={p.currency}
+                locale={locale}
+                tone={p.charged - p.credited - p.settled > 0 ? "default" : "muted"}
+              />
+            ),
+          },
+          {
+            key: "csv",
+            header: "",
+            align: "end",
+            render: (p) => (
+              <a className="text-brand-700 text-xs underline" href={`/api/agency/statements?format=csv&month=${p.month}`}>
+                CSV
+              </a>
+            ),
+          },
+        ]}
+      />
     </section>
   );
 }
@@ -502,7 +472,7 @@ function Statement({ locale }: { locale: Locale }) {
   return (
     <section className="space-y-3">
       <SectionHeading title={t("agency.statement")} description={t("agency.statementBody")} />
-      {!entries && <Skeleton className="h-24 w-full" />}
+      {!entries && <TableSkeleton rows={4} />}
       {entries && !entries.length && <p className="text-muted text-sm">{t("agency.noMovements")}</p>}
       {entries && entries.length > 0 && (
         <Card className="divide-ink-100 divide-y">
@@ -593,10 +563,10 @@ function TeamPanel({ context }: { context: AgencyContext }) {
 
   return (
     <div className="space-y-4">
-      <SectionHeading title={t("agency.team")} description={t("agency.teamBody")} />
+      <PageHeader title={t("agency.team")} description={t("agency.teamBody")} />
       {error && <Alert tone="critical">{error}</Alert>}
 
-      {!agents && <Skeleton className="h-24 w-full" />}
+      {!agents && <TableSkeleton rows={3} />}
       {agents && (
         <Card className="divide-ink-100 divide-y">
           {agents.map((agent) => (
@@ -700,7 +670,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
 
   return (
     <div className="space-y-4">
-      <SectionHeading title={t("agency.settings")} />
+      <PageHeader title={t("agency.settings")} description={t("agency.settingsIntro")} />
       {error && <Alert tone="critical">{error}</Alert>}
       {saved && <Alert tone="success">{t("agency.markupSaved")}</Alert>}
 
