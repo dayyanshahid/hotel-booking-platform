@@ -188,8 +188,18 @@ html[data-theme="dark"] .shadow-\[var\(--shadow-card\)\] {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
 }
 
-* {
-  border-color: var(--border);
+/*
+ * Default border colour.
+ *
+ * Must live in a layer. Unlayered rules beat every layered one regardless of
+ * specificity, so an unlayered `*` here silently overrode every
+ * `border-<colour>` utility in the app — the search bar's yellow frame was
+ * rendering grey, and so was anything else that named a border colour.
+ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
 }
 
 body {
@@ -508,4 +518,200 @@ html[data-theme="dark"] .bg-sand-50 {
 .full-bleed {
   margin-inline: calc(50% - 50vw);
   padding-inline: calc(50vw - 50%);
+}
+
+/* ===================================================================== */
+/* Layout system                                                          */
+/* ===================================================================== */
+
+/**
+ * Alternating page bands.
+ *
+ * A long page built entirely from white cards on a grey page reads as one
+ * undifferentiated scroll — every section the same weight, so none of them are.
+ * These give a section its own full-width ground, so the page has a rhythm you
+ * can feel before you read anything.
+ *
+ * `band` breaks out of the centred container the same way `.full-bleed` does and
+ * pads its content back to the container's edges.
+ */
+.band {
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+  padding-block: 3.5rem;
+}
+@media (min-width: 640px) {
+  .band {
+    padding-block: 4.5rem;
+  }
+}
+.band-plain {
+  background: var(--surface-muted);
+}
+.band-raised {
+  background: var(--surface);
+}
+.band-ink {
+  background: var(--chrome);
+  color: var(--chrome-ink);
+}
+
+/**
+ * A horizontally scrolling rail that lets the next item peek.
+ *
+ * Peeking is the affordance: a row that ends flush at the container edge looks
+ * like the end of the list, and nobody scrolls it. Snap points keep a card from
+ * being left half-cut once the finger lifts.
+ */
+.rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 78%);
+  gap: 0.75rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-inline: contain;
+  /* Bleed to the viewport edge so the peeking card is not clipped by padding. */
+  margin-inline: calc(50% - 50vw);
+  padding-inline: calc(50vw - 50%);
+  padding-block: 0.25rem 1rem;
+}
+/*
+ * Bands already break out to the viewport, so a rail inside one must not do it
+ * again — the second negative margin ate most of the row's usable width and
+ * left eight cards squeezed into a strip.
+ */
+.band .rail {
+  margin-inline: 0;
+  padding-inline: 0;
+}
+.rail > * {
+  scroll-snap-align: start;
+}
+@media (min-width: 640px) {
+  .rail {
+    grid-auto-columns: minmax(300px, 42%);
+  }
+}
+@media (min-width: 1024px) {
+  /* 4.3 columns: the fractional card is the peek that says "there is more". */
+  .rail {
+    grid-auto-columns: minmax(0, calc((100% - 3.9rem) / 4.3));
+  }
+}
+
+/**
+ * Text sitting directly on a photograph.
+ *
+ * The scrim is a gradient rather than a flat wash because the type sits at the
+ * bottom: a flat overlay dark enough for the caption also flattens the top of
+ * the image, which is the part worth showing.
+ */
+.overlay-tile {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.overlay-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.78) 0%,
+    rgb(0 0 0 / 0.42) 38%,
+    rgb(0 0 0 / 0.06) 68%,
+    transparent 100%
+  );
+}
+.overlay-tile > .overlay-content {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 2;
+  color: #fff;
+}
+@media (hover: hover) {
+  .overlay-tile img {
+    transition: transform 500ms var(--ease-out);
+  }
+  .overlay-tile:hover img {
+    transform: scale(1.04);
+  }
+}
+
+/** Numbers presented as a designed element rather than body copy. */
+.stat-figure {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+/**
+ * A search field.
+ *
+ * The label sits inside the control above its value, with an icon leading —
+ * the pattern every large travel site converged on, because it turns three
+ * labelled form rows into three tappable targets and halves the height. Labels
+ * floating outside the boxes is what made the form read as a form.
+ */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding-inline: 0.875rem;
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  transition:
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+.search-field:hover {
+  border-color: var(--border-strong);
+}
+.search-field:focus-within,
+button.search-field:focus-visible {
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.search-field .search-field-icon {
+  flex: none;
+  color: var(--text-muted);
+}
+.search-field .search-field-body {
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+}
+.search-field .search-field-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.search-field .search-field-value {
+  display: block;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-field input.search-field-value {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  padding: 0;
+}
+.search-field input.search-field-value::placeholder {
+  font-weight: 400;
+  color: var(--text-muted);
 }

@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Badge, Input, Spinner, cx } from "@/components/ui";
+import { Badge, Spinner, cx } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import type { Suggestion } from "@/lib/types";
 
 /**
@@ -17,13 +18,11 @@ export function DestinationAutocomplete({
   onSelect,
   error,
   autoFocus,
-  compact,
 }: {
   value: { id: string; label: string } | null;
   onSelect: (suggestion: { id: string; label: string; type: Suggestion["type"] } | null) => void;
   error?: string;
   autoFocus?: boolean;
-  compact?: boolean;
 }) {
   const { t, locale, recent } = useApp();
   // Derived: the typed value wins once the customer edits, otherwise the
@@ -127,33 +126,42 @@ export function DestinationAutocomplete({
 
   return (
     <div ref={boxRef} className="relative">
-      <label htmlFor={id} className={cx("text-sm font-medium", compact && "sr-only")}>
+      {/* The label lives inside the control, above the value, with the icon
+          leading — see `.search-field` for why. */}
+      <label htmlFor={id} className="sr-only">
         {t("common.destination")}
       </label>
-      <div className="relative mt-1.5">
-        <Input
-          id={id}
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={`${id}-listbox`}
-          aria-autocomplete="list"
-          aria-activedescendant={active >= 0 ? `${id}-opt-${active}` : undefined}
-          aria-describedby={error ? `${id}-error` : undefined}
-          autoComplete="off"
-          autoFocus={autoFocus}
-          error={Boolean(error)}
-          value={query}
-          placeholder={t("search.placeholder")}
-          onChange={(e) => {
+      <div className="search-field relative">
+        <Icon name="pin" size={20} className="search-field-icon" />
+        <span className="search-field-body">
+          <span aria-hidden className="search-field-label">
+            {t("common.destination")}
+          </span>
+          <input
+            id={id}
+            className="search-field-value"
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={`${id}-listbox`}
+            aria-autocomplete="list"
+            aria-activedescendant={active >= 0 ? `${id}-opt-${active}` : undefined}
+            aria-describedby={error ? `${id}-error` : undefined}
+            autoComplete="off"
+            autoFocus={autoFocus}
+            aria-invalid={error ? true : undefined}
+            value={query}
+            placeholder={t("search.placeholder")}
+            onChange={(e) => {
             setTyped(e.target.value);
             setOpen(true);
             if (value) onSelect(null);
           }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-        />
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+          />
+        </span>
         {loading && (
-          <span className="text-muted absolute inset-y-0 end-3 flex items-center">
+          <span className="text-muted flex items-center">
             <Spinner label={t("common.loading")} />
           </span>
         )}

@@ -98,7 +98,6 @@ export function SearchBar({
           value={destination}
           onSelect={(next) => setDestination(next)}
           error={errors.destinationId}
-          compact={variant === "compact"}
         />
         <DateRangePicker
           checkIn={dates.checkIn}
@@ -106,14 +105,12 @@ export function SearchBar({
           flexibility={dates.flexibility}
           onChange={setDates}
           error={errors.dates}
-          compact={variant === "compact"}
         />
         <OccupancyPicker
           rooms={occupancy.rooms}
           accessibleRoom={occupancy.accessibleRoom}
           onChange={setOccupancy}
           errors={errors}
-          compact={variant === "compact"}
         />
         <div className="flex items-end">
           <Button

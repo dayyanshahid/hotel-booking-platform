@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Button, cx } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { addDays, formatDate, nightsBetween, todayIso } from "@/lib/format";
 import { LOCALE_META } from "@/lib/i18n";
 import type { Flexibility } from "@/lib/types";
@@ -19,14 +20,12 @@ export function DateRangePicker({
   flexibility,
   onChange,
   error,
-  compact,
 }: {
   checkIn: string;
   checkOut: string;
   flexibility: Flexibility;
   onChange: (next: { checkIn: string; checkOut: string; flexibility: Flexibility }) => void;
   error?: string;
-  compact?: boolean;
 }) {
   const { t, locale } = useApp();
   const [open, setOpen] = useState(false);
@@ -103,19 +102,21 @@ export function DateRangePicker({
 
   return (
     <div ref={boxRef} className="relative">
-      <span className={cx("block text-sm font-medium", compact && "sr-only")}>{t("common.dates")}</span>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-describedby={error ? "dates-error" : undefined}
-        className={cx(
-          "surface mt-1.5 min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 text-start text-sm transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)]",
-          error && "border-critical-500",
-        )}
+        className={cx("search-field", error && "!border-critical-500")}
       >
-        {summary}
+        <Icon name="calendar" size={20} className="search-field-icon" />
+        <span className="search-field-body">
+          <span aria-hidden className="search-field-label">
+            {t("common.dates")}
+          </span>
+          <span className="search-field-value">{summary}</span>
+        </span>
       </button>
       {error && (
         <p id="dates-error" role="alert" className="text-critical-700 mt-1 text-xs font-medium">

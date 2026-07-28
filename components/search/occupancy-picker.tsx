@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Alert, Button, Checkbox, Select, cx } from "@/components/ui";
+import { Alert, Button, Checkbox, Select } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { MAX_ADULTS_PER_ROOM, MAX_CHILDREN_PER_ROOM, MAX_CHILD_AGE, MAX_ROOMS } from "@/lib/server/validate";
 import type { RoomAllocation } from "@/lib/types";
 
@@ -17,13 +18,11 @@ export function OccupancyPicker({
   accessibleRoom,
   onChange,
   errors,
-  compact,
 }: {
   rooms: RoomAllocation[];
   accessibleRoom: boolean;
   onChange: (next: { rooms: RoomAllocation[]; accessibleRoom: boolean }) => void;
   errors?: Record<string, string>;
-  compact?: boolean;
 }) {
   const { t } = useApp();
   const [open, setOpen] = useState(false);
@@ -56,17 +55,20 @@ export function OccupancyPicker({
 
   return (
     <div ref={boxRef} className="relative">
-      <span className={cx("block text-sm font-medium", compact && "sr-only")}>
-        {t("common.rooms")} &amp; {t("common.guests")}
-      </span>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="surface mt-1.5 min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 text-start text-sm transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)]"
+        className="search-field"
       >
-        {summary}
+        <Icon name="users" size={20} className="search-field-icon" />
+        <span className="search-field-body">
+          <span aria-hidden className="search-field-label">
+            {t("common.rooms")} &amp; {t("common.guests")}
+          </span>
+          <span className="search-field-value">{summary}</span>
+        </span>
       </button>
 
       {open && (
