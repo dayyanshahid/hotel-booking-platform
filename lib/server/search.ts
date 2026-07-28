@@ -275,9 +275,10 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
     }
   }
   if (isHotelbedsEnabled() && !supplierOutageForced) {
-    const destinationCode = await resolveHotelbedsDestination(resolved.destinationId);
-    if (destinationCode) {
-      const live = await searchHotelbedsDestination(destinationCode, effectiveIntent, locale);
+    // A coordinate for every city, or a supplier destination code on a deep link.
+    const where = await resolveHotelbedsDestination(resolved.destinationId);
+    if (where) {
+      const live = await searchHotelbedsDestination(where, effectiveIntent, locale);
       liveStatus = live.status;
       for (const adapted of live.hotels) {
         normalized.push({

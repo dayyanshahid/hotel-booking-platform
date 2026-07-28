@@ -1,6 +1,7 @@
 import type { Locale, SearchIntent, Suggestion } from "@/lib/types";
 import { hotelbeds, HotelbedsError } from "./client";
 import { isHotelbedsEnabled } from "./config";
+import { getDestination } from "@/lib/data/destinations";
 import { getCachedDestinations, getHotelBySlug, getIndex, getTypes } from "./content";
 import { adaptAvailability, buildCanonicalHotelFromContent, type AdaptedHotel } from "./adapter";
 import type { HbAvailabilityResponse } from "./types";
@@ -35,19 +36,27 @@ function baseRequest(intent: SearchIntent) {
 }
 
 /** Resolve a platform destination ID to a supplier destination code. */
-export async function resolveHotelbedsDestination(destinationId: string): Promise<string | null> {
-  if (destinationId.startsWith("hbd-")) return destinationId.replace("hbd-", "");
-  const index = await getIndex();
-  const mapped = index.byDestination;
-  // Seed destinations map only when a sync has matched them by name.
-  const alias = (await getCachedDestinations()).find(
-    (destination) =>
-      destination.code &&
-      mapped[destination.code] &&
-      destinationId.replace("dest-", "").toLowerCase() ===
-        (destination.name?.content ?? "").toLowerCase().replace(/\s+/g, "-"),
-  );
-  return alias?.code ?? null;
+/**
+ * Where to search, for one of our destinations.
+ *
+ * Matching our city names against theirs does not work and cannot be made to.
+ * Their catalogue holds "New London - CT", "London-ON" and "County Londonderry
+ * of Northern Ireland"; ours holds "london". It also required hotels to be
+ * cached for a destination before that destination could be mapped, which is
+ * circular — nothing could ever be searched the first time.
+ *
+ * Their availability endpoint takes a coordinate and a radius instead, and we
+ * have a verified coordinate for all 183 cities. A point cannot be spelled
+ * wrong, so this is exact for every destination rather than lucky for a few.
+ */
+export async function resolveHotelbedsDestination(
+  destinationId: string,
+): Promise<{ code: string } | { lat: number; lng: number } | null> {
+  // An explicit supplier destination still wins, for deep links into one.
+  if (destinationId.startsWith("hbd-")) return { code: destinationId.replace("hbd-", "") };
+  const destination = getDestination(destinationId);
+  if (!destination) return null;
+  return { lat: destination.coordinates.lat, lng: destination.coordinates.lng };
 }
 
 export interface HotelbedsSearchResult {
@@ -133,8 +142,16 @@ async function runAvailability(
   }
 }
 
+/**
+ * Radius around a city centre, in kilometres.
+ *
+ * Wide enough to include the airport hotels and beach strips that belong to a
+ * city, narrow enough not to pull in the next one along the coast.
+ */
+const SEARCH_RADIUS_KM = 20;
+
 export async function searchHotelbedsDestination(
-  destinationCode: string,
+  where: { code: string } | { lat: number; lng: number },
   intent: SearchIntent,
   locale: Locale,
 ): Promise<HotelbedsSearchResult> {
@@ -142,7 +159,16 @@ export async function searchHotelbedsDestination(
   return runAvailability(
     {
       ...baseRequest(intent),
-      destination: { code: destinationCode },
+      ...("code" in where
+        ? { destination: { code: where.code } }
+        : {
+            geolocation: {
+              latitude: where.lat,
+              longitude: where.lng,
+              radius: SEARCH_RADIUS_KM,
+              unit: "km",
+            },
+          }),
       // A bounded result set: the supplier's guidance is explicitly against
       // pulling full inventory on every search.
       filter: { maxHotels: 50, maxRatesPerRoom: 6 },

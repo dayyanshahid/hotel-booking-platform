@@ -133,7 +133,7 @@ afterEach(() => {
 });
 
 async function liveOfferId(): Promise<string> {
-  const result = await searchHotelbedsDestination("PMI", intent, "en");
+  const result = await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
   expect(result.status).toBe("ok");
   // The rate that the supplier flags as needing revalidation.
   const offer = result.hotels[0].offers.find((candidate) => candidate.capabilities.recheckRequired)!;
@@ -142,7 +142,7 @@ async function liveOfferId(): Promise<string> {
 
 describe("live availability wiring", () => {
   it("signs every request with the documented headers", async () => {
-    await searchHotelbedsDestination("PMI", intent, "en");
+    await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
     const call = calls[0];
     expect(call.headers["Api-key"]).toBe("test-key");
     expect(call.headers["X-Signature"]).toMatch(/^[0-9a-f]{64}$/);
@@ -150,8 +150,7 @@ describe("live availability wiring", () => {
   });
 
   it("sends the customer's exact occupancy, including child ages", async () => {
-    await searchHotelbedsDestination(
-      "PMI",
+    await searchHotelbedsDestination({ code: "PMI" },
       { ...intent, rooms: [{ adults: 2, childrenAges: [7] }] },
       "en",
     );

@@ -66,7 +66,7 @@ async function main() {
   };
 
   console.log(`\nAvailability: ${destination}, ${intent.checkIn} → ${intent.checkOut}, 2 adults`);
-  const result = await searchHotelbedsDestination(destination, intent, "en");
+  const result = await searchHotelbedsDestination({ code: destination }, intent, "en");
 
   if (result.status !== "ok") {
     console.error(`\nThe supplier did not answer: ${result.reason}`);
