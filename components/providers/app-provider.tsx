@@ -148,10 +148,11 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
   const t = useMemo(() => createTranslator(locale), [locale]);
   const dir = LOCALE_META[locale].dir;
 
-  // USD by default: the catalogue spans 82 countries, so the home market's
-  // currency is the wrong guess for almost every visitor. A stored preference
-  // or the destination's own currency overrides this immediately.
-  const [currency, setCurrencyState] = useState<CurrencyCode>("USD");
+  // PKR by default: the agency and most of its customers are in Pakistan, so
+  // the home market is the right first guess here even though the catalogue is
+  // worldwide. A stored preference overrides it immediately, and what the card
+  // is actually charged in is decided server-side either way.
+  const [currency, setCurrencyState] = useState<CurrencyCode>("PKR");
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [account, setAccount] = useState<{ email: string } | null>(null);
   const [saved, setSaved] = useState<SavedHotel[]>([]);
@@ -167,7 +168,7 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
   const hydrated = useRef(false);
 
   useEffect(() => {
-    setCurrencyState(read<CurrencyCode>("nz_currency", "USD"));
+    setCurrencyState(read<CurrencyCode>("nz_currency", "PKR"));
     setTheme(read<"light" | "dark">("nz_theme", "light"));
     setAccount(read<{ email: string } | null>("nz_account", null));
     setSaved(read<SavedHotel[]>("nz_saved", []));

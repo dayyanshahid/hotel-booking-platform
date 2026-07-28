@@ -11,8 +11,20 @@ export const LOCALE_META: Record<Locale, { label: string; dir: "ltr" | "rtl"; ht
 type Dict = Record<string, string>;
 
 const en: Dict = {
-  "brand.name": "Nazil",
-  "brand.tagline": "Hotels, priced honestly.",
+  "brand.name": "Spatay",
+  "brand.since": "Serving since 1984",
+  "brand.parent": "by Matchless",
+  "stat.years": "Years of experience",
+  "stat.travellers": "Happy travellers",
+  "stat.iata": "Certified agency",
+  "stat.support": "Customer support",
+  "stat.yearsValue": "40+",
+  "stat.travellersValue": "50K+",
+  "stat.iataValue": "IATA",
+  "stat.supportValue": "24/7",
+  "home.networkTitle": "One of the world\u2019s largest hotel networks",
+  "home.networkBody": "Hotel supply comes through our Bedsonline partnership, which is why a search here reaches the same inventory the large booking sites do \u2014 at a total price we show in full before you choose.",
+  "brand.tagline": "Extensive travel services.",
 
   "nav.explore": "Explore",
   "nav.hotels": "Hotels",
@@ -82,8 +94,9 @@ const en: Dict = {
   "common.perNight": "per night average",
   "common.and": "and",
 
-  "home.heroTitle": "The real total. Before you pay.",
-  "home.heroSubtitle": "{properties} places to stay in {cities} cities. Every price is the full total for your dates — taxes and fees in, cancellation terms on the card.",
+  "home.heroTitle": "Your Journey, Our Expertise",
+  "home.heroEyebrow": "Trusted by thousands since 1984",
+  "home.heroSubtitle": "{properties} places to stay in {cities} cities, priced as a full total — taxes and fees in, cancellation terms on the card.",
   "home.heroSearchHint": "Enter a city, a landmark or a property name.",
   "home.collections": "Browse by travel style",
   "home.recent": "Pick up where you left off",
@@ -134,6 +147,7 @@ const en: Dict = {
   "home.featuredBody": "The best-reviewed stay in each of our busiest cities.",
   "home.fromPerNight": "from {amount} / night",
   "home.catalogueSize": "{properties} properties · {cities} cities · {countries} countries",
+  "home.trackRecord": "Our track record",
   "home.quickPicks": "Popular right now",
   "home.proofEyebrow": "Price transparency",
   "home.statProperties": "Places to stay",
@@ -577,7 +591,7 @@ const en: Dict = {
   "footer.terms": "Terms of use",
   "footer.security": "Secure payment",
   "footer.rights": "All rights reserved.",
-  "footer.disclaimer": "Demonstration environment. Inventory, prices and bookings are simulated.",
+  "footer.disclaimer": "Pakistan\u2019s trusted travel agency since 1984. Part of Matchless Tours and Travels, IATA certified. This hotel platform is a demonstration environment \u2014 inventory, prices and bookings are simulated.",
 
   "dev.title": "Scenario harness",
   "dev.body": "Force the edge cases from the scope so every recovery path can be reviewed.",
@@ -586,8 +600,20 @@ const en: Dict = {
 };
 
 const ar: Dict = {
-  "brand.name": "نازل",
-  "brand.tagline": "فنادق بأسعار صادقة.",
+  "brand.name": "سباتاي",
+  "brand.since": "نخدمكم منذ ١٩٨٤",
+  "brand.parent": "من ماتشلس",
+  "stat.years": "سنة من الخبرة",
+  "stat.travellers": "مسافر سعيد",
+  "stat.iata": "وكالة معتمدة",
+  "stat.support": "دعم العملاء",
+  "stat.yearsValue": "+٤٠",
+  "stat.travellersValue": "+٥٠ ألف",
+  "stat.iataValue": "IATA",
+  "stat.supportValue": "٢٤/٧",
+  "home.networkTitle": "واحدة من أكبر شبكات الفنادق في العالم",
+  "home.networkBody": "يأتي مخزون الفنادق عبر شراكتنا مع Bedsonline، ولذلك يصل البحث هنا إلى المخزون نفسه الذي تصل إليه كبرى مواقع الحجز — بسعر إجمالي نعرضه كاملاً قبل أن تختار.",
+  "brand.tagline": "خدمات سفر متكاملة.",
 
   "nav.explore": "استكشف",
   "nav.hotels": "الفنادق",
@@ -657,8 +683,9 @@ const ar: Dict = {
   "common.perNight": "متوسط الليلة",
   "common.and": "و",
 
-  "home.heroTitle": "الإجمالي الحقيقي. قبل الدفع.",
-  "home.heroSubtitle": "{properties} مكان إقامة في {cities} مدينة. كل سعر هو الإجمالي الكامل لتواريخك — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
+  "home.heroTitle": "رحلتك، بخبرتنا",
+  "home.heroEyebrow": "موثوق به من الآلاف منذ ١٩٨٤",
+  "home.heroSubtitle": "{properties} مكان إقامة في {cities} مدينة، بسعر إجمالي كامل — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
   "home.heroSearchHint": "أدخل مدينة أو معلمًا أو اسم عقار.",
   "home.collections": "تصفَّح حسب أسلوب السفر",
   "home.recent": "أكمل من حيث توقفت",
@@ -682,6 +709,7 @@ const ar: Dict = {
   "home.featuredBody": "أفضل إقامة من حيث التقييم في كل مدينة من أكثر مدننا ازدحامًا.",
   "home.fromPerNight": "من {amount} / الليلة",
   "home.catalogueSize": "{properties} عقار · {cities} مدينة · {countries} دولة",
+  "home.trackRecord": "سجلّنا",
   "home.quickPicks": "الأكثر رواجًا الآن",
   "home.proofEyebrow": "وضوح الأسعار",
   "home.statProperties": "أماكن إقامة",
@@ -1152,7 +1180,7 @@ const ar: Dict = {
   "footer.terms": "شروط الاستخدام",
   "footer.security": "الدفع الآمن",
   "footer.rights": "جميع الحقوق محفوظة.",
-  "footer.disclaimer": "بيئة عرض توضيحي. المخزون والأسعار والحجوزات محاكاة.",
+  "footer.disclaimer": "وكالة سفر باكستانية موثوقة منذ ١٩٨٤، وجزء من ماتشلس للسياحة والسفر، معتمدة من IATA. منصة الفنادق هذه بيئة عرض توضيحي — المخزون والأسعار والحجوزات محاكاة.",
 
   "dev.title": "محاكاة الحالات الاستثنائية",
   "dev.body": "افرض الحالات الواردة في النطاق لمراجعة كل مسارات التعافي.",

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useApp, useApi } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Card, Drawer, Input, ToastStack, LiveRegion, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
+import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
 import { SCENARIOS } from "@/lib/server/scenarios";
 import type { ScenarioId } from "@/lib/server/scenarios";
@@ -89,8 +90,8 @@ export function SiteFooter() {
     <footer className="surface hairline no-print mt-16 border-t pb-24 lg:pb-8">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
-          <p className="text-lg font-bold tracking-[-0.02em]">{t("brand.name")}</p>
-          <p className="text-muted mt-2 max-w-xs text-sm leading-relaxed">{t("brand.tagline")}</p>
+          <Wordmark showSince />
+          <p className="text-muted mt-3 max-w-xs text-sm leading-relaxed">{t("brand.tagline")}</p>
           <p className="text-muted mt-5 max-w-xs text-xs leading-relaxed">{t("footer.disclaimer")}</p>
         </div>
         {columns.map((column) => (

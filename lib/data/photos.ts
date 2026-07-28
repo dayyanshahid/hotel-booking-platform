@@ -299,9 +299,10 @@ export function destinationPhoto(slug: string, ordinal = 0, options: PhotoOption
  * phone — one server-side crop cannot serve both.
  */
 export function heroPhoto(width = 1920): PhotoRef {
-  // A night skyline: wide enough to survive the hero's crop on a desktop band
-  // and dark enough that white type clears contrast at every viewport.
-  return refFor(DESTINATION_SETS.riyadh[0], { width });
+  // Makkah: Hajj and Umrah are the agency's flagship product, so the frame a
+  // visitor lands on should be the journey most of them are here to book. Dark
+  // enough that white type clears contrast at every viewport.
+  return refFor(DESTINATION_SETS.makkah[0], { width });
 }
 
 /** A collection card. */

@@ -90,7 +90,6 @@ export function HomeView({
   featured,
   propertyTypes,
   regions,
-  proof,
   fromPriceBasis,
   totalProperties,
   totalCities,
@@ -102,7 +101,6 @@ export function HomeView({
   featured: FeaturedStay[];
   propertyTypes: PropertyTypeTile[];
   regions: RegionTile[];
-  proof: PriceProof;
   /** The disclosure that must accompany every indicative price on the page. */
   fromPriceBasis: string;
   totalProperties: number;
@@ -178,7 +176,10 @@ export function HomeView({
           <div className="from-navy-900/95 via-navy-800/88 to-navy-700/72 absolute inset-0 bg-gradient-to-br" />
         </div>
         <div className="relative mx-auto max-w-7xl px-4">
-          <h1 className="max-w-4xl text-[34px] font-bold leading-[1.05] tracking-[-0.03em] sm:text-[56px]">
+          <p className="text-brand-300 text-[11px] font-bold uppercase tracking-[0.14em]">
+            {t("home.heroEyebrow")}
+          </p>
+          <h1 className="mt-3 max-w-4xl text-[34px] font-bold leading-[1.05] tracking-[-0.03em] sm:text-[56px]">
             {t("home.heroTitle")}
           </h1>
           <p className="mt-4 max-w-2xl leading-relaxed text-white/80 sm:text-lg">
@@ -278,92 +279,56 @@ export function HomeView({
         </section>
       )}
 
-      {/* ------------------------------------------------------- receipt */}
       {/*
-        The argument for the product, second on the page. A real stay opened up:
-        what we charge, what the property will, and nothing arriving later.
+        Their own numbers, from spatay.com. Four figures rather than four
+        paragraphs: a travel agency's credibility is its years and its
+        certification, and both are read faster as digits.
       */}
-      <section aria-labelledby="proof-heading" className="band band-raised mt-10">
-        <div className="grid gap-10 lg:grid-cols-[1fr_minmax(0,440px)] lg:items-center">
+      <section aria-labelledby="track-heading" className="band band-raised mt-10">
+        <h2 id="track-heading" className="sr-only">
+          {t("home.trackRecord")}
+        </h2>
+        <dl className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+          {[
+            { value: t("stat.yearsValue"), label: t("stat.years") },
+            { value: t("stat.travellersValue"), label: t("stat.travellers") },
+            { value: t("stat.iataValue"), label: t("stat.iata") },
+            { value: t("stat.supportValue"), label: t("stat.support") },
+          ].map((stat) => (
+            <div key={stat.label}>
+              <dd className="stat-figure text-brand-500 text-[32px] font-extrabold sm:text-[44px]">
+                {stat.value}
+              </dd>
+              <dt className="text-muted mt-1.5 text-sm">{stat.label}</dt>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_minmax(0,420px)] lg:items-center">
           <div>
-            <p className="text-brand-500 text-[11px] font-bold uppercase tracking-[0.09em]">
-              {t("home.proofEyebrow")}
-            </p>
-            <h2 id="proof-heading" className="mt-3 text-[30px] font-bold leading-[1.1] tracking-[-0.03em] sm:text-[40px]">
-              {t("home.proofTitle")}
-            </h2>
-            <p className="text-muted mt-4 max-w-xl leading-relaxed">{t("home.proofBody")}</p>
-
-            <ul className="mt-7 grid gap-4 sm:grid-cols-2">
-              {[
-                { title: t("value.total.title"), body: t("value.total.body"), icon: "receipt" as IconName },
-                { title: t("value.room.title"), body: t("value.room.body"), icon: "bed" as IconName },
-                { title: t("value.care.title"), body: t("value.care.body"), icon: "lifebuoy" as IconName },
-                { title: t("value.local.title"), body: t("value.local.body"), icon: "globe" as IconName },
-              ].map((item) => (
-                <li key={item.title} className="flex gap-3">
-                  <span className="bg-brand-50 text-brand-500 mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--radius-control)]">
-                    <Icon name={item.icon} size={17} />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-bold">{item.title}</span>
-                    <span className="text-muted block text-sm leading-relaxed">{item.body}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <h3 className="text-[26px] font-bold leading-[1.15] tracking-[-0.02em] sm:text-[32px]">
+              {t("home.networkTitle")}
+            </h3>
+            <p className="text-muted mt-3 max-w-xl leading-relaxed">{t("home.networkBody")}</p>
           </div>
-
-          {/*
-            Styled as a receipt, not as a table: a dashed rule above the total
-            and tabular figures throughout, because the point being made is
-            "this is the whole bill" and it should look like one.
-          */}
-          <div className="surface rounded-[var(--radius-card)] border p-6 shadow-[var(--shadow-raised)]">
-            <p className="text-muted text-xs">{t("home.proofExample", { hotel: proof.hotelName })}</p>
-            <dl className="tabular mt-5 space-y-3 text-sm">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-muted">{t("home.proofRoom")}</dt>
-                <dd className="font-medium">{formatMoney(proof.base, proof.currency, locale)}</dd>
-              </div>
-              {proof.included.map((line) => (
-                <div key={line.label} className="flex items-baseline justify-between gap-4">
-                  <dt className="text-muted wrap-anywhere">{line.label}</dt>
-                  <dd className="font-medium">{formatMoney(line.amount, proof.currency, locale)}</dd>
-                </div>
-              ))}
-              <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-dashed pt-4">
-                <dt className="font-bold">{t("home.proofTotal")}</dt>
-                <dd className="text-2xl font-bold tracking-[-0.02em]">
-                  {formatMoney(proof.total, proof.currency, locale)}
-                </dd>
-              </div>
-            </dl>
-
-            {proof.payAtProperty.length > 0 && (
-              <div className="surface-sunken mt-5 rounded-[var(--radius-control)] p-3">
-                <p className="text-muted text-xs font-bold">{t("home.proofAtProperty")}</p>
-                <dl className="tabular mt-2 space-y-1.5 text-xs">
-                  {proof.payAtProperty.map((line) => (
-                    <div key={line.label} className="flex items-baseline justify-between gap-3">
-                      <dt className="text-muted wrap-anywhere">{line.label}</dt>
-                      <dd>{formatMoney(line.amount, proof.currency, locale)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )}
-
-            <p className="text-positive-700 mt-4 text-xs font-bold">{t("home.proofNothingElse")}</p>
-            <Link
-              href={searchHref(locale, { ...typeIntent, destinationId: proof.destinationId })}
-              className="mt-4 inline-block"
-            >
-              <Button variant="secondary" size="sm">
-                {t("home.proofSearch")}
-              </Button>
-            </Link>
-          </div>
+          <ul className="grid gap-4 sm:grid-cols-2">
+            {[
+              { title: t("value.total.title"), body: t("value.total.body"), icon: "receipt" as IconName },
+              { title: t("value.room.title"), body: t("value.room.body"), icon: "bed" as IconName },
+              { title: t("value.care.title"), body: t("value.care.body"), icon: "lifebuoy" as IconName },
+              { title: t("value.local.title"), body: t("value.local.body"), icon: "globe" as IconName },
+            ].map((item) => (
+              <li key={item.title} className="flex gap-3">
+                <span className="bg-brand-50 text-brand-500 mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--radius-control)]">
+                  <Icon name={item.icon} size={17} />
+                </span>
+                <span>
+                  <span className="block text-sm font-bold">{item.title}</span>
+                  <span className="text-muted block text-sm leading-relaxed">{item.body}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

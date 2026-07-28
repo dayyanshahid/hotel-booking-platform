@@ -102,6 +102,7 @@ export const CURRENCY_CODES = Object.keys(CURRENCY_TABLE) as CurrencyCode[];
  * priced in locally — see `currencyChoicesFor`.
  */
 export const MAJOR_CURRENCIES: CurrencyCode[] = [
+  "PKR",
   "USD",
   "EUR",
   "GBP",

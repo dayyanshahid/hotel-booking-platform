@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Drawer, Select, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
+import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
 import { setPreferenceCookie } from "@/lib/cookies";
 import { CURRENCIES } from "@/lib/format";
@@ -39,24 +40,20 @@ export function SiteHeader() {
 
   return (
     /*
-      A navy chrome band rather than a translucent white one. Two reasons it
-      earns the weight: the search results below it are a wall of white cards
-      and photographs that need a hard top edge to sit under, and the currency,
+      A charcoal chrome band rather than a translucent white one. Two reasons it
+      earns the weight: the results below it are a wall of white cards and
+      photographs that need a hard top edge to sit under, and the currency,
       language and account controls are the only things a traveller needs to
-      find without reading — a coloured band makes them one target.
+      find without reading — a dark band makes them one target.
+
+      Charcoal rather than the brand orange: a full-width band of a colour that
+      saturated fights every photograph on the page, and the orange is worth
+      more as the single accent than as the background.
     */
     <header className="chrome sticky top-0 z-40">
       <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
         <Link href={href(locale, "/")} className="flex items-center gap-2 font-bold">
-          {/* Wordmark: the Arabic initial of the brand, drawn as a monogram. */}
-          <span aria-hidden className="grid size-8 place-items-center rounded-[var(--radius-control)] bg-white/15">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M5 8v5a5 5 0 0 0 10 0V8" />
-              <circle cx="10" cy="4.5" r="1.2" fill="currentColor" stroke="none" />
-              <path d="M18 8v11" opacity="0.55" />
-            </svg>
-          </span>
-          <span className="text-[20px] font-bold tracking-[-0.02em]">{t("brand.name")}</span>
+          <Wordmark tone="inverse" />
         </Link>
 
         <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">

@@ -55,35 +55,40 @@
    * category convention, not one brand's property; the wordmark, the copy and
    * the product are Nazil's own.
    */
-  --color-navy-50: #eaf0f8;
-  --color-navy-100: #ccdcef;
-  --color-navy-200: #9db9dd;
-  --color-navy-500: #16468f;
-  --color-navy-700: #0b3a75;
-  --color-navy-800: #08306b;
-  --color-navy-900: #062554;
+  /*
+   * Spatay's brand is orange on near-black — the wordmark's own two colours.
+   * The chrome is charcoal rather than the orange itself: a full-width band of
+   * a colour this saturated fights every photograph beneath it, and the orange
+   * is worth more as the one accent than as the background.
+   */
+  --color-navy-50: #f4f5f7;
+  --color-navy-100: #e4e6ea;
+  --color-navy-200: #c3c7cf;
+  --color-navy-500: #3a3f4a;
+  --color-navy-700: #23262e;
+  --color-navy-800: #16181d;
+  --color-navy-900: #0e1013;
 
-  /* Links, selected states, and the "we are working on it" blue. */
-  --color-brand-50: #ebf3fc;
-  --color-brand-100: #d3e5f8;
-  --color-brand-200: #a8cbf1;
-  --color-brand-300: #6ba9e6;
-  --color-brand-400: #3387d6;
-  --color-brand-500: #0f6fc4;
-  --color-brand-600: #0a5cab;
-  --color-brand-700: #084b8c;
-  --color-brand-800: #063d73;
-  --color-brand-900: #05305c;
+  /* Links, selected states, and the brand itself. */
+  --color-brand-50: #fff3ec;
+  --color-brand-100: #ffe2d1;
+  --color-brand-200: #ffc3a3;
+  --color-brand-300: #ff9a68;
+  --color-brand-400: #fb7a3c;
+  --color-brand-500: #f2621b;
+  --color-brand-600: #d94f0f;
+  --color-brand-700: #b23f0b;
+  --color-brand-800: #8c3209;
+  --color-brand-900: #6b2607;
 
   /*
-   * The action colour. Yellow on near-black is the only pairing here that
-   * clears AA at button size, so the token carries its own text colour rather
-   * than leaving each caller to guess.
+   * The action colour stays a warm amber rather than becoming a second orange:
+   * a call to action the same hue as every link is not a call to action.
    */
-  --color-action-300: #ffd43b;
-  --color-action-400: #febb02;
-  --color-action-500: #f0a500;
-  --color-action-600: #d18f00;
+  --color-action-300: #ffd77a;
+  --color-action-400: #ffc233;
+  --color-action-500: #f0ad12;
+  --color-action-600: #cf920a;
   --color-action-ink: #1a1a1a;
 
   --color-ink-50: #f5f5f5;
@@ -155,12 +160,12 @@
   --border-strong: #bdbdbd;
   --text: #1a1a1a;
   --text-muted: #595959;
-  --focus: #0f6fc4;
-  --ring: rgb(15 111 196 / 0.28);
+  --focus: #f2621b;
+  --ring: rgb(242 98 27 / 0.26);
   --scrim: rgb(0 0 0 / 0.5);
   /* The chrome band. Named separately so the header and footer stay navy
      while the page beneath them inverts with the theme. */
-  --chrome: #08306b;
+  --chrome: #16181d;
   --chrome-ink: #ffffff;
   color-scheme: light;
 }
@@ -175,10 +180,10 @@ html[data-theme="dark"] {
   --border-strong: #575757;
   --text: #f0f0f0;
   --text-muted: #a6a6a6;
-  --focus: #6ba9e6;
-  --ring: rgb(107 169 230 / 0.32);
+  --focus: #ff9a68;
+  --ring: rgb(255 154 104 / 0.3);
   --scrim: rgb(0 0 0 / 0.66);
-  --chrome: #05224d;
+  --chrome: #0e1013;
   --chrome-ink: #ffffff;
   color-scheme: dark;
 }
@@ -494,7 +499,7 @@ html[data-theme="dark"] .bg-sand-50 {
  * and is that good? — so the badge always ships with a word beside it.
  */
 .score-badge {
-  background: var(--color-brand-800);
+  background: var(--color-navy-800);
   color: #fff;
   font-variant-numeric: tabular-nums;
 }

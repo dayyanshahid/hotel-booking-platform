@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
-import { HomeView, type FeaturedStay, type PriceProof } from "@/components/pages/home-view";
+import { HomeView, type FeaturedStay } from "@/components/pages/home-view";
 import {
   bookableCountryList,
   DESTINATIONS,
   destinationsInRegion,
   featuredDestinations,
-  getDestination,
 } from "@/lib/data/destinations";
 import { REGIONS } from "@/lib/data/geo/countries";
 import { COLLECTIONS, PROPERTY_TYPES, PROPERTY_TYPE_KEYS, localized } from "@/lib/data/catalog";
-import { HOTEL_SEEDS, buildHotel, getHotelSeed, hotelsInDestination } from "@/lib/data/hotels";
+import { HOTEL_SEEDS, buildHotel, hotelsInDestination } from "@/lib/data/hotels";
 import { destinationFromPrice, hotelFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
-import { computePrice } from "@/lib/server/pricing";
-import { addDays, todayIso } from "@/lib/format";
 import { createTranslator, isLocale } from "@/lib/i18n";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
@@ -33,50 +30,9 @@ const BROWSE_CURRENCY: CurrencyCode = "USD";
 /** How many stays the "guests love" rail shows. */
 const LOVED_COUNT = 8;
 
-/** The stay the price-transparency example is worked through. */
-const PROOF_SLUG = "olaya-grand-riyadh";
 
 /** The five home-page questions. The accordion and the JSON-LD both read this. */
 const FAQ_KEYS = [1, 2, 3, 4, 5] as const;
-
-/**
- * Builds the worked price example from the same model the search path uses, so
- * the figures on the home page and the figures on a results card come out of one
- * calculation. Three nights, two adults, breakfast — a realistic stay rather
- * than a flattering one.
- */
-function buildProof(locale: Locale): PriceProof {
-  const seed = getHotelSeed(PROOF_SLUG)!;
-  const destination = getDestination(seed.destinationId)!;
-  const checkIn = addDays(todayIso(), 21);
-  const price = computePrice({
-    seed,
-    roomKey: seed.rooms[0],
-    board: "BB",
-    rateClass: "flex",
-    checkIn,
-    checkOut: addDays(checkIn, 3),
-    rooms: [{ adults: 2, childrenAges: [] }],
-    currency: BROWSE_CURRENCY,
-    countryCode: destination.countryCode,
-    sourceCode: "S1",
-    locale,
-  });
-  return {
-    hotelName: localized(seed.name, locale),
-    hotelSlug: seed.slug,
-    destinationId: seed.destinationId,
-    currency: price.currency,
-    base: price.base,
-    included: price.includedCharges
-      .filter((line) => line.amount > 0)
-      .map((line) => ({ label: line.label, amount: line.amount })),
-    total: price.total,
-    payAtProperty: price.payAtProperty
-      .filter((line) => line.amount > 0)
-      .map((line) => ({ label: line.label, amount: line.amount })),
-  };
-}
 
 /**
  * F-010 — home / explore.
@@ -196,7 +152,6 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         featured={loved}
         propertyTypes={propertyTypes}
         regions={regions}
-        proof={buildProof(locale)}
         fromPriceBasis={FROM_PRICE_BASIS[locale]}
         totalProperties={HOTEL_SEEDS.length}
         totalCities={DESTINATIONS.length}
