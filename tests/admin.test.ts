@@ -202,3 +202,26 @@ describe("incident feed", () => {
     expect(all[0].detail).toBe("499");
   });
 });
+
+describe("audit ordering", () => {
+  beforeEach(() => {
+    __resetPlatform();
+  });
+
+  it("orders entries written in the same millisecond", async () => {
+    // Ten appends in a tight loop share an ISO timestamp to the millisecond.
+    // Sorting on the timestamp alone returned them arbitrarily, which is a
+    // failure at the one question an audit log answers: what happened last.
+    for (let i = 0; i < 10; i += 1) {
+      await appendAudit({ actor: "ops@x", action: "test", subject: "s", detail: String(i) });
+    }
+    const entries = await listAudit();
+    expect(entries.map((entry) => entry.detail)).toEqual(["9", "8", "7", "6", "5", "4", "3", "2", "1", "0"]);
+  });
+
+  it("keeps counting from what is already stored", async () => {
+    await appendAudit({ actor: "a", action: "x", subject: "s", detail: "one" });
+    const second = await appendAudit({ actor: "a", action: "x", subject: "s", detail: "two" });
+    expect(second.seq).toBe(2);
+  });
+});

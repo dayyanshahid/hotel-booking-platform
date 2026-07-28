@@ -284,6 +284,8 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [payment, setPayment] = useState({ kind: "settlement", amount: 0, note: "" });
+  const [addingAgent, setAddingAgent] = useState(false);
+  const [newAgent, setNewAgent] = useState({ name: "", email: "", role: "agent" });
 
   async function load() {
     const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}`, { credentials: "same-origin" });
@@ -328,6 +330,54 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
       return;
     }
     setNotice(message);
+    await load();
+  }
+
+  /**
+   * Changing an agent's role or access.
+   *
+   * The response says whether the change leaves the agency with no active
+   * administrator; that is allowed from here — it is the point of the endpoint —
+   * but it is surfaced rather than done quietly.
+   */
+  async function patchAgent(body: { agentId: string; active?: boolean; role?: string }) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    const result = (await res.json()) as { ok: boolean; data?: { leavesNoAdmin: boolean }; error?: { message: string } };
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.message ?? t("error.validation"));
+      return;
+    }
+    setNotice(result.data?.leavesNoAdmin ? t("admin.noAgencyAdmin") : t("admin.agentUpdated"));
+    await load();
+  }
+
+  async function addAgent() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(newAgent),
+    });
+    const result = (await res.json()) as { ok: boolean; error?: { message: string } };
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.message ?? t("error.validation"));
+      return;
+    }
+    setAddingAgent(false);
+    setNewAgent({ name: "", email: "", role: "agent" });
+    setNotice(t("admin.agentAdded"));
     await load();
   }
 
@@ -491,17 +541,51 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="space-y-2">
-          <SectionHeading title={t("agency.team")} />
+          <SectionHeading
+            title={t("agency.team")}
+            description={t("admin.agentsBody")}
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setAddingAgent(true)}>
+                {t("agency.invite")}
+              </Button>
+            }
+          />
+          {/*
+            An agency whose only administrator has left cannot add another from
+            its own portal, so it is said here rather than left to be
+            discovered on a support call.
+          */}
+          {!agents.some((agent) => agent.role === "admin" && agent.active) && (
+            <Alert tone="warning">{t("admin.noAgencyAdmin")}</Alert>
+          )}
           <Card className="divide-ink-100 divide-y">
             {agents.map((agent) => (
-              <div key={agent.id} className="flex items-center justify-between gap-2 p-3.5 text-sm">
+              <div key={agent.id} className="flex flex-wrap items-center justify-between gap-2 p-3.5 text-sm">
                 <div className="min-w-0">
                   <p className="font-medium wrap-anywhere">{agent.name}</p>
                   <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>{agent.role}</Badge>
                   {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={busy}
+                    onClick={() =>
+                      patchAgent({ agentId: agent.id, role: agent.role === "admin" ? "agent" : "admin" })
+                    }
+                  >
+                    {agent.role === "admin" ? t("admin.makeAgent") : t("admin.makeAdmin")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={busy}
+                    onClick={() => patchAgent({ agentId: agent.id, active: !agent.active })}
+                  >
+                    {agent.active ? t("admin.suspend") : t("admin.reinstate")}
+                  </Button>
                 </div>
               </div>
             ))}
@@ -558,6 +642,32 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
           </Card>
         </section>
       )}
+
+      <Modal open={addingAgent} onClose={() => setAddingAgent(false)} title={t("agency.invite")} size="sm">
+        <div className="space-y-3">
+          <p className="text-muted text-sm">{t("admin.addAgentBody")}</p>
+          <Field label={t("agency.inviteName")} htmlFor="aa-name">
+            <Input id="aa-name" value={newAgent.name} onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })} />
+          </Field>
+          <Field label={t("agency.workEmail")} htmlFor="aa-email">
+            <Input
+              id="aa-email"
+              type="email"
+              value={newAgent.email}
+              onChange={(e) => setNewAgent({ ...newAgent, email: e.target.value })}
+            />
+          </Field>
+          <Field label={t("agency.role")} htmlFor="aa-role">
+            <Select id="aa-role" value={newAgent.role} onChange={(e) => setNewAgent({ ...newAgent, role: e.target.value })}>
+              <option value="agent">{t("agency.roleAgent")}</option>
+              <option value="admin">{t("agency.roleAdmin")}</option>
+            </Select>
+          </Field>
+          <Button onClick={addAgent} loading={busy} disabled={!newAgent.name.trim() || !newAgent.email.trim()}>
+            {t("agency.invite")}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -57,12 +57,14 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
   const [status, setStatus] = useState(initialStatus ?? "all");
   const [channel, setChannel] = useState("all");
   const [query, setQuery] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
     let alive = true;
     const id = window.setTimeout(async () => {
-      const params = new URLSearchParams({ status, channel, q: query });
+      const params = new URLSearchParams({ status, channel, q: query, from, to });
       const res = await fetch(`/api/admin/bookings?${params.toString()}`, { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { bookings: Row[]; total: number } };
       if (!alive) return;
@@ -73,13 +75,25 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
       alive = false;
       window.clearTimeout(id);
     };
-  }, [status, channel, query]);
+  }, [status, channel, query, from, to]);
 
   return (
     <div className="space-y-4">
-      <SectionHeading title={t("admin.bookings")} description={t("admin.bookingsBody")} />
+      <SectionHeading
+        title={t("admin.bookings")}
+        description={t("admin.bookingsBody")}
+        action={
+          <a
+            href={`/api/admin/bookings?format=csv&status=${status}&channel=${channel}&q=${encodeURIComponent(query)}&from=${from}&to=${to}&limit=500`}
+          >
+            <Button variant="secondary" size="sm">
+              CSV
+            </Button>
+          </a>
+        }
+      />
 
-      <Card className="grid gap-3 p-4 sm:grid-cols-[2fr_1fr_1fr]">
+      <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
         <Field label={t("admin.search")} htmlFor="ab-q">
           <Input
             id="ab-q"
@@ -104,6 +118,12 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
             <option value="direct">{t("admin.b2c")}</option>
             <option value="trade">{t("admin.b2b")}</option>
           </Select>
+        </Field>
+        <Field label={t("admin.bookedFrom")} htmlFor="ab-from">
+          <Input id="ab-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label={t("admin.bookedTo")} htmlFor="ab-to">
+          <Input id="ab-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
       </Card>
 
@@ -188,6 +208,11 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [note, setNote] = useState("");
 
   async function load() {
     const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}`, { credentials: "same-origin" });
@@ -205,6 +230,29 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
 
   const { booking, trade, supplier } = data;
   const currency = booking.price.currency as CurrencyCode;
+
+  async function act(path: string, init: RequestInit, message: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/${path}`, {
+      credentials: "same-origin",
+      ...init,
+    });
+    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
+    setBusy(false);
+    if (!body.ok) {
+      setError(body.error?.message ?? t("error.temporaryService"));
+      return false;
+    }
+    setNotice(message);
+    await load();
+    return true;
+  }
+
+  async function resend() {
+    await act("resend", { method: "POST" }, t("admin.resent"));
+  }
 
   async function askQuote() {
     setBusy(true);
@@ -259,11 +307,22 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
             <span className="font-mono">{booking.reference}</span> · {booking.statusDetail}
           </p>
         </div>
-        {cancellable && (
-          <Button variant="secondary" onClick={askQuote} loading={busy}>
-            {t("admin.cancelForCustomer")}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={resend} loading={busy}>
+            {t("admin.resend")}
           </Button>
-        )}
+          <Button variant="secondary" onClick={() => setContactOpen(true)}>
+            {t("admin.fixContact")}
+          </Button>
+          <Button variant="secondary" onClick={() => setNoteOpen(true)}>
+            {t("admin.addNote")}
+          </Button>
+          {cancellable && (
+            <Button variant="ghost" onClick={askQuote} loading={busy}>
+              {t("admin.cancelForCustomer")}
+            </Button>
+          )}
+        </div>
       </div>
 
       {notice && <Alert tone="success">{notice}</Alert>}
@@ -332,6 +391,66 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
           ))}
         </Card>
       </section>
+
+      <Modal open={contactOpen} onClose={() => setContactOpen(false)} title={t("admin.fixContact")} size="sm">
+        <div className="space-y-3 text-sm">
+          <p className="text-muted">{t("admin.fixContactBody")}</p>
+          <Field label={t("agency.workEmail")} htmlFor="fc-email">
+            <Input id="fc-email" type="email" placeholder={booking.contact.email} value={email} onChange={(e) => setEmail(e.target.value)} />
+          </Field>
+          <Field label={t("agency.phone")} htmlFor="fc-phone">
+            <Input id="fc-phone" placeholder={booking.contact.phone} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </Field>
+          <Button
+            loading={busy}
+            disabled={!email.trim() && !phone.trim()}
+            onClick={async () => {
+              const done = await act(
+                "contact",
+                {
+                  method: "PATCH",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ email: email || undefined, phone: phone || undefined }),
+                },
+                t("admin.contactFixed"),
+              );
+              if (done) {
+                setContactOpen(false);
+                setEmail("");
+                setPhone("");
+              }
+            }}
+          >
+            {t("common.save")}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={t("admin.addNote")} size="sm">
+        <div className="space-y-3 text-sm">
+          <p className="text-muted">{t("admin.addNoteBody")}</p>
+          <Field label={t("admin.note")} htmlFor="nt-note">
+            <Input id="nt-note" value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+          <Button
+            loading={busy}
+            disabled={!note.trim()}
+            onClick={async () => {
+              const done = await act(
+                "note",
+                { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note }) },
+                t("admin.noteAdded"),
+              );
+              if (done) {
+                setNoteOpen(false);
+                setNote("");
+              }
+            }}
+          >
+            {t("admin.addNote")}
+          </Button>
+        </div>
+      </Modal>
 
       <Modal open={open} onClose={() => setOpen(false)} title={t("admin.cancelForCustomer")} size="sm">
         {quote && (

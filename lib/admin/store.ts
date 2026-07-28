@@ -24,6 +24,17 @@ const FILE = path.join(dataDir(), "platform.json");
 export interface AuditEntry {
   id: string;
   at: string;
+  /**
+   * Monotonic within this store, so entries written inside the same
+   * millisecond still have an order.
+   *
+   * Sorting on the timestamp alone was not enough: two actions a few
+   * microseconds apart share an ISO string to the millisecond, and the sort
+   * then returned them in whichever order the array happened to hold. An audit
+   * log that cannot say which change came last fails at the one question it
+   * exists to answer.
+   */
+  seq: number;
   actor: string;
   action: string;
   /** What was acted on: an agency id, a booking reference, a setting key. */
@@ -104,12 +115,16 @@ export async function saveSettings(settings: PlatformSettings): Promise<void> {
   await persist();
 }
 
-export async function appendAudit(entry: Omit<AuditEntry, "id" | "at">): Promise<AuditEntry> {
+export async function appendAudit(entry: Omit<AuditEntry, "id" | "at" | "seq">): Promise<AuditEntry> {
   await load();
+  // Derived from what is already stored rather than a module counter, so the
+  // sequence survives a reload and a cold start.
+  const seq = state.audit.reduce((max, existing) => Math.max(max, existing.seq ?? 0), 0) + 1;
   const full: AuditEntry = {
     ...entry,
     id: `aud_${Math.random().toString(36).slice(2, 10)}`,
     at: new Date().toISOString(),
+    seq,
   };
   state.audit.push(full);
   await persist();
@@ -118,7 +133,9 @@ export async function appendAudit(entry: Omit<AuditEntry, "id" | "at">): Promise
 
 export async function listAudit(limit = 200): Promise<AuditEntry[]> {
   await load();
-  return [...state.audit].sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+  return [...state.audit]
+    .sort((a, b) => b.at.localeCompare(a.at) || (b.seq ?? 0) - (a.seq ?? 0))
+    .slice(0, limit);
 }
 
 /** Test seam. */
