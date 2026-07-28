@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { POST as searchRoute } from "@/app/api/hotels/search/route";
 import { POST as availabilityRoute } from "@/app/api/hotels/[slug]/availability/route";
 import { POST as recheckRoute } from "@/app/api/rates/recheck/route";
@@ -10,6 +10,7 @@ import { GET as bookingRoute_GET } from "@/app/api/bookings/[reference]/route";
 import { POST as quoteRoute } from "@/app/api/bookings/[reference]/cancellation-quotes/route";
 import { POST as cancelRoute } from "@/app/api/bookings/[reference]/cancellations/route";
 import { POST as lookupRoute } from "@/app/api/bookings/lookup/route";
+import { issueOtp, verifyOtp } from "@/lib/server/store";
 import { POST as otpRoute } from "@/app/api/auth/otp/route";
 import type { ScenarioId } from "@/lib/server/scenarios";
 import type { Booking, CheckoutSession, Offer, RecheckResult } from "@/lib/types";
@@ -371,5 +372,46 @@ describe("post-booking (§6.6, E-18, E-19, E-22)", () => {
       { params: Promise.resolve({ reference: booking.reference }) },
     );
     expect(res.status).toBe(409);
+  });
+});
+
+describe("fixed demo sign-in code", () => {
+  const original = process.env.DEMO_OTP;
+  afterEach(() => {
+    if (original === undefined) delete process.env.DEMO_OTP;
+    else process.env.DEMO_OTP = original;
+  });
+
+  it("issues and accepts the configured code", () => {
+    process.env.DEMO_OTP = "198400";
+    expect(issueOtp("someone@example.com", "signin")).toBe("198400");
+    expect(verifyOtp("someone@example.com", "signin", "198400")).toBe(true);
+  });
+
+  it("accepts it without an issued entry", () => {
+    // The point of the fix: on serverless the instance that issues a code is
+    // often not the one that checks it, and this store does not span them.
+    process.env.DEMO_OTP = "198400";
+    expect(verifyOtp("never-asked@example.com", "signin", "198400")).toBe(true);
+  });
+
+  it("still refuses a wrong code", () => {
+    process.env.DEMO_OTP = "198400";
+    expect(verifyOtp("someone@example.com", "signin", "000000")).toBe(false);
+  });
+
+  it("falls back to a random code when unset", () => {
+    delete process.env.DEMO_OTP;
+    const code = issueOtp("random@example.com", "signin");
+    expect(code).toMatch(/^\d{6}$/);
+    expect(verifyOtp("random@example.com", "signin", "198400")).toBe(false);
+  });
+
+  it("ignores a malformed value rather than trusting it", () => {
+    // An empty or non-numeric DEMO_OTP must not become a code that verifies.
+    process.env.DEMO_OTP = "not-a-code";
+    const code = issueOtp("safe@example.com", "signin");
+    expect(code).toMatch(/^\d{6}$/);
+    expect(verifyOtp("safe@example.com", "signin", "not-a-code")).toBe(false);
   });
 });

@@ -319,10 +319,26 @@ export function markNotificationsRead(channel: string): void {
 
 /* ---------------------------------------------------------------- OTP */
 
+/**
+ * A fixed sign-in code, when one is configured.
+ *
+ * Set `DEMO_OTP` and every sign-in accepts that code. It exists so a demo can
+ * be handed to someone with credentials that still work tomorrow — a random
+ * code that expires in ten minutes cannot be written in an email.
+ *
+ * It is, by design, a shared secret that is not secret. Never set it on a
+ * deployment holding real bookings or real money: with it set, knowing an
+ * address is the whole of signing in as that person.
+ */
+function fixedOtp(): string | null {
+  const value = process.env.DEMO_OTP?.trim();
+  return value && /^\d{4,8}$/.test(value) ? value : null;
+}
+
 export function issueOtp(key: string, purpose: string): string {
-  // Demo environment: the code is deterministic and surfaced in the response so
-  // the flow can be exercised. A real deployment sends it out-of-band only.
-  const code = String(100000 + Math.floor(Math.random() * 899999));
+  // Demo environment: the code is surfaced in the response so the flow can be
+  // exercised. A real deployment sends it out-of-band only.
+  const code = fixedOtp() ?? String(100000 + Math.floor(Math.random() * 899999));
   store.otps.set(`${purpose}:${key.toLowerCase()}`, {
     code,
     expiresAt: Date.now() + 10 * 60 * 1000,
@@ -332,6 +348,15 @@ export function issueOtp(key: string, purpose: string): string {
 }
 
 export function verifyOtp(key: string, purpose: string, code: string): boolean {
+  /*
+   * A configured code verifies without consulting the store, which also fixes
+   * a real fault on serverless: the request that issued a code and the one
+   * that checks it are often different instances, and this store is
+   * process-local. Sign-in worked only because instances happened to be reused.
+   */
+  const fixed = fixedOtp();
+  if (fixed && code.trim() === fixed) return true;
+
   const entry = store.otps.get(`${purpose}:${key.toLowerCase()}`);
   if (!entry) return false;
   if (entry.expiresAt < Date.now()) return false;
