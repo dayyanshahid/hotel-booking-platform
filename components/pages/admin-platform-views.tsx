@@ -193,7 +193,7 @@ function Suppliers() {
 
               {supplier.catalogueSize !== undefined && (
                 <p className="text-sm">
-                  {t("admin.catalogue")}: <strong>{supplier.catalogueSize}</strong>
+                  {t("admin.mappedProperties")}: <strong>{supplier.catalogueSize}</strong>
                   {supplier.catalogueSize === 0 && (
                     <span className="text-caution-700"> · {t("admin.catalogueEmpty")}</span>
                   )}

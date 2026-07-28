@@ -1,4 +1,5 @@
 import { TourmindError } from "./client";
+import { recordIncident } from "../incidents";
 import type { ApiError, Locale } from "@/lib/types";
 
 /**
@@ -60,7 +61,13 @@ export function isIndeterminate(error: unknown): boolean {
   );
 }
 
-/** Logs without the request body — it carries the account password. */
+/**
+ * Logs without the request body — it carries the account password.
+ *
+ * Mirrored into the console's incident feed for the same reason as the
+ * Hotelbeds logger: a duty operator should not need a log aggregator to see
+ * that an integration is failing.
+ */
 export function logTourmindError(scope: string, error: unknown, reference?: string): void {
   const code = error instanceof TourmindError ? error.code : "UNKNOWN";
   console.error(
@@ -72,4 +79,12 @@ export function logTourmindError(scope: string, error: unknown, reference?: stri
       message: error instanceof Error ? error.message : String(error),
     }),
   );
+  recordIncident({
+    supplier: "tourmind",
+    operation: scope,
+    kind: String(code),
+    // The message may name an endpoint; it never carries the request body.
+    detail: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+    reference,
+  });
 }

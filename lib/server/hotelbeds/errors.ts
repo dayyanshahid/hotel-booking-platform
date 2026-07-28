@@ -1,5 +1,6 @@
 import type { ApiError, ErrorCategory, Locale } from "@/lib/types";
 import { HotelbedsError } from "./client";
+import { recordIncident } from "../incidents";
 
 /**
  * Supplier failure → platform error taxonomy (§10.1).
@@ -88,7 +89,13 @@ export function mapSupplierError(error: unknown, locale: Locale): MappedSupplier
   }
 }
 
-/** Structured, PII-free server log for a supplier failure (§12.3). */
+/**
+ * Structured, PII-free server log for a supplier failure (§12.3).
+ *
+ * Also mirrored into the in-process incident feed so the operator console can
+ * answer "is this supplier having a bad hour" without anyone opening a log
+ * aggregator. The console copy is lossy; this one is the durable record.
+ */
 export function logSupplierError(operation: string, error: unknown, correlationId: string): void {
   const mapped = mapSupplierError(error, "en");
   console.error(
@@ -101,4 +108,11 @@ export function logSupplierError(operation: string, error: unknown, correlationI
       retryable: mapped.retryable,
     }),
   );
+  recordIncident({
+    supplier: "hotelbeds",
+    operation,
+    kind: error instanceof HotelbedsError ? error.kind : "unknown",
+    detail: mapped.logDetail,
+    reference: correlationId,
+  });
 }

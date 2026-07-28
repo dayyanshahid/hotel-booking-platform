@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Badge, Button, Spinner, cx } from "@/components/ui";
+import { Badge, Button, Input, Spinner, cx } from "@/components/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
 import type { AdminSession } from "@/lib/admin/session";
@@ -82,8 +82,8 @@ export function ConsoleShell({
       label: t("admin.platform"),
       links: [
         { path: "/admin", label: t("admin.overview") },
-        { path: "/admin/settings", label: t("admin.settings") },
-        { path: "/admin/suppliers", label: t("admin.suppliers") },
+        { path: "/admin/operations", label: t("admin.operations") },
+        { path: "/admin/reports", label: t("admin.platformReports") },
         { path: "/admin/audit", label: t("admin.audit") },
       ],
     },
@@ -91,12 +91,27 @@ export function ConsoleShell({
       label: t("admin.b2c"),
       links: [
         { path: "/admin/bookings", label: t("admin.bookings") },
+        { path: "/admin/customers", label: t("admin.customers") },
         { path: "/admin/cases", label: t("admin.cases") },
       ],
     },
     {
       label: t("admin.b2b"),
       links: [{ path: "/admin/agencies", label: t("admin.agencies") }],
+    },
+    {
+      label: t("admin.supply"),
+      links: [
+        { path: "/admin/catalogue", label: t("admin.catalogue") },
+        { path: "/admin/suppliers", label: t("admin.suppliers") },
+      ],
+    },
+    {
+      label: t("admin.config"),
+      links: [
+        { path: "/admin/settings", label: t("admin.settings") },
+        { path: "/admin/environment", label: t("admin.environment") },
+      ],
     },
   ];
 
@@ -116,7 +131,8 @@ export function ConsoleShell({
           <Badge tone="critical">{t("admin.console")}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-muted text-sm wrap-anywhere">{session.email}</p>
+          <GlobalSearch locale={locale} />
+          <p className="text-muted hidden text-sm wrap-anywhere lg:block">{session.email}</p>
           <Button variant="ghost" size="sm" onClick={signOut}>
             {t("agency.signOut")}
           </Button>
@@ -149,6 +165,76 @@ export function ConsoleShell({
       </nav>
 
       {children(session)}
+    </div>
+  );
+}
+
+interface Hit {
+  type: string;
+  label: string;
+  detail: string;
+  href: string;
+}
+
+/**
+ * One box that finds anything.
+ *
+ * An operator is handed a reference, an email or a name and has no idea which
+ * of eight screens owns it. Making them pick the right one first is making them
+ * guess, so this searches everything the console can open and lets the result
+ * say what it was.
+ */
+function GlobalSearch({ locale }: { locale: Locale }) {
+  const { t } = useApp();
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    let alive = true;
+    const id = window.setTimeout(async () => {
+      const res = await fetch(`/api/admin/search?q=${encodeURIComponent(query)}`, { credentials: "same-origin" });
+      const body = (await res.json()) as { ok: boolean; data?: { hits: Hit[] } };
+      if (alive && body.ok && body.data) setHits(body.data.hits);
+    }, 200);
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+  }, [query]);
+
+  return (
+    <div className="relative">
+      <Input
+        value={query}
+        placeholder={t("admin.jumpTo")}
+        aria-label={t("admin.jumpTo")}
+        onChange={(e) => setQuery(e.target.value)}
+        className="w-44 sm:w-64"
+      />
+      {hits.length > 0 && (
+        <ul className="surface hairline rise absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-[var(--radius-card)] border">
+          {hits.map((hit, i) => (
+            <li key={`${hit.href}-${i}`}>
+              <Link
+                href={href(locale, hit.href)}
+                onClick={() => {
+                  setQuery("");
+                  setHits([]);
+                }}
+                className="hover:bg-brand-50 block px-3 py-2 text-sm"
+              >
+                <span className="text-muted me-2 text-[11px] uppercase">{hit.type}</span>
+                <span className="font-medium wrap-anywhere">{hit.label}</span>
+                <span className="text-muted block text-xs wrap-anywhere">{hit.detail}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

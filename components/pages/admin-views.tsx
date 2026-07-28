@@ -5,9 +5,8 @@ import { useApp } from "@/components/providers/app-provider";
 import { ConsoleShell, refreshAdmin } from "@/components/admin/console-shell";
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton, cx } from "@/components/ui";
 import { Wordmark } from "@/components/ui/wordmark";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
-import type { AuditEntry } from "@/lib/admin/store";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
 /* -------------------------------------------------------------- sign-in */
@@ -270,54 +269,6 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
     <div className="flex justify-between">
       <dt className="text-muted">{label}</dt>
       <dd className={cx(strong && "text-positive-700 font-semibold")}>{value}</dd>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------------- audit */
-
-export function AdminAuditView({ locale }: { locale: Locale }) {
-  return <ConsoleShell locale={locale}>{() => <Audit locale={locale} />}</ConsoleShell>;
-}
-
-function Audit({ locale }: { locale: Locale }) {
-  const { t } = useApp();
-  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/admin/audit", { credentials: "same-origin" });
-      const body = (await res.json()) as { ok: boolean; data?: { entries: AuditEntry[] } };
-      setEntries(body.ok && body.data ? body.data.entries : []);
-    })();
-  }, []);
-
-  if (!entries) return <Skeleton className="h-64 w-full" />;
-
-  return (
-    <div className="space-y-3">
-      <SectionHeading title={t("admin.audit")} description={t("admin.auditBody")} />
-      {!entries.length && <p className="text-muted text-sm">{t("admin.noAudit")}</p>}
-      {entries.length > 0 && (
-        <Card className="divide-ink-100 divide-y">
-          {entries.map((entry) => (
-            <div key={entry.id} className="p-3.5 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-medium wrap-anywhere">{entry.detail}</p>
-                <Badge tone="neutral">{entry.action}</Badge>
-              </div>
-              <p className="text-muted text-xs wrap-anywhere">
-                {entry.actor} · {entry.subject} · {formatDateTime(entry.at, locale)}
-              </p>
-              {(entry.before || entry.after) && (
-                <p className="text-muted mt-0.5 font-mono text-xs wrap-anywhere">
-                  {entry.before ?? "—"} → {entry.after ?? "—"}
-                </p>
-              )}
-            </div>
-          ))}
-        </Card>
-      )}
     </div>
   );
 }

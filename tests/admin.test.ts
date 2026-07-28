@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { decodeAdminSession, encodeAdminSession, isAdminEmail } from "@/lib/admin/session";
 import { __resetPlatform, appendAudit, listAudit, saveSettings, storedSettings } from "@/lib/admin/store";
 import { applyMarkup, currentMarkupPercent, setMarkupOverride, MARKUP_RANGE } from "@/lib/server/markup";
+import { __resetIncidents, incidentRate, listIncidents, recordIncident } from "@/lib/server/incidents";
 import { __resetAgencies, statementPeriods, appendLedger, saveAgency } from "@/lib/agency/store";
 import type { Agency } from "@/lib/agency/types";
 
@@ -169,5 +170,35 @@ describe("statements", () => {
     });
     const periods = await statementPeriods(agency.id);
     expect(periods.map((p) => p.month)).toEqual(["2026-07", "2026-05"]);
+  });
+});
+
+describe("incident feed", () => {
+  beforeEach(() => {
+    __resetIncidents();
+  });
+
+  it("keeps newest first and counts only a recent window", () => {
+    recordIncident({ supplier: "hotelbeds", operation: "search", kind: "timeout", detail: "a" });
+    recordIncident({ supplier: "tourmind", operation: "book", kind: "104", detail: "b" });
+
+    const recent = listIncidents();
+    expect(recent[0].detail).toBe("b");
+
+    const rate = incidentRate(60);
+    expect(rate.find((r) => r.supplier === "hotelbeds")?.count).toBe(1);
+    // A supplier that failed last Tuesday is not failing now: asked from an
+    // hour in the future, a one-minute window is empty.
+    expect(incidentRate(1, Date.now() + 3_600_000)).toEqual([]);
+  });
+
+  it("stays bounded so a failing supplier cannot exhaust memory", () => {
+    for (let i = 0; i < 500; i += 1) {
+      recordIncident({ supplier: "hotelbeds", operation: "search", kind: "timeout", detail: String(i) });
+    }
+    const all = listIncidents(1000);
+    expect(all.length).toBeLessThanOrEqual(200);
+    // The newest survive, not the oldest.
+    expect(all[0].detail).toBe("499");
   });
 });
