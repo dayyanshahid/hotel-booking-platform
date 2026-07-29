@@ -6,7 +6,7 @@ import { ConsoleShell } from "@/components/admin/console-shell";
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import type { Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /* ------------------------------------------------------------ settings */
 
@@ -40,7 +40,7 @@ function Settings({ locale }: { locale: Locale }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/admin/settings"), { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/admin/settings"), { credentials: apiCredentials() });
     const body = (await res.json()) as { ok: boolean; data?: SettingsPayload };
     if (body.ok && body.data) {
       setData(body.data);
@@ -61,7 +61,7 @@ function Settings({ locale }: { locale: Locale }) {
     const res = await fetch(apiUrl("/api/admin/settings"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ markupPercent: value }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -158,7 +158,7 @@ function FxRates({ rows, onSaved }: { rows: FxRow[]; onSaved: () => void }) {
     const res = await fetch(apiUrl("/api/admin/settings"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ fxRates: draft }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -233,7 +233,7 @@ function Suppliers() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/suppliers"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/suppliers"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { suppliers: Supplier[] } };
       setSuppliers(body.ok && body.data ? body.data.suppliers : []);
     })();

@@ -9,7 +9,7 @@ import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
 import type { AdminSession } from "@/lib/admin/session";
 import type { Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * The console frame.
@@ -44,7 +44,7 @@ export function ConsoleShell({
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/me"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/me"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { session: AdminSession } };
       const next = body.ok && body.data ? body.data.session : null;
       cached = next;
@@ -117,7 +117,7 @@ export function ConsoleShell({
   ];
 
   async function signOut() {
-    await fetch(apiUrl("/api/admin/session"), { method: "DELETE", credentials: "same-origin" });
+    await fetch(apiUrl("/api/admin/session"), { method: "DELETE", credentials: apiCredentials() });
     refreshAdmin();
     router.push(href(locale, "/admin/signin"));
   }
@@ -197,7 +197,7 @@ function GlobalSearch({ locale }: { locale: Locale }) {
     }
     let alive = true;
     const id = window.setTimeout(async () => {
-      const res = await fetch(apiUrl(`/api/admin/search?q=${encodeURIComponent(query)}`), { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/search?q=${encodeURIComponent(query)}`), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { hits: Hit[] } };
       if (alive && body.ok && body.data) setHits(body.data.hits);
     }, 200);

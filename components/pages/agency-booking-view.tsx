@@ -11,7 +11,7 @@ import { formatDate, formatDateTime, formatDeadline, formatMoney } from "@/lib/f
 import { href } from "@/lib/nav";
 import type { AgencyBooking } from "@/lib/agency/types";
 import type { Booking, CancellationQuote, CurrencyCode, Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * One booking, as the agency that sold it needs to see it.
@@ -66,7 +66,7 @@ function Detail({
 
   async function load() {
     const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}`), {
-      credentials: "same-origin",
+      credentials: apiCredentials(),
     });
     const body = (await res.json()) as { ok: boolean; data?: Payload };
     setData(body.ok && body.data ? body.data : "missing");
@@ -102,7 +102,7 @@ function Detail({
     const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({}),
     });
     const body = (await res.json()) as {
@@ -127,7 +127,7 @@ function Detail({
     const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ quoteId: quote.quoteId, idempotencyKey: `cx-${quote.quoteId}` }),
     });
     const body = (await res.json()) as {
@@ -157,7 +157,7 @@ function Detail({
     setError(null);
     const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`), {
       method: "POST",
-      credentials: "same-origin",
+      credentials: apiCredentials(),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
@@ -296,7 +296,7 @@ function Detail({
               const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/change`), {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                credentials: "same-origin",
+                credentials: apiCredentials(),
                 body: JSON.stringify({ kind: changeKind, detail: changeDetail }),
               });
               const result = (await res.json()) as { ok: boolean; data?: { alreadyOpen: boolean } };

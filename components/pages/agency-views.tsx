@@ -21,7 +21,7 @@ import type {
   MarkupRule,
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /** One label for a permission, wherever it is shown. */
 function permissionLabel(t: (key: string) => string, permission: AgentPermission): string {
@@ -216,7 +216,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/agency/bookings"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/bookings"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { bookings: AgencyBooking[] } };
       setBookings(body.ok && body.data ? body.data.bookings : []);
     })();
@@ -412,7 +412,7 @@ function Periods({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/agency/statements"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/statements"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { periods: StatementPeriod[] } };
       setPeriods(body.ok && body.data ? body.data.periods : []);
     })();
@@ -493,7 +493,7 @@ function Statement({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/agency/ledger"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/ledger"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { entries: LedgerEntry[] } };
       setEntries(body.ok && body.data ? body.data.entries : []);
     })();
@@ -551,7 +551,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const isAdmin = context.session.role === "admin";
 
   async function reload() {
-    const res = await fetch(apiUrl("/api/agency/agents"), { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/agency/agents"), { credentials: apiCredentials() });
     const body = (await res.json()) as { ok: boolean; data?: { agents: Agent[] } };
     setAgents(body.ok && body.data ? body.data.agents : []);
   }
@@ -566,7 +566,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ name, email, role, permission }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -591,7 +591,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ agentId: agent.id, permission: next }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -603,7 +603,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ agentId: agent.id, active: !agent.active }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -729,7 +729,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
     const res = await fetch(apiUrl("/api/agency/settings"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ markup, profile }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };

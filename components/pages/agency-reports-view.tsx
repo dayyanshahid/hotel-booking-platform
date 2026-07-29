@@ -7,7 +7,7 @@ import { Card } from "@/components/ui";
 import { Money, PageHeader, Section, StatSkeleton, Stat, StatGrid } from "@/components/agency/ui";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * Production.
@@ -45,7 +45,7 @@ function Reports({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/agency/reports"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/reports"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: Payload };
       if (body.ok && body.data) setData(body.data);
     })();

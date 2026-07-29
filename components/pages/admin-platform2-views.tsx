@@ -10,7 +10,7 @@ import { TripPrompt } from "@/components/search/trip-prompt";
 import { addDays, formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
 import type { AuditEntry } from "@/lib/admin/store";
 import type { CurrencyCode, HotelResultCard, Locale, SearchFilters, SearchIntent, SearchResponse } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /* ---------------------------------------------------------- catalogue */
 
@@ -60,7 +60,7 @@ function Catalogue() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/admin/catalogue"), { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/admin/catalogue"), { credentials: apiCredentials() });
     const body = (await res.json()) as { ok: boolean; data?: CataloguePayload };
     if (body.ok && body.data) setData(body.data);
   }
@@ -79,7 +79,7 @@ function Catalogue() {
     let alive = true;
     const id = window.setTimeout(async () => {
       const res = await fetch(apiUrl(`/api/admin/catalogue/lookup?q=${encodeURIComponent(lookup)}`), {
-        credentials: "same-origin",
+        credentials: apiCredentials(),
       });
       const body = (await res.json()) as { ok: boolean; data?: { matches: MatchRow[] } };
       if (alive && body.ok && body.data) setMatches(body.data.matches);
@@ -92,7 +92,7 @@ function Catalogue() {
 
   async function openCountry(code: string) {
     const res = await fetch(apiUrl(`/api/admin/catalogue/lookup?country=${encodeURIComponent(code)}`), {
-      credentials: "same-origin",
+      credentials: apiCredentials(),
     });
     const body = (await res.json()) as { ok: boolean; data?: { country: string; cities: CityRow[] } };
     if (body.ok && body.data) setCountry({ name: body.data.country, cities: body.data.cities });
@@ -107,7 +107,7 @@ function Catalogue() {
     const res = await fetch(apiUrl("/api/admin/catalogue"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ supplier }),
     });
     const body = (await res.json()) as {
@@ -323,7 +323,7 @@ function Reports({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/reports"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/reports"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: ReportsPayload };
       if (body.ok && body.data) setData(body.data);
     })();
@@ -435,7 +435,7 @@ function Environment() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/environment"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/environment"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: EnvironmentPayload };
       if (body.ok && body.data) setData(body.data);
     })();
@@ -565,7 +565,7 @@ function SupplyProbe() {
     const res = await fetch(apiUrl("/api/admin/probe"), {
       method: "POST",
       headers: { "content-type": "application/json", "x-locale": locale },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ intent, filters }),
     });
     const body = (await res.json()) as { ok: boolean; data?: ProbePayload; error?: { message: string } };
@@ -777,7 +777,7 @@ function Audit({ locale }: { locale: Locale }) {
     let alive = true;
     const id = window.setTimeout(async () => {
       const params = new URLSearchParams({ actor, action });
-      const res = await fetch(apiUrl(`/api/admin/audit?${params.toString()}`), { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/audit?${params.toString()}`), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { entries: AuditEntry[]; actions: string[] } };
       if (!alive) return;
       setEntries(body.ok && body.data ? body.data.entries : []);

@@ -8,7 +8,7 @@ import { Alert, Button, Card, Field, Input, Modal } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import type { AgencyCustomer } from "@/lib/agency/types";
 import type { Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * The agency's own client list.
@@ -35,7 +35,7 @@ function Customers({ locale }: { locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/agency/customers"), { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/agency/customers"), { credentials: apiCredentials() });
     const body = (await res.json()) as { ok: boolean; data?: { customers: AgencyCustomer[] } };
     setCustomers(body.ok && body.data ? body.data.customers : []);
   }
@@ -51,7 +51,7 @@ function Customers({ locale }: { locale: Locale }) {
     const res = await fetch(apiUrl("/api/agency/customers"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ ...editing, id: editing.id || undefined }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
@@ -68,7 +68,7 @@ function Customers({ locale }: { locale: Locale }) {
     setBusy(true);
     await fetch(apiUrl(`/api/agency/customers?id=${encodeURIComponent(id)}`), {
       method: "DELETE",
-      credentials: "same-origin",
+      credentials: apiCredentials(),
     });
     setBusy(false);
     setEditing(null);

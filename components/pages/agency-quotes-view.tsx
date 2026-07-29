@@ -11,7 +11,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /* --------------------------------------------------------------- list */
 
@@ -32,7 +32,7 @@ function QuoteList({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/agency/quotes"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/quotes"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: { quotes: AgencyQuote[] } };
       setQuotes(body.ok && body.data ? body.data.quotes : []);
     })();
@@ -117,7 +117,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const res = await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), { credentials: "same-origin" });
+    const res = await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), { credentials: apiCredentials() });
     const body = (await res.json()) as { ok: boolean; data?: { quote: AgencyQuote } };
     setQuote(body.ok && body.data ? body.data.quote : "missing");
   }
@@ -135,7 +135,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
     await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ status }),
     });
     setBusy(false);

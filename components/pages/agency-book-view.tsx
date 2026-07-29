@@ -11,7 +11,7 @@ import { formatDate, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type { CheckoutSession, CurrencyCode, Locale, RecheckResult } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 interface GuestField {
   roomIndex: number;
@@ -108,7 +108,7 @@ function TradeCheckout({
       const res = await fetch(apiUrl("/api/checkout/sessions"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: apiCredentials(),
         body: JSON.stringify({ offerId }),
       });
       const body = (await res.json()) as { ok: boolean; data?: CheckoutSession };
@@ -122,7 +122,7 @@ function TradeCheckout({
       const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: apiCredentials(),
         body: JSON.stringify({ offerIds: [offerId] }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
@@ -134,7 +134,7 @@ function TradeCheckout({
       const refreshed = await fetch(apiUrl("/api/rates/recheck"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: apiCredentials(),
         body: JSON.stringify({ offerId, checkoutSessionId: body.data.checkoutSessionId }),
       });
       const refreshedBody = (await refreshed.json()) as { ok: boolean; data?: RecheckResult };
@@ -174,7 +174,7 @@ function TradeCheckout({
     const res = await fetch(apiUrl("/api/rates/recheck"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ offerId, checkoutSessionId: session.checkoutSessionId, accept: true }),
     });
     const body = (await res.json()) as { ok: boolean; data?: RecheckResult };
@@ -190,7 +190,7 @@ function TradeCheckout({
       const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: apiCredentials(),
         body: JSON.stringify({ offerIds: [offerId] }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
@@ -222,7 +222,7 @@ function TradeCheckout({
     const res = await fetch(apiUrl("/api/bookings"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({
         checkoutSessionId: session.checkoutSessionId,
         // Derived from the session, so a double-submit lands on the same order.

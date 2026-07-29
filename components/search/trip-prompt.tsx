@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/format";
 import type { Interpretation } from "@/lib/server/interpret";
 import type { CurrencyCode, SearchFilters, SearchIntent } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * Describe your trip.
@@ -51,7 +51,7 @@ export function TripPrompt({
     const res = await fetch(apiUrl("/api/search/interpret"), {
       method: "POST",
       headers: { "content-type": "application/json", "x-locale": locale },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({ text: prompt, currency: currency ?? browsingCurrency }),
     });
     const body = (await res.json()) as { ok: boolean; data?: Interpretation };

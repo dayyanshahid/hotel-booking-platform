@@ -8,7 +8,7 @@ import { Wordmark } from "@/components/ui/wordmark";
 import { formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /* -------------------------------------------------------------- sign-in */
 
@@ -143,7 +143,7 @@ function Overview({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/overview"), { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/overview"), { credentials: apiCredentials() });
       const body = (await res.json()) as { ok: boolean; data?: Overview };
       if (body.ok && body.data) setData(body.data);
     })();

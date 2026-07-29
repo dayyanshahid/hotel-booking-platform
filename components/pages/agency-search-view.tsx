@@ -25,7 +25,7 @@ import { addDays, formatDate, formatMoney, guestCount, nightsBetween, todayIso }
 import { countLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
-import { apiUrl } from "@/lib/api-origin";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import type {
   CurrencyCode,
   Locale,
@@ -169,7 +169,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     const res = await fetch(apiUrl("/api/hotels/search"), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: "same-origin",
+      credentials: apiCredentials(),
       body: JSON.stringify({
         intent,
         /*
@@ -208,7 +208,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: apiCredentials(),
         body: JSON.stringify({ offerIds }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
