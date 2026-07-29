@@ -623,3 +623,30 @@ export interface ApiError {
 }
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: ApiError };
+
+/* ------------------------------------------------- supplier confirmation */
+
+export interface SupplierConfirmation {
+  /** Whether the supplier still considers this live. */
+  status: "confirmed" | "pending" | "cancelled" | "failed" | "unknown";
+  /**
+   * The property's own confirmation number, when the supplier gives us one.
+   *
+   * This is what a guest reads out at the desk. It names the hotel's record,
+   * not our wholesaler's, which is why it may be shown when a supplier
+   * reference may not. TourMind returns it; Hotelbeds does not, and the voucher
+   * simply omits the line rather than printing something misleading in its
+   * place.
+   */
+  hotelConfirmationNumber?: string;
+  /** Guests as the supplier holds them — who the property is expecting. */
+  guests?: { firstName: string; lastName: string; child: boolean }[];
+  /** Rooms as confirmed, which can differ from what was requested. */
+  rooms?: { name?: string; board?: string; guests?: string[] }[];
+  checkIn?: string;
+  checkOut?: string;
+  /** When the supplier recorded the booking. */
+  bookedAt?: string;
+  /** True when we could not reach the supplier; the voucher says so. */
+  unavailable?: boolean;
+}

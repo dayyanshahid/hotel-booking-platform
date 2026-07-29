@@ -10,7 +10,13 @@ import { Alert, Badge, Button, Card, Field, Input, Modal, SectionHeading, Select
 import { formatDate, formatDateTime, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyBooking } from "@/lib/agency/types";
-import type { Booking, CancellationQuote, CurrencyCode, Locale } from "@/lib/types";
+import type {
+  Booking,
+  CancellationQuote,
+  CurrencyCode,
+  Locale,
+  SupplierConfirmation,
+} from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
@@ -57,6 +63,15 @@ function Detail({
    * look at today.
    */
   const [daysToTravel, setDaysToTravel] = useState<number | null>(null);
+  /*
+   * What the property itself holds.
+   *
+   * Fetched separately from the booking, and after it, because it is a live
+   * supplier call: the page must render on our own record even when the
+   * supplier is slow or unreachable, and the voucher says so rather than
+   * refusing to print.
+   */
+  const [confirmation, setConfirmation] = useState<SupplierConfirmation | undefined>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,6 +88,19 @@ function Detail({
     if (body.ok && body.data) {
       const checkIn = new Date(`${body.data.booking.checkIn}T00:00:00Z`).getTime();
       setDaysToTravel(Math.ceil((checkIn - Date.now()) / 86400000));
+
+      // A hold has no voucher yet, so there is nothing to confirm.
+      if (body.data.trade.status !== "held") {
+        const voucher = await fetch(
+          apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/voucher`),
+          { credentials: apiCredentials() },
+        );
+        const payload = (await voucher.json()) as {
+          ok: boolean;
+          data?: { confirmation: SupplierConfirmation };
+        };
+        if (payload.ok && payload.data) setConfirmation(payload.data.confirmation);
+      }
     }
   }
 
@@ -252,6 +280,7 @@ function Detail({
       </Card>
 
       <TradeVoucher
+        confirmation={confirmation}
         booking={booking}
         trade={trade}
         profile={context.agency.profile}

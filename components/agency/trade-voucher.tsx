@@ -4,7 +4,8 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card } from "@/components/ui";
 import { formatDate, formatDeadline, formatMoney, guestCount } from "@/lib/format";
 import type { AgencyBooking, AgencyProfile } from "@/lib/agency/types";
-import type { Booking, CurrencyCode, Locale } from "@/lib/types";
+
+import type { Booking, CurrencyCode, Locale, SupplierConfirmation } from "@/lib/types";
 
 /**
  * The voucher an agency hands its customer.
@@ -26,12 +27,22 @@ export function TradeVoucher({
   profile,
   agencyName,
   locale,
+  confirmation,
 }: {
   booking: Booking;
   trade: AgencyBooking;
   profile: AgencyProfile;
   agencyName: string;
   locale: Locale;
+  /**
+   * What the supplier says it holds, when we could ask.
+   *
+   * Printed alongside our own record rather than instead of it. If a property
+   * confirmed a different room or spelled a guest differently, the person at
+   * the desk is going by their copy, and the agent needs to see the difference
+   * before the customer discovers it at midnight.
+   */
+  confirmation?: SupplierConfirmation;
 }) {
   const { t } = useApp();
   const currency = trade.currency as CurrencyCode;
@@ -47,7 +58,22 @@ export function TradeVoucher({
 
       <div className="rounded-[var(--radius-card)] border p-4">
         <div className="hairline flex flex-wrap items-start justify-between gap-3 border-b pb-3">
-          <div>
+          <div className="flex items-start gap-3">
+            {/*
+              The agency's mark, not ours. A fixed box so a tall or wide file
+              cannot push the rest of the header off the page, and plain
+              `<img>` because this is a customer-supplied URL on a document
+              that gets printed — the image optimiser is no help here.
+            */}
+            {profile.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profile.logoUrl}
+                alt={profile.legalName || agencyName}
+                className="h-12 w-auto max-w-[160px] object-contain"
+              />
+            )}
+            <div>
             <p className="text-base font-bold wrap-anywhere">{profile.legalName || agencyName}</p>
             {profile.address && <p className="text-muted text-sm wrap-anywhere">{profile.address}</p>}
             {profile.city && <p className="text-muted text-sm">{profile.city}</p>}
@@ -59,6 +85,7 @@ export function TradeVoucher({
                 {t("agency.taxNumber")}: {profile.taxNumber}
               </p>
             )}
+            </div>
           </div>
           <div className="text-end">
             <p className="text-muted text-xs">{t("booking.reference")}</p>
@@ -68,6 +95,32 @@ export function TradeVoucher({
             </Badge>
           </div>
         </div>
+
+        {/*
+          What the property itself confirmed.
+          Its own confirmation number is the one identifier a front desk can
+          look up, and it is the supplier's only when they give us theirs
+          instead — which is why the line is omitted rather than filled with
+          something that would send a guest to the wrong record.
+        */}
+        {confirmation?.hotelConfirmationNumber && (
+          <div className="bg-positive-50 mt-3 rounded-[var(--radius-control)] px-3 py-2">
+            <p className="text-muted text-xs">{t("agency.hotelConfirmation")}</p>
+            <p className="font-mono text-base font-bold wrap-anywhere">
+              {confirmation.hotelConfirmationNumber}
+            </p>
+          </div>
+        )}
+
+        {confirmation?.status === "pending" && (
+          <p className="text-caution-700 mt-3 text-sm">{t("agency.confirmationPending")}</p>
+        )}
+        {confirmation?.status === "cancelled" && (
+          <p className="text-critical-700 mt-3 text-sm font-medium">{t("agency.confirmationCancelled")}</p>
+        )}
+        {confirmation?.unavailable && (
+          <p className="text-muted no-print mt-3 text-xs">{t("agency.confirmationUnavailable")}</p>
+        )}
 
         <div className="mt-3">
           <p className="text-lg font-bold wrap-anywhere">{booking.hotelName}</p>

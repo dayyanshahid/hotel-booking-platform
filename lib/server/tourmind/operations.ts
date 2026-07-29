@@ -401,6 +401,12 @@ export async function tourmindRetrieve(agentRefId: string): Promise<{
   status: "confirmed" | "pending" | "cancelled" | "failed";
   reservationId?: string;
   hotelConfirmationNo?: string;
+  checkIn?: string;
+  checkOut?: string;
+  roomCount?: number;
+  bookedAt?: string;
+  /** Guests as the supplier holds them, which is who the property expects. */
+  guests?: { firstName: string; lastName: string; child: boolean }[];
 } | null> {
   const response = await tourmindPost<TmSearchOrderResponse>(
     TM.retrieve,
@@ -410,6 +416,14 @@ export async function tourmindRetrieve(agentRefId: string): Promise<{
   const info = response.OrderInfo;
   if (!info) return null;
   const status = String(info.OrderStatus ?? "").toUpperCase();
+  const guests = (info.PaxRooms ?? []).flatMap((room) =>
+    (room.PaxNames ?? []).map((pax) => ({
+      firstName: pax.FirstName,
+      lastName: pax.LastName,
+      child: pax.Type === "CHI",
+    })),
+  );
+
   return {
     status:
       status === "CONFIRMED"
@@ -421,6 +435,11 @@ export async function tourmindRetrieve(agentRefId: string): Promise<{
             : "pending",
     reservationId: info.ReservationID,
     hotelConfirmationNo: info.HotelConfirmationNo,
+    checkIn: info.CheckIn,
+    checkOut: info.CheckOut,
+    roomCount: info.RoomCount,
+    bookedAt: info.BookingTime,
+    guests: guests.length ? guests : undefined,
   };
 }
 

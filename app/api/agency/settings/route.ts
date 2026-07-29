@@ -26,6 +26,30 @@ function readRule(input: unknown): MarkupRule | null {
   return { mode, value };
 }
 
+/**
+ * A logo URL that is safe to put in an image tag.
+ *
+ * The agency types this in and it ends up on every voucher their customers
+ * receive, so it is not merely a string. `javascript:` and `data:` are the
+ * obvious abuses; plain `http:` is the quiet one, because a single insecure
+ * image turns an otherwise secure page into a mixed-content warning on the
+ * document a traveller is asked to trust. HTTPS only.
+ *
+ * An empty value clears the logo rather than failing, which is how an agency
+ * removes one.
+ */
+function safeLogoUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" ? url.toString().slice(0, 400) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function PATCH(req: Request) {
   const locale = localeFrom(req);
   const session = await activeAgent();
@@ -79,6 +103,7 @@ export async function PATCH(req: Request) {
         taxNumber: sanitize(body.profile.taxNumber, 40),
         email: sanitize(body.profile.email, 120).toLowerCase(),
         phone: sanitize(body.profile.phone, 40),
+        logoUrl: safeLogoUrl(body.profile.logoUrl) ?? agency.profile.logoUrl,
       }
     : agency.profile;
 

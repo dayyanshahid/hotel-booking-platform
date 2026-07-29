@@ -127,9 +127,24 @@ export interface TmSearchOrderResponse {
     ReservationID?: string;
     /** PENDING · CONFIRMED · CANCELLED · FAILED */
     OrderStatus?: string;
+    /**
+     * The property's own confirmation number.
+     *
+     * The one identifier on this response a guest can usefully hand over at a
+     * front desk — and, unlike the reservation id, it names the hotel's record
+     * rather than our wholesaler's.
+     */
     HotelConfirmationNo?: string;
     TotalPrice?: number;
     CurrencyCode?: string;
+    HotelCode?: number;
+    RoomCount?: number;
+    CheckIn?: string;
+    CheckOut?: string;
+    PaxRooms?: TmPaxRoom[];
+    Contact?: string;
+    ContactPhone?: string;
+    BookingTime?: string;
   };
 }
 

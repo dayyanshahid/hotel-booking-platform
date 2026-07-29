@@ -931,6 +931,37 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
               onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
             />
           </Field>
+          {/*
+            The mark that goes on every document a customer receives. Shown
+            back as a preview rather than only as a URL — a broken link is
+            obvious here and invisible on a voucher already handed over.
+          */}
+          <Field
+            label={t("agency.logoUrl")}
+            htmlFor="pf-logo"
+            hint={t("agency.logoUrlHint")}
+            className="sm:col-span-2"
+          >
+            <Input
+              id="pf-logo"
+              type="url"
+              inputMode="url"
+              placeholder="https://"
+              value={profile.logoUrl ?? ""}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
+            />
+          </Field>
+          {profile.logoUrl && (
+            <div className="sm:col-span-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={profile.logoUrl}
+                alt={profile.legalName || t("agency.logoUrl")}
+                className="hairline h-14 w-auto max-w-[200px] rounded-[var(--radius-control)] border object-contain p-1"
+              />
+            </div>
+          )}
         </div>
       </Card>
 

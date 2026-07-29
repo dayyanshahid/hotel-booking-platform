@@ -141,6 +141,15 @@ export interface AgencyProfile {
   taxNumber?: string;
   email: string;
   phone: string;
+  /**
+   * The agency's own mark, printed on anything a customer receives.
+   *
+   * A URL rather than an upload: an agency already has its logo hosted
+   * somewhere, and storing image bytes in the same document as a credit line is
+   * a poor trade. Rendered inside a fixed box so a tall or wide file cannot
+   * break the top of a voucher.
+   */
+  logoUrl?: string;
 }
 
 export interface Agency {
