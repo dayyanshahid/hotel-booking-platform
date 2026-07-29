@@ -3,7 +3,7 @@ import { getDestination } from "@/lib/data/destinations";
 import { localized } from "@/lib/data/catalog";
 import { isTourmindEnabled } from "./config";
 import { tourmindHotelsInCity, type TourmindHotelRecord } from "./catalogue";
-import { tourmindAvailability, type TourmindOffer } from "./operations";
+import { tourmindAvailability, tourmindAvailabilityBatch, type TourmindOffer } from "./operations";
 import type { Locale, SearchIntent, Suggestion } from "@/lib/types";
 import { fold } from "../../text";
 
@@ -34,10 +34,11 @@ function hotelIdFromSlug(slug: string): number | null {
 /**
  * How many of a city's properties to price per search.
  *
- * Availability takes up to twenty hotel codes per call and a city can hold
- * hundreds. Pricing all of them would spend the customer's wait on rooms they
- * will never scroll to, so a search prices one batch and the rest stay
- * reachable by opening the property.
+ * Their availability call takes twenty hotel codes and a city can hold
+ * hundreds — Dubai alone maps to over sixteen hundred. Pricing all of them
+ * would spend the customer's wait on rooms they will never scroll to, so a
+ * search prices one call's worth and the rest stay reachable by opening the
+ * property.
  */
 const BATCH = 20;
 
@@ -59,26 +60,27 @@ export async function searchTourmind(
   const records = (await tourmindHotelsInCity(destination.slug)).slice(0, BATCH);
   if (!records.length) return [];
 
-  // One call per property: their availability endpoint accepts a batch, but a
-  // batch failing loses every property in it, and one slow hotel should not
-  // take the others down with it.
-  const settled = await Promise.allSettled(
-    records.map(async (record) => ({
-      slug: tourmindSlug(record.hotelId),
-      record,
-      offers: await tourmindAvailability(
-        String(record.hotelId),
-        intent,
-        locale,
-        destination.countryCode,
-      ),
-    })),
+  /*
+   * One call for the whole batch, which is what their endpoint is for.
+   *
+   * This used to fan out one request per property. Against their server that
+   * lost a quarter of the properties to timeouts and took eight seconds; the
+   * batched call returns the same set in under three.
+   */
+  const byHotel = await tourmindAvailabilityBatch(
+    records.map((record) => String(record.hotelId)),
+    intent,
+    locale,
+    destination.countryCode,
   );
 
-  return settled
-    .filter((r): r is PromiseFulfilledResult<TourmindResult> => r.status === "fulfilled")
-    .map((r) => r.value)
-    .filter((result) => result.offers.length > 0);
+  const results: TourmindResult[] = [];
+  for (const record of records) {
+    const offers = byHotel.get(String(record.hotelId));
+    if (!offers?.length) continue;
+    results.push({ slug: tourmindSlug(record.hotelId), record, offers });
+  }
+  return results;
 }
 
 /** Rates for one TourMind property, for the detail page. */

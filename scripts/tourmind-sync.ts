@@ -9,9 +9,15 @@
  * lists are kept — a hotel we cannot place on our own map is inventory we
  * could never surface.
  */
+import { config as loadEnv } from "dotenv";
 import { isTourmindEnabled } from "../lib/server/tourmind/config";
 import { syncTourmindCatalogue } from "../lib/server/tourmind/catalogue";
 import { bookableCountryList } from "../lib/data/destinations";
+
+// Credentials live in .env.local, which a CLI does not get for free the way a
+// Next request does. Without this the script reported "credentials are not
+// set" no matter what was configured.
+loadEnv({ path: ".env.local" });
 
 function arg(name: string): string | undefined {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -33,9 +39,13 @@ async function main() {
     : bookableCountryList().map((c) => c.code);
 
   const maxPages = Number(arg("max-pages") ?? 20);
+  const pageSize = Number(arg("page-size") ?? 500);
 
   console.log(`Syncing ${countries.length} countries (max ${maxPages} pages each)…`);
-  const summary = await syncTourmindCatalogue(countries, { maxPagesPerCountry: maxPages });
+  const summary = await syncTourmindCatalogue(countries, {
+    maxPagesPerCountry: maxPages,
+    pageSize,
+  });
 
   console.log(
     `Fetched ${summary.fetched} properties; kept ${summary.matched} ` +

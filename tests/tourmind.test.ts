@@ -6,6 +6,12 @@ import { isTourmindSlug, tourmindSlug } from "@/lib/server/tourmind/search";
 import { TourmindError } from "@/lib/server/tourmind/client";
 import { isIndeterminate, mapTourmindError } from "@/lib/server/tourmind/errors";
 import liveRate from "./fixtures/tourmind-rate.json";
+import staticList from "./fixtures/tourmind-static-list.json";
+import { __recordFromStatic as recordFrom } from "@/lib/server/tourmind/catalogue";
+import {
+  __offersFromHotel as collapse,
+  __paxRoomsWithNames as createOrderBody,
+} from "@/lib/server/tourmind/operations";
 import type { SearchIntent } from "@/lib/types";
 
 /**
@@ -283,5 +289,130 @@ describe("tourmind supplier isolation", () => {
   it("tells a customer nothing was charged when the supplier is down", () => {
     const mapped = mapTourmindError(new TourmindError("temporaryService", "104", "x"), "en");
     expect(mapped.message.toLowerCase()).toContain("nothing has been charged");
+  });
+});
+
+/**
+ * What their server actually does, as opposed to what the specification says.
+ *
+ * Everything below was written against a live test account after the vendor
+ * supplied credentials. Each case is a fault that shipped because the
+ * integration had only ever been read, never run.
+ */
+describe("what the live API actually returns", () => {
+  it("reads a hotel id that arrives as a string", () => {
+    /*
+     * The spec calls HotelId an integer; the wire carries "739867". A string
+     * survived into the cached record, and the property page — which parses the
+     * id back out of the slug as a number — then compared "739867" against
+     * 739867 and found nothing. Every TourMind property was findable in search
+     * and dead when opened.
+     */
+    const hotels = staticList.HotelStaticListResult.Hotels;
+    const records = hotels.map((hotel) => recordFrom(hotel));
+    for (const record of records) {
+      expect(typeof record?.hotelId).toBe("number");
+      expect(Number.isFinite(record?.hotelId)).toBe(true);
+    }
+    expect(records[0]?.hotelId).toBe(739867);
+  });
+
+  it("keeps the slug and the parsed id in agreement", () => {
+    const record = recordFrom(staticList.HotelStaticListResult.Hotels[0]);
+    const slug = tourmindSlug(record!.hotelId);
+    expect(slug).toBe("tm-739867");
+    // The property page's half of the round trip.
+    expect(Number(slug.slice(3))).toBe(record!.hotelId);
+  });
+});
+
+describe("what booking actually requires", () => {
+  /**
+   * Every booking failed with "Invalid PaxNames" until the guests were named.
+   * Their `Type` enum is `ADU`/`CHI` and nothing else validates — "Adult" is
+   * rejected exactly like sending no names at all.
+   */
+  it("names every guest with their own ADU/CHI type", () => {
+    const body = createOrderBody(
+      { ...intent, rooms: [{ adults: 2, childrenAges: [7] }, { adults: 1, childrenAges: [] }] },
+      [
+        { roomIndex: 0, type: "adult", firstName: "Amina", surname: "Haddad" },
+        { roomIndex: 0, type: "adult", firstName: "Karim", surname: "Haddad" },
+        { roomIndex: 0, type: "child", firstName: "Lina", surname: "Haddad" },
+        { roomIndex: 1, type: "adult", firstName: "Sara", surname: "Nasser" },
+      ],
+    );
+
+    expect(body[0].PaxNames).toEqual([
+      { FirstName: "Amina", LastName: "Haddad", Type: "ADU" },
+      { FirstName: "Karim", LastName: "Haddad", Type: "ADU" },
+      { FirstName: "Lina", LastName: "Haddad", Type: "CHI" },
+    ]);
+    expect(body[1].PaxNames).toEqual([{ FirstName: "Sara", LastName: "Nasser", Type: "ADU" }]);
+  });
+
+  it("falls back to the lead traveller for a room nobody was named in", () => {
+    // They refuse a room with no name, and an unnamed second room is the
+    // ordinary case when a booker fills in only their own details.
+    const body = createOrderBody({ ...intent, rooms: [{ adults: 2, childrenAges: [] }, { adults: 2, childrenAges: [] }] }, [
+      { roomIndex: 0, type: "adult", firstName: "Amina", surname: "Haddad" },
+    ]);
+    expect(body[1].PaxNames).toEqual([{ FirstName: "Amina", LastName: "Haddad", Type: "ADU" }]);
+  });
+});
+
+describe("a thousand rates for one property", () => {
+  /**
+   * Their test data returns over a thousand rates for a single hotel — the same
+   * room at a hundred prices a few yuan apart. Passing that through put a
+   * thousand rows on a property page and a thousand offers in the store, for a
+   * choice nobody can make.
+   */
+  const rate = (room: string, price: number, meal: string, refundable: boolean) => ({
+    RoomTypeCode: room,
+    Name: room,
+    RateInfos: [
+      {
+        RateCode: `${room}-${price}-${meal}-${refundable}`,
+        TotalPrice: price,
+        CurrencyCode: "CNY",
+        Refundable: refundable,
+        MealInfo: { MealType: meal },
+      },
+    ],
+  });
+
+  it("keeps the cheapest of each room, board and cancellation combination", () => {
+    const offers = collapse(
+      {
+        HotelCode: "753337",
+        RoomTypes: [
+          rate("Superior Twin", 900, "1", true),
+          rate("Superior Twin", 700, "1", true),
+          rate("Superior Twin", 800, "1", true),
+          // Same room, different board — a real choice, so it stays.
+          rate("Superior Twin", 950, "2", true),
+          // Same room and board, non-refundable — also a real choice.
+          rate("Superior Twin", 650, "1", false),
+          rate("Deluxe King", 1200, "2", true),
+        ],
+      },
+      intent,
+    );
+
+    expect(offers).toHaveLength(4);
+    const twinRefundableRoomOnly = offers.find(
+      (offer) => offer.roomName === "Superior Twin" && offer.boardCode === "RO" && offer.refundable,
+    );
+    // 700, not the 900 that happened to come first.
+    expect(twinRefundableRoomOnly?.net).toBe(700);
+  });
+
+  it("caps what one property can put on a page", () => {
+    const many = Array.from({ length: 200 }, (_, i) => rate(`Room ${i}`, 500 + i, "1", true));
+    const offers = collapse({ HotelCode: "1", RoomTypes: many }, intent);
+    expect(offers.length).toBeLessThanOrEqual(40);
+    // Cheapest first, so the cap keeps what a guest would have chosen anyway.
+    expect(offers[0].net).toBe(500);
   });
 });

@@ -68,7 +68,7 @@ export class TourmindError extends Error {
 export async function tourmindPost<T extends { Error?: TmError }>(
   path: string,
   body: Record<string, unknown>,
-  kind: "search" | "booking" = "search",
+  kind: "search" | "prebook" | "booking" | "catalogue" = "search",
 ): Promise<T> {
   const config = getTourmindConfig();
   const controller = new AbortController();

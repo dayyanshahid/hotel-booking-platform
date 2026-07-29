@@ -1,0 +1,47 @@
+{
+  "ResponseHeader": {
+    "ResponseTime": "2026-07-29 18:53:10",
+    "TransactionID": "97b38692-f976-441e-aa47-0fac55a4ced0"
+  },
+  "HotelStaticListResult": {
+    "Pagination": {
+      "PageCount": 722,
+      "TotalCount": 2166
+    },
+    "Hotels": [
+      {
+        "HotelId": "739867",
+        "Name": "Marjan Island Resort & Spa Managed by ACCOR",
+        "StarRating": "5",
+        "Address": "Marjan Island Boulevard",
+        "CountryCode": "AE",
+        "CityCode": "29832",
+        "CityName": "Ras Al Khaimah Emirate",
+        "Latitude": "25.68205",
+        "Longitude": "55.74597"
+      },
+      {
+        "HotelId": "740189",
+        "Name": "TOP Grand Continental Flamingo Hotel",
+        "StarRating": "4",
+        "Address": "Sheikh Hamdan bin Mohammad StNext to Capital Garden, 28080",
+        "CountryCode": "AE",
+        "CityCode": "29829",
+        "CityName": "Abu Dhabi Emirate",
+        "Latitude": "24.49332",
+        "Longitude": "54.36621"
+      },
+      {
+        "HotelId": "740571",
+        "Name": "TRYP by Wyndham Abu Dhabi City Centre",
+        "StarRating": "4",
+        "Address": "Khalifa Street, 445765",
+        "CountryCode": "AE",
+        "CityCode": "29829",
+        "CityName": "Abu Dhabi Emirate",
+        "Latitude": "24.49609",
+        "Longitude": "54.36641"
+      }
+    ]
+  }
+}

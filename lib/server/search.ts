@@ -214,6 +214,9 @@ export interface SearchOptions {
   locale: Locale;
 }
 
+/** Whether a live supplier answered, failed, or was never asked. */
+type LiveStatus = "ok" | "unavailable" | "skipped";
+
 export async function runSearch(intent: SearchIntent, options: SearchOptions): Promise<SearchResponse> {
   // Pick up any markup the console has set before a single rate is priced.
   await primeMarkup();
@@ -252,47 +255,56 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    * The scenario harness stays authoritative: a forced outage must also suppress
    * the live source, or the edge case could not be demonstrated.
    */
-  let liveStatus: "ok" | "unavailable" | "skipped" = "skipped";
   const supplierOutageForced = scenario === "allSuppliersFail" || scenario === "zeroResults";
 
   /*
-   * TourMind, merged the same way. It is a no-op until credentials are set and
-   * the catalogue has been synced, so an unconfigured supplier costs a search
-   * nothing — and a forced outage suppresses it alongside the others, or the
-   * edge case could not be demonstrated.
+   * Live supply, both suppliers at once.
+   *
+   * They used to run one after the other, which was invisible while only one of
+   * them had credentials and costs a guest the sum of both the moment the
+   * second one is switched on. They share nothing, so there is no reason to
+   * make one wait for the other.
+   *
+   * Each is a source in its own right for the completeness count. A single
+   * shared flag meant a Hotelbeds success overwrote a TourMind failure and the
+   * page called itself complete while a supplier was down.
    */
-  if (isTourmindEnabled() && !supplierOutageForced) {
-    try {
-      const results = await searchTourmind(effectiveIntent, locale);
-      for (const result of results) {
-        const adapted = normalizeTourmind(result, effectiveIntent, locale);
-        if (adapted.offers.length) {
-          normalized.push({ ...adapted, sourceCount: 1 });
-          liveStatus = "ok";
-        }
+  const [tourmindOutcome, hotelbedsOutcome] = await Promise.all([
+    (async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+      if (!isTourmindEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
+      try {
+        const results = await searchTourmind(effectiveIntent, locale);
+        const hotels = results
+          .map((result) => normalizeTourmind(result, effectiveIntent, locale))
+          .filter((adapted) => adapted.offers.length)
+          .map((adapted) => ({ ...adapted, sourceCount: 1 }));
+        return { status: "ok", hotels };
+      } catch {
+        // A live source failing degrades the page; it never empties it. The
+        // simulated and other live results still stand.
+        return { status: "unavailable", hotels: [] };
       }
-    } catch {
-      // A live source failing degrades the page; it never empties it. The
-      // simulated and Hotelbeds results above still stand.
-      liveStatus = "unavailable";
-    }
-  }
-  if (isHotelbedsEnabled() && !supplierOutageForced) {
-    // A coordinate for every city, or a supplier destination code on a deep link.
-    const where = await resolveHotelbedsDestination(resolved.destinationId);
-    if (where) {
+    })(),
+    (async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+      if (!isHotelbedsEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
+      // A coordinate for every city, or a supplier destination code on a deep link.
+      const where = await resolveHotelbedsDestination(resolved.destinationId);
+      if (!where) return { status: "skipped", hotels: [] };
       const live = await searchHotelbedsDestination(where, effectiveIntent, locale);
-      liveStatus = live.status;
-      for (const adapted of live.hotels) {
-        normalized.push({
+      return {
+        status: live.status,
+        hotels: live.hotels.map((adapted) => ({
           hotel: adapted.hotel,
           rooms: adapted.rooms,
           offers: adapted.offers,
           sourceCount: 1,
-        });
-      }
-    }
-  }
+        })),
+      };
+    })(),
+  ]);
+
+  normalized.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);
+  const liveStatuses = [tourmindOutcome.status, hotelbedsOutcome.status];
 
   let cards = normalized.map((n) => buildResultCard(n, effectiveIntent, locale));
 
@@ -313,9 +325,13 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const pageSize = options.pageSize ?? 12;
   const pageItems = sorted.slice(0, page * pageSize).map((x) => x.card);
 
-  const liveFailed = liveStatus === "unavailable";
-  const totalSources = responses.length + (liveStatus === "skipped" ? 0 : 1);
-  const totalFailed = failedCount + (liveFailed ? 1 : 0);
+  // Every live supplier that was asked counts as a source, and each one that
+  // could not answer counts as a failure — otherwise a page missing a
+  // supplier's entire inventory describes itself as complete.
+  const liveAsked = liveStatuses.filter((status) => status !== "skipped").length;
+  const liveFailedCount = liveStatuses.filter((status) => status === "unavailable").length;
+  const totalSources = responses.length + liveAsked;
+  const totalFailed = failedCount + liveFailedCount;
   const completeness: SearchResponse["completeness"] =
     totalFailed >= totalSources ? "empty" : totalFailed > 0 ? "partial" : "complete";
 

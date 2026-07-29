@@ -22,11 +22,20 @@ export interface TmError {
   ErrorMessage?: string;
 }
 
+export interface TmPaxName {
+  FirstName: string;
+  LastName: string;
+  /** `ADU` adult · `CHI` child. Their enum exactly; nothing else validates. */
+  Type: "ADU" | "CHI";
+}
+
 export interface TmPaxRoom {
   Adults?: number;
   Children?: number;
   ChildrenAges?: number[];
   RoomCount?: number;
+  /** Required by CreateOrder, meaningless to availability. */
+  PaxNames?: TmPaxName[];
 }
 
 export interface TmCancelPolicyInfo {
@@ -101,7 +110,27 @@ export interface TmRoomAvailResponse {
 export interface TmCreateOrderResponse {
   Error?: TmError;
   ReservationID?: string;
-  OrderInfo?: { Status?: string | number; [key: string]: unknown };
+  OrderInfo?: {
+    /** PENDING · CONFIRMED · CANCELLED · FAILED, per their booking docs. */
+    OrderStatus?: string;
+    /** Older name kept for tolerance; their live response uses OrderStatus. */
+    Status?: string | number;
+    [key: string]: unknown;
+  };
+}
+
+/** Retrieve Booking — the authority on a booking whose create was uncertain. */
+export interface TmSearchOrderResponse {
+  Error?: TmError;
+  OrderInfo?: {
+    AgentRefID?: string;
+    ReservationID?: string;
+    /** PENDING · CONFIRMED · CANCELLED · FAILED */
+    OrderStatus?: string;
+    HotelConfirmationNo?: string;
+    TotalPrice?: number;
+    CurrencyCode?: string;
+  };
 }
 
 export interface TmCancelOrderResponse {

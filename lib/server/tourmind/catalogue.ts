@@ -44,7 +44,15 @@ export interface TourmindHotelRecord {
 }
 
 interface TmHotelInfo {
-  HotelId?: number;
+  /**
+   * A string on the wire — `"739867"` — despite the spec calling it an integer.
+   *
+   * It matters more than a type annotation usually would: the slug we mint from
+   * it is parsed back to a number when a property page opens, and a string here
+   * meant the lookup compared "739867" against 739867 and never matched. Every
+   * TourMind property was reachable from search and dead on arrival.
+   */
+  HotelId?: number | string;
   Name?: string;
   CountryCode?: string;
   CityName?: string;
@@ -141,12 +149,14 @@ export async function tourmindHotelsInCity(citySlug: string): Promise<TourmindHo
 function toRecord(info: TmHotelInfo): TourmindHotelRecord | null {
   const lat = Number(info.Latitude);
   const lng = Number(info.Longitude);
-  if (!info.HotelId || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const hotelId = Number(info.HotelId);
+  if (!Number.isFinite(hotelId) || hotelId <= 0) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   // 0,0 is in the Atlantic and is what an unset coordinate looks like.
   if (lat === 0 && lng === 0) return null;
   const stars = Number(info.StarRating);
   return {
-    hotelId: info.HotelId,
+    hotelId,
     name: info.Name ?? "",
     countryCode: (info.CountryCode ?? "").toUpperCase(),
     cityName: info.CityName ?? "",
@@ -174,18 +184,33 @@ export interface SyncSummary {
  */
 export async function syncTourmindCatalogue(
   countryCodes: string[],
-  options: { maxPagesPerCountry?: number } = {},
+  options: { maxPagesPerCountry?: number; pageSize?: number } = {},
 ): Promise<SyncSummary> {
   const maxPages = options.maxPagesPerCountry ?? 20;
+  /*
+   * A page size, always.
+   *
+   * Without one their default page is large enough that the request ran past
+   * every timeout we set and the sync could never finish — the catalogue was
+   * unreachable, not slow. 500 is a page that arrives in a couple of seconds
+   * and still pulls a country of two thousand properties in five calls.
+   */
+  const pageSize = options.pageSize ?? 500;
   const matched: TourmindHotelRecord[] = [];
   let fetched = 0;
 
   for (const countryCode of countryCodes) {
     for (let page = 1; page <= maxPages; page += 1) {
-      const response = await tourmindPost<TmHotelStaticListResponse>(TM.hotels, {
-        CountryCode: countryCode,
-        Pagination: { PageIndex: page },
-      });
+      const response = await tourmindPost<TmHotelStaticListResponse>(
+        TM.hotels,
+        {
+          CountryCode: countryCode,
+          Pagination: { PageIndex: page, PageSize: pageSize },
+        },
+        // Static data, fetched deliberately rather than on a request path: it
+        // is allowed to take longer than a guest would ever wait.
+        "catalogue",
+      );
 
       const hotels = response.HotelStaticListResult?.Hotels ?? [];
       fetched += hotels.length;
@@ -210,6 +235,11 @@ export async function syncTourmindCatalogue(
     cities: new Set(matched.map((h) => h.citySlug)).size,
     skipped: fetched - matched.length,
   };
+}
+
+/** Test seam: the wire-to-record step, so a real payload can be asserted on. */
+export function __recordFromStatic(info: unknown): TourmindHotelRecord | null {
+  return toRecord(info as TmHotelInfo);
 }
 
 /** Test seam: load records without touching the network or the disk. */

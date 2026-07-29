@@ -7,6 +7,8 @@ import {
 } from "./store";
 import { findSupplierBookingByClientReference, getSupplierBooking } from "./hotelbeds/operations";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
+import { isTourmindEnabled } from "./tourmind/config";
+import { tourmindRetrieve } from "./tourmind/operations";
 import type { Booking, Locale } from "../types";
 
 /**
@@ -42,6 +44,66 @@ export async function reconcileBooking(booking: Booking, locale: Locale): Promis
    * its own reference or by the client reference we sent.
    */
   const linked = getSupplierReference(booking.reference);
+
+  /*
+   * TourMind resolves against our own AgentRefID, which is the reference we
+   * chose and therefore the one thing a timed-out create cannot take from us.
+   *
+   * Their documentation names this the way out of a PENDING create, and until
+   * now nothing called it: a TourMind booking that came back pending had no
+   * path to an answer at all, which is worse than a failure because nobody
+   * knows whether a room is held.
+   */
+  if (isTourmindEnabled() && booking.hotelSlug.startsWith("tm-")) {
+    const agentRef = linked?.source === "tourmind" ? linked.reference : null;
+    const outcome = agentRef ? await tourmindRetrieve(agentRef).catch(() => null) : null;
+
+    if (outcome && outcome.status !== "pending") {
+      const failed = outcome.status === "failed" || outcome.status === "cancelled";
+      const resolved: Booking = {
+        ...booking,
+        status: failed ? "failed" : "confirmed",
+        statusDetail: failed
+          ? locale === "ar"
+            ? "لم يتمكن العقار من قبول الحجز. تم الإفراج عن مبلغ التفويض."
+            : "The property could not accept the booking. The authorisation has been released."
+          : locale === "ar"
+            ? "تم التأكيد بعد المطابقة مع العقار."
+            : "Confirmed after reconciliation with the property.",
+        updatedAt: now,
+        reconciliation: undefined,
+        timeline: [
+          ...booking.timeline,
+          {
+            at: now,
+            code: failed ? "booking.rejected" : "booking.reconciled",
+            label: failed
+              ? locale === "ar"
+                ? "رُفض الحجز"
+                : "Booking rejected by property"
+              : locale === "ar"
+                ? "اكتملت المطابقة — الحجز مؤكد"
+                : "Reconciliation complete — booking confirmed",
+            actor: "platform" as const,
+          },
+        ],
+      };
+      await saveBooking(resolved, resolved.contact.email);
+      return { booking: resolved, polling: false, changed: true };
+    }
+
+    // Still pending, or we could not ask: keep the same attempt budget the
+    // other supplier gets before this becomes a person's problem.
+    if (attempts >= 5) return escalate(booking, locale, now);
+    const stillPending: Booking = {
+      ...booking,
+      updatedAt: now,
+      reconciliation: { ...booking.reconciliation, attempts, nextCheckMs: 5000 },
+    };
+    await saveBooking(stillPending, stillPending.contact.email);
+    return { booking: stillPending, polling: true, changed: false };
+  }
+
   if (isHotelbedsEnabled() && (linked || booking.hotelSlug.startsWith("hb-"))) {
     const supplierBooking = linked
       ? await getSupplierBooking(linked.reference)
@@ -84,29 +146,7 @@ export async function reconcileBooking(booking: Booking, locale: Locale): Promis
 
     // Not found yet: keep going until the attempt budget is spent, then hand
     // the case to support rather than guessing.
-    if (attempts >= 5) {
-      const escalated: Booking = {
-        ...booking,
-        status: "reconciliationRequired",
-        statusDetail:
-          locale === "ar"
-            ? "لم نتمكن من تأكيد النتيجة تلقائيًا. فريق الدعم يتابع الحجز ولا حاجة لأي إجراء منك."
-            : "We could not confirm the outcome automatically. Support is following it up — no action is needed from you.",
-        updatedAt: now,
-        reconciliation: undefined,
-        timeline: [
-          ...booking.timeline,
-          {
-            at: now,
-            code: "booking.escalated",
-            label: locale === "ar" ? "أُحيل إلى فريق الدعم" : "Escalated to the support team",
-            actor: "platform" as const,
-          },
-        ],
-      };
-      await saveBooking(escalated, escalated.contact.email);
-      return { booking: escalated, polling: false, changed: true };
-    }
+    if (attempts >= 5) return escalate(booking, locale, now);
 
     const stillPending: Booking = {
       ...booking,
@@ -156,4 +196,35 @@ export async function reconcileBooking(booking: Booking, locale: Locale): Promis
   };
   await saveBooking(updated, updated.contact.email);
   return { booking: updated, polling: true, changed: false };
+}
+
+/**
+ * Hand the booking to a person.
+ *
+ * Shared by both suppliers: after the attempt budget is spent the honest answer
+ * is that we do not know, and a support queue is a better place for that than a
+ * poll that never ends.
+ */
+async function escalate(booking: Booking, locale: Locale, now: string): Promise<ReconcileResult> {
+  const escalated: Booking = {
+    ...booking,
+    status: "reconciliationRequired",
+    statusDetail:
+      locale === "ar"
+        ? "لم نتمكن من تأكيد النتيجة تلقائيًا. فريق الدعم يتابع الحجز ولا حاجة لأي إجراء منك."
+        : "We could not confirm the outcome automatically. Support is following it up — no action is needed from you.",
+    updatedAt: now,
+    reconciliation: undefined,
+    timeline: [
+      ...booking.timeline,
+      {
+        at: now,
+        code: "booking.escalated",
+        label: locale === "ar" ? "أُحيل إلى فريق الدعم" : "Escalated to the support team",
+        actor: "platform" as const,
+      },
+    ],
+  };
+  await saveBooking(escalated, escalated.contact.email);
+  return { booking: escalated, polling: false, changed: true };
 }

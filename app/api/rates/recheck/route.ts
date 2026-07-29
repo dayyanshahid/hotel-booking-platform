@@ -10,6 +10,9 @@ import { getOffer, getSession, rememberOffer, saveSession } from "@/lib/server/s
 import { nightsBetween } from "@/lib/format";
 import { checkRate } from "@/lib/server/hotelbeds/operations";
 import { mapSupplierError } from "@/lib/server/hotelbeds/errors";
+import { tourmindPrebook } from "@/lib/server/tourmind/operations";
+import { getDestination as destinationById } from "@/lib/data/destinations";
+import type { StoredOffer } from "@/lib/server/store";
 import type { CancellationPolicy, Locale, PriceStack, RecheckResult } from "@/lib/types";
 
 interface Body {
@@ -53,13 +56,66 @@ export async function POST(req: Request) {
    * confirmation state and the same acceptance gate (§6.4, §9.1).
    */
   if (stored.hotelbeds) {
+    const binding = stored.hotelbeds;
     return recheckLiveOffer({
       stored,
-      binding: stored.hotelbeds,
       previous,
       locale,
       accept: body.accept === true,
       checkoutSessionId: body.checkoutSessionId,
+      refresh: async () => {
+        const live = await checkRate(binding, previous, {
+          checkIn: stored.intent.checkIn,
+          locale,
+          displayCurrency: stored.intent.currency,
+        });
+        if (!live.available) return { available: false };
+        return {
+          available: true,
+          price: live.price,
+          cancellation: live.cancellation,
+          boardLabel: live.boardLabel,
+          // The refreshed key is the only one the supplier will accept at booking.
+          commit: (offer) => ({ ...offer, hotelbeds: { ...binding, rateKey: live.rateKey, net: live.net } }),
+        };
+      },
+    });
+  }
+
+  /*
+   * TourMind, through exactly the same gate.
+   *
+   * Their offers have always declared `recheckRequired: true` and nothing ever
+   * honoured it — the route knew one supplier. So a TourMind rate went to
+   * CreateOrder on the code availability handed out, when their prebook returns
+   * a different code and is the step that confirms the price. An agency was
+   * committing credit against a rate nobody had confirmed.
+   */
+  if (stored.tourmind) {
+    const binding = stored.tourmind;
+    const countryCode = destinationById(stored.intent.destinationId)?.countryCode;
+    return recheckLiveOffer({
+      stored,
+      previous,
+      locale,
+      accept: body.accept === true,
+      checkoutSessionId: body.checkoutSessionId,
+      refresh: async () => {
+        const live = await tourmindPrebook(binding, stored.intent, locale, countryCode);
+        if (!live) return { available: false };
+        return {
+          available: true,
+          price: live.price,
+          cancellation: live.cancellation,
+          boardLabel: localized(BOARD_CATALOG[live.boardCode]?.label, locale) || live.boardCode,
+          // Their prebook mints a new rate code; booking with the old one is
+          // booking a rate the supplier no longer holds for us.
+          commit: (offer) => ({
+            ...offer,
+            tourmind: { ...binding, rateCode: live.rateCode, net: live.net },
+          }),
+        };
+      },
     });
   }
 
@@ -204,27 +260,41 @@ export async function POST(req: Request) {
 }
 
 /**
- * CheckRate against the live supplier, mapped into the same RecheckResult the
- * simulated path returns. A refreshed rateKey replaces the stored one only when
- * the customer has accepted, so an unaccepted change can never be booked.
+ * What a supplier's re-check returns, whoever the supplier is.
+ *
+ * `commit` carries the part only that supplier understands — a refreshed rate
+ * key, a new rate code — so everything after it, the comparison, the acceptance
+ * gate and the session update, is written once.
+ */
+type LiveRefresh = () => Promise<
+  | { available: false }
+  | {
+      available: true;
+      price: PriceStack;
+      cancellation: CancellationPolicy;
+      boardLabel: string;
+      commit: (offer: StoredOffer) => StoredOffer;
+    }
+>;
+
+/**
+ * Re-check against a live supplier, mapped into the same RecheckResult the
+ * simulated path returns. The refreshed binding replaces the stored one only
+ * when the customer has accepted, so an unaccepted change can never be booked.
  */
 async function recheckLiveOffer(input: {
   stored: NonNullable<ReturnType<typeof getOffer>>;
-  binding: NonNullable<NonNullable<ReturnType<typeof getOffer>>["hotelbeds"]>;
   previous: { price: PriceStack; cancellation: CancellationPolicy; boardLabel: string };
   locale: Locale;
   accept: boolean;
   checkoutSessionId?: string;
+  refresh: LiveRefresh;
 }) {
-  const { stored, binding, previous, locale, accept } = input;
+  const { stored, previous, locale, accept } = input;
 
-  let live: Awaited<ReturnType<typeof checkRate>>;
+  let live: Awaited<ReturnType<LiveRefresh>>;
   try {
-    live = await checkRate(binding, previous, {
-      checkIn: stored.intent.checkIn,
-      locale,
-      displayCurrency: stored.intent.currency,
-    });
+    live = await input.refresh();
   } catch (error) {
     const mapped = mapSupplierError(error, locale);
     return fail(mapped.category, mapped.messageKey, locale, {
@@ -299,14 +369,15 @@ async function recheckLiveOffer(input: {
   const newExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   if (!requiresAcceptance || accept) {
-    rememberOffer(stored.offerId, {
-      ...stored,
-      price: live.price,
-      cancellation: live.cancellation,
-      expiresAt: newExpiresAt,
-      // The refreshed key is the only one the supplier will accept at booking.
-      hotelbeds: { ...binding, rateKey: live.rateKey, net: live.net },
-    });
+    rememberOffer(
+      stored.offerId,
+      live.commit({
+        ...stored,
+        price: live.price,
+        cancellation: live.cancellation,
+        expiresAt: newExpiresAt,
+      }),
+    );
     if (input.checkoutSessionId) {
       const session = getSession(input.checkoutSessionId);
       if (session) {

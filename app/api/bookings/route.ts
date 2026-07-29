@@ -295,12 +295,28 @@ export async function POST(req: Request) {
           email: body.contact.email,
           phone: body.contact.phone,
         },
+        // Their create call refuses a booking with no named guest per room.
+        guests: guests.map((guest) => ({
+          roomIndex: guest.roomIndex,
+          type: guest.type === "child" ? ("child" as const) : ("adult" as const),
+          firstName: guest.firstName,
+          surname: guest.surname,
+        })),
         specialRequest: requests.join(" | ") || undefined,
       });
       supplierReference = result.reservationId;
       // Cancellation keys on our own AgentRefID, not their reservation id: a
       // create that timed out may have succeeded without us ever seeing theirs.
       tourmindAgentRef = result.agentRefId;
+      /*
+       * Their own status, not our inference from having received an id.
+       *
+       * PENDING is a real outcome for this supplier — their documentation says
+       * to poll for the final one — and calling it confirmed would put a
+       * voucher in a guest's hand for a room nobody has held yet.
+       */
+      if (result.status === "pending") pending = true;
+      if (result.status === "failed") rejected = true;
     } catch (error) {
       logTourmindError("bookings.create", error, ref);
       if (isIndeterminate(error)) {

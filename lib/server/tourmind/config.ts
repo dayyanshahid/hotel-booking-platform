@@ -28,7 +28,7 @@ export interface TourmindConfig {
   markupPercent: number;
   /** Prefix for the AgentRefID we send, so bookings are traceable to this app. */
   agentRefPrefix: string;
-  timeouts: { search: number; booking: number };
+  timeouts: { search: number; prebook: number; booking: number; catalogue: number };
 }
 
 function num(value: string | undefined, fallback: number): number {
@@ -52,8 +52,20 @@ export function getTourmindConfig(): TourmindConfig {
     agentRefPrefix: process.env.TOURMIND_AGENT_REF_PREFIX ?? "SPT",
     timeouts: {
       search: num(process.env.TOURMIND_SEARCH_TIMEOUT_MS, 8000),
+      /*
+       * The re-check is not a browse call and must not share its budget.
+       *
+       * Measured at six seconds and over against their server, which meant it
+       * regularly lost a race with the eight-second search timeout — and losing
+       * it fails the one step that confirms the price before money moves. A
+       * customer waiting on a confirmation will wait longer than one skimming
+       * results, and the alternative is booking an unverified rate.
+       */
+      prebook: num(process.env.TOURMIND_PREBOOK_TIMEOUT_MS, 25000),
       // A booking that times out is never retried, so this is generous.
       booking: num(process.env.TOURMIND_BOOKING_TIMEOUT_MS, 60000),
+      // The static catalogue is synced deliberately, never on a request path.
+      catalogue: num(process.env.TOURMIND_CATALOGUE_TIMEOUT_MS, 60000),
     },
   };
 }
