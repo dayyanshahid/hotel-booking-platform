@@ -10,12 +10,21 @@
 /**
  * How long before the supplier's deadline a hold is released.
  *
- * A sweeper that fires at the deadline itself will one day fire a minute late,
- * and a minute late is the difference between free and a night's charge. Six
- * hours is enough to survive a missed run without shortening a hold to the
- * point of uselessness.
+ * This is not a taste decision — it follows from how often the sweeper runs. A
+ * hold can only be released on a sweep, so the margin has to exceed the gap
+ * between sweeps, or a deadline will fall in the space between two runs and be
+ * missed. Missed means the cancellation is no longer free and the agency is
+ * charged for a room nobody sold.
+ *
+ * The default assumes a daily sweep, because that is all Vercel's Hobby plan
+ * will schedule: twenty-six hours covers a full day with room for a late or
+ * skipped run. A deployment that can sweep every fifteen minutes should set
+ * this far lower — six hours is ample — and gets materially longer holds for
+ * it. Longer is always safe and always costs the agency selling time, which is
+ * why it is configurable rather than simply generous.
  */
-export const HOLD_SAFETY_MARGIN_MS = 6 * 60 * 60 * 1000;
+export const HOLD_SAFETY_MARGIN_MS =
+  Number(process.env.NEXT_PUBLIC_HOLD_SAFETY_MARGIN_HOURS || 26) * 60 * 60 * 1000;
 
 /** The moment an unissued hold must be cancelled by. */
 export function holdDeadline(freeCancellationUntil: string): string {
