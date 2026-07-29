@@ -11,6 +11,7 @@ import { Meter, Money } from "./ui";
 import { href } from "@/lib/nav";
 import { refreshAgency, useAgency, type AgencyContext } from "./use-agency";
 import type { Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /**
  * The portal frame.
@@ -89,7 +90,7 @@ export function PortalShell({
   ];
 
   async function signOut() {
-    await fetch("/api/agency/session", { method: "DELETE", credentials: "same-origin" });
+    await fetch(apiUrl("/api/agency/session"), { method: "DELETE", credentials: "same-origin" });
     refreshAgency();
     router.push(href(locale, "/agency/signin"));
   }

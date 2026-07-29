@@ -8,6 +8,7 @@ import { Wordmark } from "@/components/ui/wordmark";
 import { formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* -------------------------------------------------------------- sign-in */
 
@@ -23,7 +24,7 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
   async function send() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/admin/session", {
+    const res = await fetch(apiUrl("/api/admin/session"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
@@ -41,7 +42,7 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
   async function verify() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/admin/session", {
+    const res = await fetch(apiUrl("/api/admin/session"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
@@ -142,7 +143,7 @@ function Overview({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/admin/overview", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/overview"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: Overview };
       if (body.ok && body.data) setData(body.data);
     })();

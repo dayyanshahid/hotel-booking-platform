@@ -20,6 +20,7 @@ import {
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CancellationQuote, CurrencyCode, Locale, SupportCase } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* ------------------------------------------------------------ bookings */
 
@@ -65,7 +66,7 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
     let alive = true;
     const id = window.setTimeout(async () => {
       const params = new URLSearchParams({ status, channel, q: query, from, to });
-      const res = await fetch(`/api/admin/bookings?${params.toString()}`, { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/bookings?${params.toString()}`), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { bookings: Row[]; total: number } };
       if (!alive) return;
       setRows(body.ok && body.data ? body.data.bookings : []);
@@ -215,7 +216,7 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   const [note, setNote] = useState("");
 
   async function load() {
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}`, { credentials: "same-origin" });
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}`), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: DetailPayload };
     setData(body.ok && body.data ? body.data : "missing");
   }
@@ -235,7 +236,7 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/${path}`, {
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/${path}`), {
       credentials: "same-origin",
       ...init,
     });
@@ -257,7 +258,7 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   async function askQuote() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`, {
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -276,7 +277,7 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   async function confirm() {
     if (!quote) return;
     setBusy(true);
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`, {
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -502,7 +503,7 @@ function CaseQueue({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
 
   async function load(nextStatus = status, nextOwner = owner) {
-    const res = await fetch(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`, {
+    const res = await fetch(apiUrl(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`), {
       credentials: "same-origin",
     });
     const body = (await res.json()) as { ok: boolean; data?: { cases: QueuedCase[]; you: string } };
@@ -518,7 +519,7 @@ function CaseQueue({ locale }: { locale: Locale }) {
   async function patch(body: Record<string, unknown>, close = true) {
     if (!active) return;
     setBusy(true);
-    await fetch(`/api/admin/cases/${encodeURIComponent(active.caseId)}`, {
+    await fetch(apiUrl(`/api/admin/cases/${encodeURIComponent(active.caseId)}`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

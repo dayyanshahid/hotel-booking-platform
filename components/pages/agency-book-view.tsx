@@ -11,6 +11,7 @@ import { formatDate, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type { CheckoutSession, CurrencyCode, Locale, RecheckResult } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 interface GuestField {
   roomIndex: number;
@@ -104,7 +105,7 @@ function TradeCheckout({
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/checkout/sessions", {
+      const res = await fetch(apiUrl("/api/checkout/sessions"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -118,7 +119,7 @@ function TradeCheckout({
       setSession(body.data);
       setOthers(seedGuests(body.data.rooms));
 
-      const priced = await fetch("/api/agency/quote", {
+      const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -130,7 +131,7 @@ function TradeCheckout({
       // Ask the supplier whether the rate still stands, before the agent has
       // read a price out to anyone.
       setRechecking(true);
-      const refreshed = await fetch("/api/rates/recheck", {
+      const refreshed = await fetch(apiUrl("/api/rates/recheck"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -170,7 +171,7 @@ function TradeCheckout({
     if (!session || session === "gone") return;
     setRechecking(true);
     setError(null);
-    const res = await fetch("/api/rates/recheck", {
+    const res = await fetch(apiUrl("/api/rates/recheck"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -186,7 +187,7 @@ function TradeCheckout({
     const current = body.data.current;
     if (current) {
       setSession({ ...session, price: current.price, cancellation: current.cancellation });
-      const priced = await fetch("/api/agency/quote", {
+      const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
@@ -218,7 +219,7 @@ function TradeCheckout({
     setBusy(true);
     setError(null);
 
-    const res = await fetch("/api/bookings", {
+    const res = await fetch(apiUrl("/api/bookings"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

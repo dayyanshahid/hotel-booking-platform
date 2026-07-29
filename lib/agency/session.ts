@@ -1,4 +1,5 @@
 import "server-only";
+import { crossSiteSessions } from "@/lib/server/cors";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { canAtLeast, permissionOf, type AgencySession, type AgentPermission } from "./types";
@@ -148,10 +149,18 @@ export async function agentWithPermission(
 
 export async function startSession(session: AgencySession): Promise<void> {
   const jar = await cookies();
+  /*
+   * A portal on its own origin needs a cookie that survives a cross-site
+   * request, and a browser only accepts `SameSite=None` over HTTPS. So the
+   * policy follows the deployment rather than being chosen once: same-origin
+   * stays `lax`, which is the safer default and the one that needs no TLS in
+   * local development.
+   */
+  const crossSite = crossSiteSessions();
   jar.set(COOKIE, encodeSession(session), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: crossSite ? "none" : "lax",
+    secure: crossSite || process.env.NODE_ENV === "production",
     path: "/",
     maxAge: MAX_AGE,
   });

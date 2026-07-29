@@ -11,6 +11,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* --------------------------------------------------------------- list */
 
@@ -31,7 +32,7 @@ function QuoteList({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/agency/quotes", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/quotes"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { quotes: AgencyQuote[] } };
       setQuotes(body.ok && body.data ? body.data.quotes : []);
     })();
@@ -116,7 +117,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const res = await fetch(`/api/agency/quotes/${encodeURIComponent(id)}`, { credentials: "same-origin" });
+    const res = await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: { quote: AgencyQuote } };
     setQuote(body.ok && body.data ? body.data.quote : "missing");
   }
@@ -131,7 +132,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
 
   async function mark(status: AgencyQuote["status"]) {
     setBusy(true);
-    await fetch(`/api/agency/quotes/${encodeURIComponent(id)}`, {
+    await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

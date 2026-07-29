@@ -10,6 +10,7 @@ import { TripPrompt } from "@/components/search/trip-prompt";
 import { addDays, formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
 import type { AuditEntry } from "@/lib/admin/store";
 import type { CurrencyCode, HotelResultCard, Locale, SearchFilters, SearchIntent, SearchResponse } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* ---------------------------------------------------------- catalogue */
 
@@ -59,7 +60,7 @@ function Catalogue() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch("/api/admin/catalogue", { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/admin/catalogue"), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: CataloguePayload };
     if (body.ok && body.data) setData(body.data);
   }
@@ -77,7 +78,7 @@ function Catalogue() {
     }
     let alive = true;
     const id = window.setTimeout(async () => {
-      const res = await fetch(`/api/admin/catalogue/lookup?q=${encodeURIComponent(lookup)}`, {
+      const res = await fetch(apiUrl(`/api/admin/catalogue/lookup?q=${encodeURIComponent(lookup)}`), {
         credentials: "same-origin",
       });
       const body = (await res.json()) as { ok: boolean; data?: { matches: MatchRow[] } };
@@ -90,7 +91,7 @@ function Catalogue() {
   }, [lookup]);
 
   async function openCountry(code: string) {
-    const res = await fetch(`/api/admin/catalogue/lookup?country=${encodeURIComponent(code)}`, {
+    const res = await fetch(apiUrl(`/api/admin/catalogue/lookup?country=${encodeURIComponent(code)}`), {
       credentials: "same-origin",
     });
     const body = (await res.json()) as { ok: boolean; data?: { country: string; cities: CityRow[] } };
@@ -103,7 +104,7 @@ function Catalogue() {
     setBusy(supplier);
     setError(null);
     setNotice(null);
-    const res = await fetch("/api/admin/catalogue", {
+    const res = await fetch(apiUrl("/api/admin/catalogue"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -322,7 +323,7 @@ function Reports({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/admin/reports", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/reports"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: ReportsPayload };
       if (body.ok && body.data) setData(body.data);
     })();
@@ -434,7 +435,7 @@ function Environment() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/admin/environment", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/admin/environment"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: EnvironmentPayload };
       if (body.ok && body.data) setData(body.data);
     })();
@@ -561,7 +562,7 @@ function SupplyProbe() {
     setBusy(true);
     setFailure(null);
     setSeed(intent);
-    const res = await fetch("/api/admin/probe", {
+    const res = await fetch(apiUrl("/api/admin/probe"), {
       method: "POST",
       headers: { "content-type": "application/json", "x-locale": locale },
       credentials: "same-origin",
@@ -776,7 +777,7 @@ function Audit({ locale }: { locale: Locale }) {
     let alive = true;
     const id = window.setTimeout(async () => {
       const params = new URLSearchParams({ actor, action });
-      const res = await fetch(`/api/admin/audit?${params.toString()}`, { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/audit?${params.toString()}`), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { entries: AuditEntry[]; actions: string[] } };
       if (!alive) return;
       setEntries(body.ok && body.data ? body.data.entries : []);

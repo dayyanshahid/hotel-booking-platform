@@ -11,6 +11,7 @@ import { formatDate, formatDateTime, formatDeadline, formatMoney } from "@/lib/f
 import { href } from "@/lib/nav";
 import type { AgencyBooking } from "@/lib/agency/types";
 import type { Booking, CancellationQuote, CurrencyCode, Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /**
  * One booking, as the agency that sold it needs to see it.
@@ -64,7 +65,7 @@ function Detail({
   const [changeDetail, setChangeDetail] = useState("");
 
   async function load() {
-    const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}`, {
+    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}`), {
       credentials: "same-origin",
     });
     const body = (await res.json()) as { ok: boolean; data?: Payload };
@@ -98,7 +99,7 @@ function Detail({
   async function askQuote() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`, {
+    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -123,7 +124,7 @@ function Detail({
     if (!quote) return;
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`, {
+    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/cancel`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -154,7 +155,7 @@ function Detail({
   async function issue() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`, {
+    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`), {
       method: "POST",
       credentials: "same-origin",
     });
@@ -292,7 +293,7 @@ function Detail({
           <Button
             onClick={async () => {
               setBusy(true);
-              const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/change`, {
+              const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/change`), {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 credentials: "same-origin",

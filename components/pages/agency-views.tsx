@@ -21,6 +21,7 @@ import type {
   MarkupRule,
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /** One label for a permission, wherever it is shown. */
 function permissionLabel(t: (key: string) => string, permission: AgentPermission): string {
@@ -52,7 +53,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
   async function send() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/agency/session", {
+    const res = await fetch(apiUrl("/api/agency/session"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
@@ -87,7 +88,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
   async function verify() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/agency/session", {
+    const res = await fetch(apiUrl("/api/agency/session"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
@@ -215,7 +216,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/agency/bookings", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/bookings"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { bookings: AgencyBooking[] } };
       setBookings(body.ok && body.data ? body.data.bookings : []);
     })();
@@ -411,7 +412,7 @@ function Periods({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/agency/statements", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/statements"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { periods: StatementPeriod[] } };
       setPeriods(body.ok && body.data ? body.data.periods : []);
     })();
@@ -492,7 +493,7 @@ function Statement({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/agency/ledger", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/ledger"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { entries: LedgerEntry[] } };
       setEntries(body.ok && body.data ? body.data.entries : []);
     })();
@@ -550,7 +551,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const isAdmin = context.session.role === "admin";
 
   async function reload() {
-    const res = await fetch("/api/agency/agents", { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/agency/agents"), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: { agents: Agent[] } };
     setAgents(body.ok && body.data ? body.data.agents : []);
   }
@@ -562,7 +563,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   async function invite() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/agency/agents", {
+    const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -587,7 +588,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
    * takes effect on their very next request, not when their session expires.
    */
   async function setPermissionFor(agent: Agent, next: AgentPermission) {
-    const res = await fetch("/api/agency/agents", {
+    const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -599,7 +600,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   }
 
   async function toggle(agent: Agent) {
-    const res = await fetch("/api/agency/agents", {
+    const res = await fetch(apiUrl("/api/agency/agents"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -725,7 +726,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
     setBusy(true);
     setError(null);
     setSaved(false);
-    const res = await fetch("/api/agency/settings", {
+    const res = await fetch(apiUrl("/api/agency/settings"), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

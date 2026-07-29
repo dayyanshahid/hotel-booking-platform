@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { canAtLeast } from "@/lib/agency/types";
+import { apiUrl } from "@/lib/api-origin";
 import type {
   Agency,
   AgencyBalance,
@@ -56,7 +57,7 @@ const listeners = new Set<Listener>();
 async function load(): Promise<AgencyContext | null> {
   if (cached !== undefined) return cached;
   if (!inflight) {
-    inflight = fetch("/api/agency/me", { credentials: "same-origin" })
+    inflight = fetch(apiUrl("/api/agency/me"), { credentials: "same-origin" })
       .then(async (res) => {
         if (!res.ok) return null;
         const body = (await res.json()) as { ok: boolean; data?: AgencyContext };
@@ -123,7 +124,7 @@ export function useAgencyQuotes(offerIds: string[]): Record<string, AgencyOfferV
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch("/api/agency/quote", {
+        const res = await fetch(apiUrl("/api/agency/quote"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           credentials: "same-origin",

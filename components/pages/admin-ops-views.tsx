@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton, cx 
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CurrencyCode, Locale, SupportCase, TravelerProfile } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* --------------------------------------------------------- operations */
 
@@ -66,7 +67,7 @@ function Operations({ locale }: { locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch("/api/admin/operations", { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/admin/operations"), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: OpsPayload };
     if (body.ok && body.data) setData(body.data);
   }
@@ -81,7 +82,7 @@ function Operations({ locale }: { locale: Locale }) {
     setBusy(reference);
     setError(null);
     setNotice(null);
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/recheck`, {
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/recheck`), {
       method: "POST",
       credentials: "same-origin",
     });
@@ -99,7 +100,7 @@ function Operations({ locale }: { locale: Locale }) {
     setBusy(reference);
     setError(null);
     setNotice(null);
-    const res = await fetch(`/api/admin/bookings/${encodeURIComponent(reference)}/refund`, {
+    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/refund`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -256,7 +257,7 @@ function Customers({ locale }: { locale: Locale }) {
   useEffect(() => {
     let alive = true;
     const id = window.setTimeout(async () => {
-      const res = await fetch(`/api/admin/customers?q=${encodeURIComponent(query)}`, { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/customers?q=${encodeURIComponent(query)}`), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { customers: CustomerRow[] } };
       if (alive) setRows(body.ok && body.data ? body.data.customers : []);
     }, 200);
@@ -343,7 +344,7 @@ function CustomerDetail({ locale, email }: { locale: Locale; email: string }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(`/api/admin/customers/${encodeURIComponent(email)}`, { credentials: "same-origin" });
+      const res = await fetch(apiUrl(`/api/admin/customers/${encodeURIComponent(email)}`), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: CustomerPayload };
       setData(body.ok && body.data ? body.data : "missing");
     })();

@@ -1,4 +1,5 @@
 import "server-only";
+import { crossSiteSessions } from "@/lib/server/cors";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
@@ -123,10 +124,17 @@ export async function currentAdmin(): Promise<AdminSession | null> {
 
 export async function startAdminSession(session: AdminSession): Promise<void> {
   const jar = await cookies();
+  /*
+   * The console on its own origin needs a cookie that survives a cross-site
+   * request, and a browser only accepts `SameSite=None` over HTTPS. The policy
+   * follows the deployment: same-origin stays `lax`, which is safer and needs
+   * no TLS locally.
+   */
+  const crossSite = crossSiteSessions();
   jar.set(COOKIE, encodeAdminSession(session), {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: crossSite ? "none" : "lax",
+    secure: crossSite || process.env.NODE_ENV === "production",
     path: "/",
     maxAge: MAX_AGE,
   });

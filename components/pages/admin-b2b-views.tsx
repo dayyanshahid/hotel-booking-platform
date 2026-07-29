@@ -28,6 +28,7 @@ import type {
   LedgerEntry,
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /* --------------------------------------------------------------- list */
 
@@ -43,7 +44,7 @@ function AgencyList({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
 
   async function load() {
-    const res = await fetch("/api/admin/agencies", { credentials: "same-origin" });
+    const res = await fetch(apiUrl("/api/admin/agencies"), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: { agencies: Row[] } };
     setRows(body.ok && body.data ? body.data.agencies : []);
   }
@@ -152,7 +153,7 @@ function OnboardModal({
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/admin/agencies", {
+    const res = await fetch(apiUrl("/api/admin/agencies"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -288,7 +289,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   const [newAgent, setNewAgent] = useState({ name: "", email: "", role: "agent" });
 
   async function load() {
-    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}`, { credentials: "same-origin" });
+    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}`), { credentials: "same-origin" });
     const body = (await res.json()) as { ok: boolean; data?: DetailPayload };
     if (body.ok && body.data) {
       setData(body.data);
@@ -317,7 +318,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}`, {
+    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -344,7 +345,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
+    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/agents`), {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -363,7 +364,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   async function addAgent() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
+    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/agents`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -384,7 +385,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   async function post() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/admin/agencies/${encodeURIComponent(id)}/ledger`, {
+    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/ledger`), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",

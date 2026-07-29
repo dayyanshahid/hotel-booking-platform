@@ -25,6 +25,7 @@ import { addDays, formatDate, formatMoney, guestCount, nightsBetween, todayIso }
 import { countLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
+import { apiUrl } from "@/lib/api-origin";
 import type {
   CurrencyCode,
   Locale,
@@ -165,7 +166,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     setSort(nextSort);
     setPage(nextPage);
 
-    const res = await fetch("/api/hotels/search", {
+    const res = await fetch(apiUrl("/api/hotels/search"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
@@ -204,7 +205,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     // One quote call for the whole page rather than one per row.
     const offerIds = body.data.results.map((r) => r.offerSummary.offerId);
     if (offerIds.length) {
-      const priced = await fetch("/api/agency/quote", {
+      const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",

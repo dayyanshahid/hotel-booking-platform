@@ -12,6 +12,7 @@ import { formatDate, todayIso } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyBooking, AgencyQuote } from "@/lib/agency/types";
 import type { Locale } from "@/lib/types";
+import { apiUrl } from "@/lib/api-origin";
 
 /**
  * The screen an agent opens first.
@@ -33,8 +34,8 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
   useEffect(() => {
     void (async () => {
       const [b, q] = await Promise.all([
-        fetch("/api/agency/bookings", { credentials: "same-origin" }).then((r) => r.json()),
-        fetch("/api/agency/quotes", { credentials: "same-origin" }).then((r) => r.json()),
+        fetch(apiUrl("/api/agency/bookings"), { credentials: "same-origin" }).then((r) => r.json()),
+        fetch(apiUrl("/api/agency/quotes"), { credentials: "same-origin" }).then((r) => r.json()),
       ]);
       setBookings(b.ok ? b.data.bookings : []);
       setQuotes(q.ok ? q.data.quotes : []);

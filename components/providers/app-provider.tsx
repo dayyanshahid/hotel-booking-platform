@@ -14,6 +14,7 @@ import { createTranslator, LOCALE_META, type TranslateFn } from "@/lib/i18n";
 import type { AppNotification, CurrencyCode, Locale, SearchIntent } from "@/lib/types";
 import { SCENARIO_COOKIE, type ScenarioId } from "@/lib/server/scenarios";
 import { setPreferenceCookie as setCookie } from "@/lib/cookies";
+import { apiUrl } from "@/lib/api-origin";
 
 /* ------------------------------------------------------------ analytics */
 
@@ -307,13 +308,13 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
       notifications,
       refreshNotifications: async () => {
         if (!account?.email) return;
-        const res = await fetch(`/api/notifications?channel=${encodeURIComponent(account.email)}`);
+        const res = await fetch(apiUrl(`/api/notifications?channel=${encodeURIComponent(account.email)}`));
         const json = await res.json();
         if (json?.ok) setNotifications(json.data.notifications ?? []);
       },
       markNotificationsRead: async () => {
         if (!account?.email) return;
-        await fetch("/api/notifications", {
+        await fetch(apiUrl("/api/notifications"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ channel: account.email }),

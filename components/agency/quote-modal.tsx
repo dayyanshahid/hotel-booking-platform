@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Field, Input, Modal, Select } from "@/components/ui";
+import { apiUrl } from "@/lib/api-origin";
 
 /**
  * Turning a basket of rates into a document.
@@ -39,7 +40,7 @@ export function QuoteModal({
   useEffect(() => {
     if (!open) return;
     void (async () => {
-      const res = await fetch("/api/agency/customers", { credentials: "same-origin" });
+      const res = await fetch(apiUrl("/api/agency/customers"), { credentials: "same-origin" });
       const body = (await res.json()) as { ok: boolean; data?: { customers: { id: string; name: string; email?: string }[] } };
       if (body.ok && body.data) setSaved(body.data.customers);
     })();
@@ -48,7 +49,7 @@ export function QuoteModal({
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/agency/quotes", {
+    const res = await fetch(apiUrl("/api/agency/quotes"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
