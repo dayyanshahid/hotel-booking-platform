@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Agency, AgencyBalance, AgencyOfferView, AgencySession } from "@/lib/agency/types";
+import { canAtLeast } from "@/lib/agency/types";
+import type {
+  Agency,
+  AgencyBalance,
+  AgencyOfferView,
+  AgencySession,
+  AgentPermission,
+} from "@/lib/agency/types";
 
 /**
  * Whether a trade session is in play, and what it is entitled to see.
@@ -20,6 +27,17 @@ export interface AgencyContext {
     "id" | "name" | "slug" | "countryCode" | "commissionPercent" | "markup" | "credit" | "profile"
   >;
   balance: AgencyBalance | null;
+}
+
+/**
+ * What the signed-in account may do, for the screens that decide what to show.
+ *
+ * The server refuses regardless — this is what stops a view-only agent being
+ * offered a button that will only tell them no.
+ */
+export function may(context: AgencyContext | null, required: AgentPermission): boolean {
+  if (!context) return false;
+  return canAtLeast(context.session.permission ?? "issue", required);
 }
 
 type Listener = (value: AgencyContext | null) => void;

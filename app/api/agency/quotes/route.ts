@@ -1,5 +1,5 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
-import { activeAgent } from "@/lib/agency/session";
+import { activeAgent, agentWithPermission } from "@/lib/agency/session";
 import { getAgency, listQuotes, saveQuote } from "@/lib/agency/store";
 import { withExpiry } from "@/lib/agency/quotes";
 import { viewOffer } from "@/lib/agency/rates";
@@ -48,8 +48,14 @@ interface Body {
 
 export async function POST(req: Request) {
   const locale = localeFrom(req);
-  const session = await activeAgent();
-  if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  const guard = await agentWithPermission("booking");
+  if ("denied" in guard) {
+    const authed = await activeAgent();
+    return authed
+      ? fail("accountSecurity", "agency.notPermitted", locale, { status: 403 })
+      : fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  }
+  const session = guard.session;
 
   const body = await readJson<Body>(req);
   if (!body?.customerName?.trim() || !Array.isArray(body.offerIds) || !body.offerIds.length) {

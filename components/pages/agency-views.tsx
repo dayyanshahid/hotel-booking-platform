@@ -12,6 +12,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type {
   Agent,
+  AgentPermission,
   AgencyBooking,
   AgencyProfile,
   LedgerEntry,
@@ -20,6 +21,15 @@ import type {
   MarkupRule,
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
+
+/** One label for a permission, wherever it is shown. */
+function permissionLabel(t: (key: string) => string, permission: AgentPermission): string {
+  return permission === "viewOnly"
+    ? t("agency.permissionViewOnly")
+    : permission === "booking"
+      ? t("agency.permissionBooking")
+      : t("agency.permissionIssue");
+}
 
 /* ------------------------------------------------------------- sign-in */
 
@@ -47,10 +57,25 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
     });
-    const body = (await res.json()) as { ok: boolean; data?: { demoCode?: string } };
+    const body = (await res.json()) as {
+      ok: boolean;
+      data?: { demoCode?: string; codeRequired?: boolean };
+    };
     setBusy(false);
     if (!body.ok) {
       setError(t("error.validation"));
+      return;
+    }
+    /*
+     * A view-only account is signed straight in.
+     *
+     * The code protects what a session can spend, and this one can spend
+     * nothing — asking for it would be a step with nothing behind it. The
+     * server decides, not this screen: it is the same rule that lets the
+     * account in, so the two cannot disagree.
+     */
+    if (body.data?.codeRequired === false) {
+      await verify();
       return;
     }
     setStage("code");
@@ -515,6 +540,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Agent["role"]>("agent");
+  const [permission, setPermission] = useState<AgentPermission>("issue");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isAdmin = context.session.role === "admin";
@@ -536,7 +562,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ name, email, role }),
+      body: JSON.stringify({ name, email, role, permission }),
     });
     const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
@@ -546,6 +572,25 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     }
     setName("");
     setEmail("");
+    await reload();
+  }
+
+  /**
+   * Change what someone may do, without touching whether they are active.
+   *
+   * This is the everyday action on this screen — a new starter goes to
+   * view-only, an experienced agent is trusted with the credit line — and it
+   * takes effect on their very next request, not when their session expires.
+   */
+  async function setPermissionFor(agent: Agent, next: AgentPermission) {
+    const res = await fetch("/api/agency/agents", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ agentId: agent.id, permission: next }),
+    });
+    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
+    if (!body.ok) setError(body.error?.message ?? t("error.validation"));
     await reload();
   }
 
@@ -575,10 +620,24 @@ function TeamPanel({ context }: { context: AgencyContext }) {
                 <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
                 <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
                   {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
                 </Badge>
+                {isAdmin && agent.id !== context.session.agentId ? (
+                  <Select
+                    aria-label={t("agency.permission")}
+                    className="!min-h-9 w-auto"
+                    value={agent.permission ?? "issue"}
+                    onChange={(e) => setPermissionFor(agent, e.target.value as AgentPermission)}
+                  >
+                    <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
+                    <option value="booking">{t("agency.permissionBooking")}</option>
+                    <option value="issue">{t("agency.permissionIssue")}</option>
+                  </Select>
+                ) : (
+                  <Badge tone="neutral">{permissionLabel(t, agent.permission ?? "issue")}</Badge>
+                )}
                 {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
                 {isAdmin && agent.id !== context.session.agentId && (
                   <Button variant="ghost" size="sm" onClick={() => toggle(agent)}>
@@ -605,6 +664,27 @@ function TeamPanel({ context }: { context: AgencyContext }) {
               <Select id="agent-role" value={role} onChange={(e) => setRole(e.target.value as Agent["role"])}>
                 <option value="agent">{t("agency.roleAgent")}</option>
                 <option value="admin">{t("agency.roleAdmin")}</option>
+              </Select>
+            </Field>
+            <Field
+              label={t("agency.permission")}
+              htmlFor="agent-permission"
+              hint={
+                permission === "viewOnly"
+                  ? t("agency.permissionViewOnlyHelp")
+                  : permission === "booking"
+                    ? t("agency.permissionBookingHelp")
+                    : t("agency.permissionIssueHelp")
+              }
+            >
+              <Select
+                id="agent-permission"
+                value={permission}
+                onChange={(e) => setPermission(e.target.value as AgentPermission)}
+              >
+                <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
+                <option value="booking">{t("agency.permissionBooking")}</option>
+                <option value="issue">{t("agency.permissionIssue")}</option>
               </Select>
             </Field>
           </div>

@@ -21,6 +21,7 @@ import { getHotelContent } from "@/lib/server/hotelbeds/content";
 import { tourmindBook } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import { activeAgent } from "@/lib/agency/session";
+import { canAtLeast } from "@/lib/agency/types";
 import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
 import { saveAgencyBooking } from "@/lib/agency/store";
 import { countryForOffer } from "@/lib/agency/context";
@@ -171,6 +172,17 @@ export async function POST(req: Request) {
    * asked for it. Checking first costs nothing and makes the refusal honest.
    */
   const agent = await activeAgent();
+  /*
+   * A view-only account cannot reach the supplier at all.
+   *
+   * The portal hides the button, which is a courtesy; this is the rule. An
+   * account that may only browse must not be able to create a supplier order by
+   * replaying a request, and the check belongs on the same side of the wire as
+   * the credit gate — before anything is held.
+   */
+  if (agent && !canAtLeast(agent.permission ?? "issue", "booking")) {
+    return fail("accountSecurity", "agency.notPermitted", locale, { status: 403 });
+  }
   let agencyCommit: AgencyCommit | null = null;
   if (agent) {
     agencyCommit = await priceForAgency(

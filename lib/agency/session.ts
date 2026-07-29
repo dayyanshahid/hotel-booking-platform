@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import type { AgencySession } from "./types";
+import { canAtLeast, permissionOf, type AgencySession, type AgentPermission } from "./types";
 import { getAgency, getAgentByEmail } from "./store";
 
 /**
@@ -118,10 +118,32 @@ export async function activeAgent(): Promise<AgencySession | null> {
   const [agent, agency] = await Promise.all([getAgentByEmail(session.email), getAgency(session.agencyId)]);
   if (!agent?.active || agent.agencyId !== session.agencyId) return null;
   if (!agency || agency.status !== "active") return null;
-  // Re-derived from configuration on every request rather than trusted from the
-  // cookie: removing someone from the allowlist has to take effect now, not
-  // when their session happens to expire.
-  return { ...session, ops: isOpsEmail(session.email) };
+  /*
+   * Permission comes from the stored account, never from the cookie.
+   *
+   * A cookie is signed, so it cannot be forged — but it was issued when the
+   * agent signed in and says what they could do then. Demoting someone to
+   * view-only has to stop the next request, not wait for a twelve-hour session
+   * to expire. The same reasoning already applied to the operator allowlist.
+   */
+  return { ...session, permission: permissionOf(agent), ops: isOpsEmail(session.email) };
+}
+
+/**
+ * The session, if it may do this.
+ *
+ * Every route that spends money or holds stock calls this rather than checking
+ * a role inline. A permission enforced only where someone remembered to check
+ * is not a permission — the portal hides what an account cannot do, and this is
+ * what makes hiding it more than a courtesy.
+ */
+export async function agentWithPermission(
+  required: AgentPermission,
+): Promise<{ session: AgencySession } | { denied: AgentPermission }> {
+  const session = await activeAgent();
+  if (!session) return { denied: required };
+  const held = session.permission ?? "issue";
+  return canAtLeast(held, required) ? { session } : { denied: required };
 }
 
 export async function startSession(session: AgencySession): Promise<void> {

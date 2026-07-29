@@ -90,6 +90,7 @@ function seed(): void {
       email: "admin@skyline.example",
       name: "Agency admin",
       role: "admin",
+      permission: "issue",
       active: true,
       createdAt: now,
     },
@@ -99,6 +100,32 @@ function seed(): void {
       email: "agent@skyline.example",
       name: "Counter agent",
       role: "agent",
+      permission: "issue",
+      active: true,
+      createdAt: now,
+    },
+    /*
+     * A third seeded login, because the three permissions are the point of the
+     * hierarchy and a demo that only ever shows the most powerful one proves
+     * nothing about the other two.
+     */
+    {
+      id: "agt_demo_viewer",
+      agencyId: agency.id,
+      email: "viewer@skyline.example",
+      name: "Reservations trainee",
+      role: "agent",
+      permission: "viewOnly",
+      active: true,
+      createdAt: now,
+    },
+    {
+      id: "agt_demo_holder",
+      agencyId: agency.id,
+      email: "holds@skyline.example",
+      name: "Groups desk",
+      role: "agent",
+      permission: "booking",
       active: true,
       createdAt: now,
     },

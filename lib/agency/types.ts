@@ -20,7 +20,39 @@
  * payment authorisation — decides whether a booking can proceed.
  */
 
+/**
+ * What an account may do, in the three steps the trade actually works in.
+ *
+ * These are cumulative, and the order is the order money moves in: looking at
+ * stock commits nothing, holding it commits the supplier but not the agency's
+ * money, and issuing commits both. Splitting them is what lets an agency give a
+ * junior a login without giving them the credit line.
+ *
+ * `admin` is not a fourth permission but a flag alongside them — an office
+ * manager who issues bookings and also administers the staff list.
+ */
+export type AgentPermission = "viewOnly" | "booking" | "issue";
+
+/**
+ * Kept for the accounts that predate permissions.
+ *
+ * Every stored agent had one of these two; `admin` becomes an issuer who can
+ * also manage staff, and `agent` becomes an issuer, because that is what they
+ * could already do. Migrating anyone *down* to view-only would silently remove
+ * a capability an agency is relying on today.
+ */
 export type AgentRole = "admin" | "agent";
+
+/** Ranked so a check can ask "at least this much" rather than list variants. */
+export const PERMISSION_RANK: Record<AgentPermission, number> = {
+  viewOnly: 0,
+  booking: 1,
+  issue: 2,
+};
+
+export function canAtLeast(permission: AgentPermission, required: AgentPermission): boolean {
+  return PERMISSION_RANK[permission] >= PERMISSION_RANK[required];
+}
 
 export interface Agent {
   id: string;
@@ -28,10 +60,26 @@ export interface Agent {
   email: string;
   name: string;
   role: AgentRole;
+  /**
+   * What this account may do. Absent on accounts created before permissions
+   * existed, which {@link permissionOf} resolves from the role.
+   */
+  permission?: AgentPermission;
   /** Suspended agents keep their bookings but cannot sign in or book. */
   active: boolean;
   createdAt: string;
   lastSeenAt?: string;
+}
+
+/**
+ * The permission an account actually has.
+ *
+ * Reading this rather than the field directly is what keeps an agent created
+ * last year working: no stored permission means the role decides, and both
+ * existing roles could issue.
+ */
+export function permissionOf(agent: Pick<Agent, "role" | "permission">): AgentPermission {
+  return agent.permission ?? "issue";
 }
 
 /**
@@ -155,6 +203,11 @@ export interface AgencySession {
   email: string;
   name: string;
   role: AgentRole;
+  /**
+   * Resolved from the stored account on every request, not carried in the
+   * cookie: a demotion has to bite immediately.
+   */
+  permission?: AgentPermission;
   agencyName: string;
   /**
    * Our own staff, identified by an allowlist rather than a row anyone can

@@ -1,5 +1,5 @@
 import { fail, localeFrom, ok, readJson } from "@/lib/server/api";
-import { activeAgent } from "@/lib/agency/session";
+import { activeAgent, agentWithPermission } from "@/lib/agency/session";
 import { getAgencyBooking } from "@/lib/agency/store";
 import { getBooking, getQuote, peekIdempotency, setIdempotency } from "@/lib/server/store";
 import { scenarioFromRequest } from "@/lib/server/scenarios";
@@ -22,8 +22,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ reference: str
   const { reference } = await ctx.params;
   const locale = localeFrom(req);
   const scenario = scenarioFromRequest(req);
-  const session = await activeAgent();
-  if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  const guard = await agentWithPermission("issue");
+  if ("denied" in guard) {
+    const authed = await activeAgent();
+    return authed
+      ? fail("accountSecurity", "agency.notPermitted", locale, { status: 403 })
+      : fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  }
+  const session = guard.session;
 
   const trade = await getAgencyBooking(reference);
   if (!trade || trade.agencyId !== session.agencyId) {

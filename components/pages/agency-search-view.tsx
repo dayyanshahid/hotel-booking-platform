@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import type { AgencyContext } from "@/components/agency/use-agency";
+import { may, type AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Button, Card, Drawer, EmptyState, SectionHeading, cx } from "@/components/ui";
 import { NoResultsArt } from "@/components/ui/illustrations";
 import { SearchBar } from "@/components/search/search-bar";
@@ -115,6 +115,16 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  /*
+   * What this account may do.
+   *
+   * The server refuses either way; this is so a view-only agent is not offered
+   * a button whose only outcome is a refusal. Browsing rates with cost and
+   * margin on them is exactly what the permission is for.
+   */
+  const canQuote = may(context, "booking");
+  const canIssue = may(context, "issue");
 
   /** Offers the agent has set aside for a quote, in the order they picked them. */
   const [basket, setBasket] = useState<string[]>([]);
@@ -457,26 +467,30 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             </Button>
                           </Link>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant={picked ? "ghost" : "secondary"}
-                              onClick={() =>
-                                setBasket((prev) =>
-                                  picked
-                                    ? prev.filter((id) => id !== card.offerSummary.offerId)
-                                    : [...prev, card.offerSummary.offerId],
-                                )
-                              }
-                            >
-                              {picked && <Icon name="check" size={14} />}
-                              {picked ? t("agency.inQuote") : t("agency.addToQuote")}
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
-                            >
-                              {t("agency.book")}
-                            </Button>
+                            {canQuote && (
+                              <Button
+                                size="sm"
+                                variant={picked ? "ghost" : "secondary"}
+                                onClick={() =>
+                                  setBasket((prev) =>
+                                    picked
+                                      ? prev.filter((id) => id !== card.offerSummary.offerId)
+                                      : [...prev, card.offerSummary.offerId],
+                                  )
+                                }
+                              >
+                                {picked && <Icon name="check" size={14} />}
+                                {picked ? t("agency.inQuote") : t("agency.addToQuote")}
+                              </Button>
+                            )}
+                            {canIssue && (
+                              <Button
+                                size="sm"
+                                onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
+                              >
+                                {t("agency.book")}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       }

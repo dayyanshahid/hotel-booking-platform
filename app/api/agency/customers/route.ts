@@ -1,5 +1,5 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
-import { activeAgent } from "@/lib/agency/session";
+import { activeAgent, agentWithPermission } from "@/lib/agency/session";
 import { getCustomer, listCustomers, removeCustomer, saveCustomer } from "@/lib/agency/store";
 import type { AgencyCustomer } from "@/lib/agency/types";
 
@@ -13,8 +13,14 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const locale = localeFrom(req);
-  const session = await activeAgent();
-  if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  const guard = await agentWithPermission("booking");
+  if ("denied" in guard) {
+    const authed = await activeAgent();
+    return authed
+      ? fail("accountSecurity", "agency.notPermitted", locale, { status: 403 })
+      : fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  }
+  const session = guard.session;
 
   const body = await readJson<Partial<AgencyCustomer> & { id?: string }>(req);
   if (!body?.name?.trim()) {
@@ -50,8 +56,14 @@ export async function POST(req: Request) {
 
 export async function DELETE(req: Request) {
   const locale = localeFrom(req);
-  const session = await activeAgent();
-  if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  const guard = await agentWithPermission("booking");
+  if ("denied" in guard) {
+    const authed = await activeAgent();
+    return authed
+      ? fail("accountSecurity", "agency.notPermitted", locale, { status: 403 })
+      : fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
+  }
+  const session = guard.session;
 
   const id = new URL(req.url).searchParams.get("id") ?? "";
   const removed = await removeCustomer(session.agencyId, id);
