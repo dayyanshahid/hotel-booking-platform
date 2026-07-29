@@ -4,6 +4,8 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card } from "@/components/ui";
 import { formatDate, formatDeadline, formatMoney, guestCount } from "@/lib/format";
 import type { AgencyBooking, AgencyProfile } from "@/lib/agency/types";
+import { brandingOf } from "@/lib/agency/branding";
+import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 
 import type { Booking, CurrencyCode, Locale, SupplierConfirmation } from "@/lib/types";
 
@@ -46,6 +48,7 @@ export function TradeVoucher({
 }) {
   const { t } = useApp();
   const currency = trade.currency as CurrencyCode;
+  const branding = brandingOf({ name: agencyName, profile });
 
   return (
     <Card className="p-4">
@@ -57,43 +60,21 @@ export function TradeVoucher({
       </div>
 
       <div className="rounded-[var(--radius-card)] border p-4">
-        <div className="hairline flex flex-wrap items-start justify-between gap-3 border-b pb-3">
-          <div className="flex items-start gap-3">
-            {/*
-              The agency's mark, not ours. A fixed box so a tall or wide file
-              cannot push the rest of the header off the page, and plain
-              `<img>` because this is a customer-supplied URL on a document
-              that gets printed — the image optimiser is no help here.
-            */}
-            {profile.logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.logoUrl}
-                alt={profile.legalName || agencyName}
-                className="h-12 w-auto max-w-[160px] object-contain"
-              />
-            )}
-            <div>
-            <p className="text-base font-bold wrap-anywhere">{profile.legalName || agencyName}</p>
-            {profile.address && <p className="text-muted text-sm wrap-anywhere">{profile.address}</p>}
-            {profile.city && <p className="text-muted text-sm">{profile.city}</p>}
-            <p className="text-muted text-sm">
-              {[profile.phone, profile.email].filter(Boolean).join(" · ")}
-            </p>
-            {profile.taxNumber && (
-              <p className="text-muted text-xs">
-                {t("agency.taxNumber")}: {profile.taxNumber}
-              </p>
-            )}
-            </div>
-          </div>
-          <div className="text-end">
-            <p className="text-muted text-xs">{t("booking.reference")}</p>
-            <p className="font-mono text-base font-bold">{booking.reference}</p>
-            <Badge tone={booking.status === "confirmed" ? "positive" : "caution"}>
-              {booking.status === "confirmed" ? t("booking.confirmedTitle") : t("booking.pendingTitle")}
-            </Badge>
-          </div>
+        {/*
+          The same letterhead the quotation carries. Shared rather than
+          duplicated, because the two documents go to the same customer from the
+          same agency and a logo on one and not the other reads as a forgery.
+        */}
+        <DocumentBrand
+          branding={branding}
+          title={t("agency.voucher")}
+          reference={booking.reference}
+          meta={formatDate(booking.checkIn, locale)}
+        />
+        <div className="flex justify-end pt-3">
+          <Badge tone={booking.status === "confirmed" ? "positive" : "caution"}>
+            {booking.status === "confirmed" ? t("booking.confirmedTitle") : t("booking.pendingTitle")}
+          </Badge>
         </div>
 
         {/*
@@ -202,6 +183,9 @@ export function TradeVoucher({
         )}
 
         <p className="text-muted hairline mt-3 border-t pt-3 text-xs">{t("agency.voucherFooter")}</p>
+
+        {/* The agency's own conditions, after ours. */}
+        <DocumentFooter branding={branding} />
       </div>
     </Card>
   );

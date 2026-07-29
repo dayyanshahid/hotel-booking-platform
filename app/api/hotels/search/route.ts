@@ -40,6 +40,13 @@ export async function POST(req: Request) {
     supply: body.supply === "live" ? "live" : "all",
   });
 
+  /*
+   * `unconfigured` is deliberately not an error. There is nothing wrong with
+   * the request, retrying cannot change the answer, and a 503 would put a
+   * "try again" toast in front of an agent who needs to be told that no
+   * supplier is connected. It returns a normal, empty page carrying its own
+   * explanation.
+   */
   if (response.completeness === "empty") {
     return fail("temporaryService", "results.allFailed", locale, {
       status: 503,

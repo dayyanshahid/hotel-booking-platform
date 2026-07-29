@@ -2,6 +2,7 @@ import { fail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import { getAgency, saveAgency } from "@/lib/agency/store";
 import type { AgencyProfile, MarkupOverride, MarkupPolicy, MarkupRule } from "@/lib/agency/types";
+import { normalizeHex } from "@/lib/agency/branding";
 
 /**
  * The agency's own margin rule and the details that appear on its documents.
@@ -27,18 +28,18 @@ function readRule(input: unknown): MarkupRule | null {
 }
 
 /**
- * A logo URL that is safe to put in an image tag.
+ * A URL safe to put on a customer's document — the logo, or the website.
  *
- * The agency types this in and it ends up on every voucher their customers
- * receive, so it is not merely a string. `javascript:` and `data:` are the
- * obvious abuses; plain `http:` is the quiet one, because a single insecure
- * image turns an otherwise secure page into a mixed-content warning on the
- * document a traveller is asked to trust. HTTPS only.
+ * The agency types these in and they end up on every quotation and voucher
+ * their customers receive, so they are not merely strings. `javascript:` and
+ * `data:` are the obvious abuses; plain `http:` is the quiet one, because a
+ * single insecure image turns an otherwise secure page into a mixed-content
+ * warning on the document a traveller is asked to trust. HTTPS only.
  *
- * An empty value clears the logo rather than failing, which is how an agency
+ * An empty value clears the field rather than failing, which is how an agency
  * removes one.
  */
-function safeLogoUrl(value: unknown): string | undefined {
+function safeHttpsUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -48,6 +49,20 @@ function safeLogoUrl(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The accent, canonicalised — or nothing, if it is not a colour.
+ *
+ * `normalizeHex` is the same function the settings preview and both documents
+ * use, so what an agency sees before saving is what gets stored. An empty value
+ * clears the colour back to the default rather than failing, which is how an
+ * agency removes one.
+ */
+function safeBrandColor(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (!value.trim()) return "";
+  return normalizeHex(value) ?? undefined;
 }
 
 export async function PATCH(req: Request) {
@@ -95,17 +110,47 @@ export async function PATCH(req: Request) {
     markup = { default: { ...fallback, currency: agency.credit.currency }, overrides };
   }
 
-  const profile: AgencyProfile = body?.profile
-    ? {
-        legalName: sanitize(body.profile.legalName, 120) || agency.profile.legalName,
-        address: sanitize(body.profile.address, 160),
-        city: sanitize(body.profile.city, 80),
-        taxNumber: sanitize(body.profile.taxNumber, 40),
-        email: sanitize(body.profile.email, 120).toLowerCase(),
-        phone: sanitize(body.profile.phone, 40),
-        logoUrl: safeLogoUrl(body.profile.logoUrl) ?? agency.profile.logoUrl,
-      }
-    : agency.profile;
+  let profile: AgencyProfile = agency.profile;
+
+  if (body?.profile) {
+    /*
+     * Branding is refused rather than dropped.
+     *
+     * These used to fall back to the stored value when they did not validate,
+     * so an agency that pasted an `http://` logo saw the field revert on the
+     * next load with nothing said. Silently discarding what someone typed is
+     * the worst of the options: they cannot tell whether it saved, and the
+     * document they are about to send a customer is not the one they designed.
+     */
+    const logoUrl = safeHttpsUrl(body.profile.logoUrl);
+    const website = safeHttpsUrl(body.profile.website);
+    const brandColor = safeBrandColor(body.profile.brandColor);
+
+    if (logoUrl === undefined && body.profile.logoUrl !== undefined) {
+      return fail("validation", "agency.logoInvalid", locale, { status: 422, fields: { logoUrl: "invalid" } });
+    }
+    if (website === undefined && body.profile.website !== undefined) {
+      return fail("validation", "agency.websiteInvalid", locale, { status: 422, fields: { website: "invalid" } });
+    }
+    if (brandColor === undefined && body.profile.brandColor !== undefined) {
+      return fail("validation", "agency.colorInvalid", locale, { status: 422, fields: { brandColor: "invalid" } });
+    }
+
+    profile = {
+      legalName: sanitize(body.profile.legalName, 120) || agency.profile.legalName,
+      address: sanitize(body.profile.address, 160),
+      city: sanitize(body.profile.city, 80),
+      taxNumber: sanitize(body.profile.taxNumber, 40),
+      email: sanitize(body.profile.email, 120).toLowerCase(),
+      phone: sanitize(body.profile.phone, 40),
+      logoUrl: logoUrl ?? agency.profile.logoUrl,
+      website: website ?? agency.profile.website,
+      brandColor: brandColor ?? agency.profile.brandColor,
+      // Long enough for a real set of booking conditions, short enough that it
+      // cannot become a second page nobody meant to send.
+      documentFooter: sanitize(body.profile.documentFooter, 1200),
+    };
+  }
 
   await saveAgency({ ...agency, markup, profile });
   return ok({ markup, profile });

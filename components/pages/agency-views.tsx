@@ -8,6 +8,8 @@ import { refreshAgency, type AgencyContext } from "@/components/agency/use-agenc
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, cx } from "@/components/ui";
 import { DataTable, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
+import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
+import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/branding";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type {
@@ -933,39 +935,15 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
               onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
             />
           </Field>
-          {/*
-            The mark that goes on every document a customer receives. Shown
-            back as a preview rather than only as a URL — a broken link is
-            obvious here and invisible on a voucher already handed over.
-          */}
-          <Field
-            label={t("agency.logoUrl")}
-            htmlFor="pf-logo"
-            hint={t("agency.logoUrlHint")}
-            className="sm:col-span-2"
-          >
-            <Input
-              id="pf-logo"
-              type="url"
-              inputMode="url"
-              placeholder="https://"
-              value={profile.logoUrl ?? ""}
-              disabled={!isAdmin}
-              onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
-            />
-          </Field>
-          {profile.logoUrl && (
-            <div className="sm:col-span-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={profile.logoUrl}
-                alt={profile.legalName || t("agency.logoUrl")}
-                className="hairline h-14 w-auto max-w-[200px] rounded-[var(--radius-control)] border object-contain p-1"
-              />
-            </div>
-          )}
         </div>
       </Card>
+
+      <BrandingCard
+        profile={profile}
+        setProfile={setProfile}
+        agencyName={context.agency.name}
+        isAdmin={isAdmin}
+      />
 
       {isAdmin && (
         <Button onClick={save} loading={busy}>
@@ -977,6 +955,146 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
 }
 
 /** What a $1,000 cost sells for under a rule — the sanity check before saving. */
+/**
+ * The agency's own identity on what its customers receive.
+ *
+ * Kept apart from the profile card above it because these are different
+ * questions. That one is who the agency legally is — the details that have to
+ * be right on an invoice. This one is what their paperwork looks like, and the
+ * only way to answer it is to see it.
+ *
+ * So the preview is not a mock-up: it is `DocumentBrand`, the component the
+ * quotation and the voucher actually render, given the values in the form as
+ * they are typed. A preview drawn separately would be a second implementation
+ * of the letterhead, and the day it drifted, the agency would find out from a
+ * customer.
+ */
+function BrandingCard({
+  profile,
+  setProfile,
+  agencyName,
+  isAdmin,
+}: {
+  profile: AgencyProfile;
+  setProfile: (next: AgencyProfile) => void;
+  agencyName: string;
+  isAdmin: boolean;
+}) {
+  const { t } = useApp();
+
+  /*
+   * What the form currently describes, resolved exactly as the document will
+   * resolve it — including the default colour when the field is empty and the
+   * readable ink that goes on top of whatever was chosen.
+   */
+  const branding = brandingOf({ name: agencyName, profile });
+
+  /*
+   * The colour swatch needs a valid hex or it silently shows black, so the
+   * picker is fed the resolved colour while the text field keeps whatever the
+   * agency is midway through typing. Binding both to the raw value makes the
+   * swatch flicker to black on every keystroke of `#1a2b3c`.
+   */
+  const typed = profile.brandColor ?? "";
+  const colorInvalid = typed.trim() !== "" && normalizeHex(typed) === null;
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div>
+        <h2 className="font-semibold">{t("agency.branding")}</h2>
+        <p className="text-muted text-sm">{t("agency.brandingBody")}</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t("agency.logoUrl")} htmlFor="pf-logo" hint={t("agency.logoUrlHint")}>
+          <Input
+            id="pf-logo"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            value={profile.logoUrl ?? ""}
+            disabled={!isAdmin}
+            onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
+          />
+        </Field>
+
+        <Field label={t("agency.website")} htmlFor="pf-website" hint={t("agency.websiteHint")}>
+          <Input
+            id="pf-website"
+            type="url"
+            inputMode="url"
+            placeholder="https://"
+            value={profile.website ?? ""}
+            disabled={!isAdmin}
+            onChange={(e) => setProfile({ ...profile, website: e.target.value })}
+          />
+        </Field>
+
+        <Field
+          label={t("agency.brandColor")}
+          htmlFor="pf-color"
+          hint={colorInvalid ? t("agency.colorInvalid") : t("agency.brandColorHint")}
+          className="sm:col-span-2"
+        >
+          <div className="flex items-center gap-2">
+            {/*
+              Two ways in, because agencies arrive with either. A brand book
+              gives a hex to paste; someone matching a logo by eye wants the
+              swatch. They write the same value.
+            */}
+            <input
+              type="color"
+              aria-label={t("agency.brandColor")}
+              value={branding.color}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, brandColor: e.target.value })}
+              className="hairline h-10 w-14 shrink-0 cursor-pointer rounded-[var(--radius-control)] border bg-transparent p-1"
+            />
+            <Input
+              id="pf-color"
+              placeholder={DEFAULT_BRAND_COLOR}
+              value={typed}
+              disabled={!isAdmin}
+              onChange={(e) => setProfile({ ...profile, brandColor: e.target.value })}
+              className="font-mono"
+            />
+          </div>
+        </Field>
+
+        <Field
+          label={t("agency.documentFooter")}
+          htmlFor="pf-footer"
+          hint={t("agency.documentFooterHint")}
+          className="sm:col-span-2"
+        >
+          <textarea
+            id="pf-footer"
+            rows={4}
+            maxLength={1200}
+            value={profile.documentFooter ?? ""}
+            disabled={!isAdmin}
+            onChange={(e) => setProfile({ ...profile, documentFooter: e.target.value })}
+            className="hairline focus-ring w-full rounded-[var(--radius-control)] border px-3 py-2 text-sm"
+          />
+        </Field>
+      </div>
+
+      <div>
+        <SectionHeading title={t("agency.brandingPreview")} />
+        <div className="hairline surface-sunken mt-2 rounded-[var(--radius-card)] border p-4">
+          <DocumentBrand
+            branding={branding}
+            title={t("agency.quotation")}
+            reference="QT-000000"
+            meta={t("agency.brandingPreviewMeta")}
+          />
+          <DocumentFooter branding={branding} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function previewSell(cost: number, rule: MarkupRule): number {
   return rule.mode === "percent"
     ? Math.round(cost * (1 + Math.max(0, rule.value) / 100))

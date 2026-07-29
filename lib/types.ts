@@ -353,8 +353,18 @@ export interface SearchResponse {
   results: HotelResultCard[];
   totalCount: number;
   facets: SearchFacets;
-  /** complete | partial — partial means at least one source is still unavailable. */
-  completeness: "complete" | "partial" | "empty";
+  /**
+   * How much of the supply behind this page actually answered.
+   *
+   * `partial` means at least one source is still unavailable; `empty` means
+   * none of the sources we asked could answer. `unconfigured` is different in
+   * kind: we asked nobody, because this environment has no supplier connected.
+   * It is separated out because the recovery is not the same — `empty` is worth
+   * retrying and `unconfigured` never will be, and telling an agent to try
+   * again in a moment when no amount of trying can help wastes their time and
+   * their customer's.
+   */
+  completeness: "complete" | "partial" | "empty" | "unconfigured";
   /** Customer-safe explanation when completeness !== complete. */
   completenessMessage?: string;
   page: number;

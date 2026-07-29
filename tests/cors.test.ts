@@ -85,25 +85,21 @@ describe("preflight", () => {
   });
 });
 
-describe("every call to the API asks for its cookie", () => {
+describe("every call to the API reaches it, and carries its cookie", () => {
   /*
-   * The failure this catches is invisible in development and total in
-   * production. `fetch` defaults to `same-origin` credentials, which sends
-   * nothing to another origin and — worse — discards the `Set-Cookie` that
-   * comes back. Combined and local builds are same-origin, so the default is
-   * correct there and the omission cannot be noticed; on a separated portal it
-   * means sign-in succeeds, the session is dropped on the floor, and the agent
-   * is returned to the sign-in screen they just completed, with no error in the
-   * console and a 200 in the network tab.
+   * Two mistakes with one shape: correct on a combined build, silently broken
+   * on a separated one. Neither can be noticed on a laptop, because on a laptop
+   * the API is on the origin serving the page.
    *
-   * It was found by signing in to a deployed portal, and only because the
-   * symptom was strange enough to chase. A grep is a poor kind of test, but the
-   * alternative here is a browser against two real origins, and this catches
-   * the whole class in the place it actually gets introduced: someone adding a
-   * fetch and not thinking about an origin they cannot see locally.
+   * Both were found on a deployed portal rather than in review, which is the
+   * argument for checking them mechanically. A grep is a poor kind of test, but
+   * the alternative is a browser against two real origins, and this catches the
+   * class where it gets introduced: someone adding a fetch without thinking
+   * about an origin they cannot see from where they are working.
    */
-  it("passes credentials on every fetch through apiUrl", async () => {
-    const { readdir, readFile } = await import("node:fs/promises");
+
+  const sourceFiles = async () => {
+    const { readdir } = await import("node:fs/promises");
     const { join } = await import("node:path");
 
     const walk = async (dir: string): Promise<string[]> => {
@@ -118,25 +114,73 @@ describe("every call to the API asks for its cookie", () => {
       return out;
     };
 
+    return walk(process.cwd());
+  };
+
+  const relative = (file: string) => file.replace(process.cwd() + "/", "");
+
+  /** The index just past the `fetch(...)` call beginning at `start`. */
+  const endOfCall = (source: string, start: number) => {
+    let depth = 0;
+    let i = start + "fetch".length;
+    while (i < source.length) {
+      if (source[i] === "(") depth += 1;
+      else if (source[i] === ")" && --depth === 0) break;
+      i += 1;
+    }
+    return i;
+  };
+
+  it("passes credentials on every fetch through apiUrl", async () => {
+    /*
+     * `fetch` defaults to `same-origin` credentials, which sends no cookie to
+     * another origin and — worse — discards the `Set-Cookie` that comes back.
+     * The symptom is that sign-in succeeds and the agent is returned to the
+     * sign-in screen they just completed, with a 200 in the network tab and
+     * nothing in the console.
+     */
+    const { readFile } = await import("node:fs/promises");
     const offenders: string[] = [];
-    for (const file of await walk(process.cwd())) {
+
+    for (const file of await sourceFiles()) {
       const source = await readFile(file, "utf8");
       if (!source.includes("apiUrl(")) continue;
 
       for (const match of source.matchAll(/fetch\(\s*apiUrl\(/g)) {
-        // Walk to the matching paren so the whole call is examined, not a
-        // fixed window that a long URL or a multi-line body would outrun.
-        let depth = 0;
-        let end = match.index + "fetch".length;
-        while (end < source.length) {
-          if (source[end] === "(") depth += 1;
-          else if (source[end] === ")" && --depth === 0) break;
-          end += 1;
+        const call = source.slice(match.index, endOfCall(source, match.index) + 1);
+        if (!call.includes("credentials")) {
+          offenders.push(`${relative(file)}:${source.slice(0, match.index).split("\n").length}`);
         }
-        if (!source.slice(match.index, end + 1).includes("credentials")) {
-          const line = source.slice(0, match.index).split("\n").length;
-          offenders.push(`${file.replace(process.cwd() + "/", "")}:${line}`);
-        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("routes shared components' API calls through apiUrl, not a relative path", async () => {
+    /*
+     * A relative `/api/...` resolves against whatever origin is serving the
+     * page. In a component shared with a separated front end that is the
+     * portal, which has no API routes at all, so the call 404s against itself
+     * and the feature simply does nothing.
+     *
+     * This is how destination autocomplete came to return no suggestions on the
+     * deployed portal: the data was on the backend the whole time and the field
+     * was asking the wrong host. Nothing errored, so nothing looked wrong.
+     *
+     * Server code under app/api is exempt — it *is* the origin.
+     */
+    const { readFile } = await import("node:fs/promises");
+    const offenders: string[] = [];
+
+    for (const file of await sourceFiles()) {
+      const path = relative(file);
+      if (!path.startsWith("components/") && !path.startsWith("lib/")) continue;
+      if (path.startsWith("lib/server/")) continue;
+
+      const source = await readFile(file, "utf8");
+      for (const match of source.matchAll(/fetch\(\s*[`"']\/api\//g)) {
+        offenders.push(`${path}:${source.slice(0, match.index).split("\n").length}`);
       }
     }
 

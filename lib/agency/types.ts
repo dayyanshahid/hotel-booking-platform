@@ -150,6 +150,27 @@ export interface AgencyProfile {
    * break the top of a voucher.
    */
   logoUrl?: string;
+  /**
+   * The accent on customer-facing documents, as `#rrggbb`.
+   *
+   * Stored as the agency typed it and resolved through `brandingOf`, which also
+   * decides the ink that goes on top of it — a pale brand colour needs dark
+   * text, and about a third of real ones are pale.
+   */
+  brandColor?: string;
+  /** Printed under the contact line. HTTPS only, like the logo. */
+  website?: string;
+  /**
+   * The agency's own booking conditions, printed at the foot of every quotation
+   * and voucher.
+   *
+   * Agencies are usually required to put their own terms on what they hand a
+   * customer, and without somewhere to say so they either paste it into the
+   * notes of every quote or leave it off. Plain text, never markup: this is
+   * rendered on a document a traveller is asked to trust, and an agency admin
+   * is not a person who should be able to inject HTML into it.
+   */
+  documentFooter?: string;
 }
 
 export interface Agency {

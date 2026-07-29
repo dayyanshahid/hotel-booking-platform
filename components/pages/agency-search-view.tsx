@@ -584,16 +584,34 @@ function TradeZeroResults({
   const { t, locale } = useApp();
   const recovery = data.recovery;
 
+  /*
+   * An empty page has two very different causes and the advice for them is
+   * opposite. Usually there is genuinely nothing for these dates, and the way
+   * out is to relax the search. But when no supplier is connected, relaxing
+   * anything is wasted effort — the agent could widen the occupancy and shift
+   * the dates all afternoon and still see this screen. So that case says what
+   * is actually wrong, and offers none of the suggestions that cannot help.
+   */
+  const unconfigured = data.completeness === "unconfigured";
+
   return (
     <div className="space-y-4">
       <EmptyState
         art={<NoResultsArt />}
-        title={t("results.empty")}
-        body={t("agency.noResultsBody")}
-        actions={<Button onClick={onClearFilters}>{t("results.relaxFilters")}</Button>}
+        title={unconfigured ? t("results.noSupplier") : t("results.empty")}
+        body={
+          unconfigured
+            ? (data.completenessMessage ?? t("results.noSupplierBody"))
+            : t("agency.noResultsBody")
+        }
+        actions={
+          unconfigured ? undefined : (
+            <Button onClick={onClearFilters}>{t("results.relaxFilters")}</Button>
+          )
+        }
       />
 
-      {recovery && recovery.nearbyDates.length > 0 && (
+      {!unconfigured && recovery && recovery.nearbyDates.length > 0 && (
         <section>
           <SectionHeading title={t("results.nearbyDates")} />
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -616,7 +634,7 @@ function TradeZeroResults({
         </section>
       )}
 
-      {recovery && recovery.nearbyDestinations.length > 0 && (
+      {!unconfigured && recovery && recovery.nearbyDestinations.length > 0 && (
         <section>
           <SectionHeading title={t("results.nearbyAreas")} />
           <ul className="grid gap-3 sm:grid-cols-3">

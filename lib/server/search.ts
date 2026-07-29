@@ -344,8 +344,26 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const liveFailedCount = liveStatuses.filter((status) => status === "unavailable").length;
   const totalSources = responses.length + liveAsked;
   const totalFailed = failedCount + liveFailedCount;
-  const completeness: SearchResponse["completeness"] =
-    totalFailed >= totalSources ? "empty" : totalFailed > 0 ? "partial" : "complete";
+
+  /*
+   * Nobody was asked, so nobody failed.
+   *
+   * This is what a live-only search looks like in an environment with no
+   * supplier credentials: not a bad search and not an outage, just a platform
+   * with nothing plugged into it. Counting it as "everything failed" — which is
+   * what `0 >= 0` did — told an agent their search could not be reached and to
+   * try again in a moment, and no amount of trying would ever have produced a
+   * room. They would sooner shift the dates twenty times than guess that the
+   * supplier was never connected.
+   */
+  const unconfigured = totalSources === 0;
+  const completeness: SearchResponse["completeness"] = unconfigured
+    ? "unconfigured"
+    : totalFailed >= totalSources
+      ? "empty"
+      : totalFailed > 0
+        ? "partial"
+        : "complete";
 
   const response: SearchResponse = {
     searchToken: `st_${hash01(JSON.stringify(effectiveIntent)).toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`,
@@ -354,8 +372,11 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
     totalCount: sorted.length,
     facets,
     completeness,
-    completenessMessage:
-      totalFailed >= totalSources
+    completenessMessage: unconfigured
+      ? locale === "ar"
+        ? "لا يوجد مورّد متصل بهذه البيئة، لذلك لا توجد أسعار لعرضها. تواصل مع مشغّل المنصة."
+        : "No supplier is connected to this environment, so there are no rates to show. This is not a problem with your search — contact the platform operator."
+      : totalFailed >= totalSources
         ? locale === "ar"
           ? "تعذّر الوصول إلى مصادر الفنادق. بحثك محفوظ ويمكنك إعادة المحاولة."
           : "We could not reach our hotel sources. Your search is saved — try again in a moment."

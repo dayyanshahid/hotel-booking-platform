@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Spinner, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
+import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import type { Suggestion } from "@/lib/types";
 
 /**
@@ -61,8 +62,8 @@ export function DestinationAutocomplete({
       abortRef.current = controller;
       try {
         const res = await fetch(
-          `/api/search/suggestions?q=${encodeURIComponent(query)}&locale=${locale}`,
-          { signal: controller.signal },
+          apiUrl(`/api/search/suggestions?q=${encodeURIComponent(query)}&locale=${locale}`),
+          { signal: controller.signal, credentials: apiCredentials() },
         );
         const json = await res.json();
         if (json?.ok) {

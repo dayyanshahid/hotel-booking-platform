@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
+import { brandingOf } from "@/lib/agency/branding";
+import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Skeleton } from "@/components/ui";
@@ -145,7 +147,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const currency = quote.currency as CurrencyCode;
   const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
   const cost = quote.items.reduce((sum, item) => sum + item.cost, 0);
-  const profile = context.agency.profile;
+  const branding = brandingOf(context.agency);
 
   return (
     <div className="space-y-4">
@@ -190,24 +192,18 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
       </Card>
 
       <Card className="p-5">
-        <header className="hairline flex flex-wrap items-start justify-between gap-4 border-b pb-4">
-          <div>
-            <p className="text-lg font-bold wrap-anywhere">{profile.legalName || context.agency.name}</p>
-            {profile.address && <p className="text-muted text-sm wrap-anywhere">{profile.address}</p>}
-            {profile.city && <p className="text-muted text-sm">{profile.city}</p>}
-            <p className="text-muted text-sm">{[profile.phone, profile.email].filter(Boolean).join(" · ")}</p>
-            {profile.taxNumber && (
-              <p className="text-muted text-xs">
-                {t("agency.taxNumber")}: {profile.taxNumber}
-              </p>
-            )}
-          </div>
-          <div className="text-end">
-            <p className="text-sm font-semibold uppercase tracking-wide">{t("agency.quotation")}</p>
-            <p className="font-mono text-base font-bold">{quote.reference}</p>
-            <p className="text-muted text-xs">{formatDateTime(quote.createdAt, locale)}</p>
-          </div>
-        </header>
+        {/*
+          The agency's letterhead, identical to the one on the voucher. Until
+          now this document carried their name and address but not their logo
+          or their colour, so a customer got a plain quotation and then a
+          branded voucher from what should look like the same company.
+        */}
+        <DocumentBrand
+          branding={branding}
+          title={t("agency.quotation")}
+          reference={quote.reference}
+          meta={formatDateTime(quote.createdAt, locale)}
+        />
 
         <div className="hairline flex flex-wrap justify-between gap-4 border-b py-4 text-sm">
           <div>
@@ -247,6 +243,9 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
 
         {quote.notes && <p className="text-muted hairline border-t pt-3 text-sm wrap-anywhere">{quote.notes}</p>}
         <p className="text-muted hairline mt-3 border-t pt-3 text-xs">{t("agency.quoteFooter")}</p>
+
+        {/* The agency's own booking conditions, after ours. */}
+        <DocumentFooter branding={branding} />
       </Card>
     </div>
   );
