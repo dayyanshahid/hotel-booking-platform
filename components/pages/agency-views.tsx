@@ -278,6 +278,7 @@ const BOOKING_TONE: Record<AgencyBooking["status"], "positive" | "caution" | "ne
   pending: "caution",
   cancelled: "neutral",
   failed: "critical",
+  held: "caution",
 };
 
 /** A status is a label, not a field name — Arabic should not read "cancelled". */
@@ -286,6 +287,7 @@ const BOOKING_STATUS: Record<AgencyBooking["status"], string> = {
   pending: "agency.statusPending",
   cancelled: "agency.statusCancelled",
   failed: "agency.statusFailed",
+  held: "agency.statusHeld",
 };
 
 /**
@@ -480,6 +482,8 @@ const LEDGER_LABEL: Record<LedgerEntry["kind"], string> = {
   cancellation: "agency.ledgerCancellation",
   settlement: "agency.ledgerSettlement",
   adjustment: "agency.ledgerAdjustment",
+  hold: "agency.ledgerHold",
+  holdRelease: "agency.ledgerHoldRelease",
 };
 
 function Statement({ locale }: { locale: Locale }) {

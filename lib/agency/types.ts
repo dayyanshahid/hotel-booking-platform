@@ -181,7 +181,17 @@ export interface LedgerEntry {
   /** Negative commits credit, positive releases it. */
   amount: number;
   currency: string;
-  kind: "booking" | "cancellation" | "settlement" | "adjustment";
+  /*
+   * `hold` and `holdRelease` are not charges.
+   *
+   * Neither supplier offers a true hold, so ours is a real refundable booking
+   * that has not been issued yet. The agency owes nothing for it — it can still
+   * walk away for free — but the exposure is real, so it has to come off
+   * available credit or a line could be spent twice over. Both kinds count
+   * toward headroom and neither appears on a statement, because a statement is
+   * a list of what is owed.
+   */
+  kind: "booking" | "cancellation" | "settlement" | "adjustment" | "hold" | "holdRelease";
   /** Platform booking reference, when the entry came from one. */
   reference?: string;
   note: string;
@@ -193,6 +203,8 @@ export interface AgencyBalance {
   limit: number;
   /** Committed but unsettled — what current bookings hold. */
   used: number;
+  /** Of `used`, the part that is reserved against holds rather than owed. */
+  heldAmount: number;
   available: number;
 }
 
@@ -264,8 +276,28 @@ export interface AgencyBooking {
   /** What the agency charges its customer, at the markup in force that day. */
   sell: number;
   currency: string;
-  status: "confirmed" | "pending" | "cancelled" | "failed";
+  /**
+   * `held` is a real supplier booking nobody has issued yet.
+   *
+   * It exists because neither supplier will hold a room without booking it, so
+   * the only honest hold is a refundable booking we intend to cancel unless
+   * someone issues it first.
+   */
+  status: "confirmed" | "pending" | "cancelled" | "failed" | "held";
   createdAt: string;
+  /**
+   * When an unissued hold is cancelled automatically.
+   *
+   * Set to a margin *before* the supplier's free-cancellation deadline: a
+   * sweeper that runs at the deadline itself will sometimes run a minute late,
+   * and a minute late is the difference between free and a night's charge.
+   */
+  holdExpiresAt?: string;
+  /** The supplier's free-cancellation deadline this hold was derived from. */
+  freeCancellationUntil?: string;
+  /** Who issued it, and when it stopped being a hold. */
+  issuedAt?: string;
+  issuedBy?: string;
   /** The agency's own reference for this sale, if they recorded one. */
   customerReference?: string;
 }

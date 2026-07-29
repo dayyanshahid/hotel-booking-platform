@@ -261,13 +261,25 @@ export async function agencyBalance(agencyId: string): Promise<AgencyBalance | n
   const agency = await getAgency(agencyId);
   if (!agency) return null;
   const entries = state.ledger.filter((e) => e.agencyId === agencyId);
+  /*
+   * Holds count against the line even though nothing is owed for them.
+   *
+   * A hold is a real refundable booking the agency has not issued. They can
+   * still walk away for nothing, so it is not a debt — but the room is held in
+   * their name, and a line that ignored that could be spent twice on the same
+   * money. Reported separately so a statement can leave it out.
+   */
   const net = entries.reduce((sum, e) => sum + e.amount, 0);
+  const heldNet = entries
+    .filter((e) => e.kind === "hold" || e.kind === "holdRelease")
+    .reduce((sum, e) => sum + e.amount, 0);
   const used = Math.max(0, -net);
   return {
     agencyId,
     currency: agency.credit.currency,
     limit: agency.credit.limit,
     used,
+    heldAmount: Math.max(0, -heldNet),
     available: Math.max(0, agency.credit.limit - used),
   };
 }

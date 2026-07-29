@@ -22,6 +22,7 @@ import { tourmindBook } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import { activeAgent } from "@/lib/agency/session";
 import { canAtLeast } from "@/lib/agency/types";
+import { canHold, reserveForHold } from "@/lib/agency/holds";
 import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
 import { saveAgencyBooking } from "@/lib/agency/store";
 import { countryForOffer } from "@/lib/agency/context";
@@ -37,6 +38,16 @@ interface Body {
   billing?: Record<string, string>;
   consents: { terms: boolean; cancellation: boolean; localFees: boolean; mandatory: boolean; marketing: boolean };
   payment: { method: string; token: string; threeDsStatus: "notRequired" | "passed" | "abandoned" | "failed" };
+  /**
+   * Place this as a hold rather than issuing it.
+   *
+   * Trade only, and only on a refundable rate whose free window is still open —
+   * the supplier order is identical either way, because neither supplier offers
+   * anything else. What differs is that the credit is reserved rather than
+   * charged, and something will cancel it before the deadline unless an issuer
+   * confirms it first.
+   */
+  hold?: boolean;
 }
 
 function reference(): string {
@@ -414,9 +425,42 @@ export async function POST(req: Request) {
    * writes key on the platform reference, so a replayed request lands on the
    * same rows rather than charging the agency twice.
    */
+  /*
+   * A hold reserves; a sale charges.
+   *
+   * The supplier order above is the same either way — there is no such thing as
+   * an unconfirmed booking at either of them — so the difference lives entirely
+   * on our side of the wire: which ledger entry is written, and whether a
+   * sweeper is going to cancel this before the free window closes.
+   */
+  const holdWindow =
+    agent && body.hold && !pending && !rejected
+      ? canHold({
+          refundable: session.cancellation.refundable,
+          freeCancellationUntil: session.cancellation.freeUntil,
+        })
+      : null;
+
+  if (agent && body.hold && (!holdWindow || !holdWindow.ok)) {
+    return fail("policyRestriction", "agency.cannotHold", locale, {
+      status: 409,
+      action: "selectAlternative",
+      message:
+        locale === "ar"
+          ? "لا يمكن حجز هذا السعر مؤقتًا — الإلغاء المجاني غير متاح أو انتهت مهلته. أصدره الآن أو اختر سعرًا آخر."
+          : "This rate cannot be held — it is non-refundable or its free-cancellation window is closing. Issue it now, or pick another rate.",
+    });
+  }
+
+  const isHold = Boolean(holdWindow?.ok);
+
   if (agent && agencyCommit && !rejected) {
     const commit = { ...agencyCommit, reference: booking.reference };
-    await commitBooking(agent, commit, booking.hotelName, now);
+    if (isHold && holdWindow?.ok) {
+      await reserveForHold(agent, commit.reference, commit.cost, commit.currency, booking.hotelName, now);
+    } else {
+      await commitBooking(agent, commit, booking.hotelName, now);
+    }
     await saveAgencyBooking({
       reference: booking.reference,
       agencyId: agent.agencyId,
@@ -430,8 +474,10 @@ export async function POST(req: Request) {
       cost: commit.cost,
       sell: commit.sell,
       currency: commit.currency,
-      status: pending ? "pending" : "confirmed",
+      status: pending ? "pending" : isHold ? "held" : "confirmed",
       createdAt: now,
+      holdExpiresAt: holdWindow?.ok ? holdWindow.deadline : undefined,
+      freeCancellationUntil: isHold ? session.cancellation.freeUntil : undefined,
     });
   }
   if (supplierReference && offer?.hotelbeds) {

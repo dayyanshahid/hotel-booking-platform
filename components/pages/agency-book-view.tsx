@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
+import { may, refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
+import { canHold } from "@/lib/agency/hold-policy";
 import { Alert, Button, Card, Checkbox, Field, Input, SectionHeading, Skeleton } from "@/components/ui";
 import { formatDate, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
@@ -198,7 +199,21 @@ function TradeCheckout({
     setRechecking(false);
   }
 
-  async function book() {
+  /*
+   * Whether this rate can be held at all.
+   *
+   * The same rule the server applies, so the button and the answer agree:
+   * refundable, with a free-cancellation deadline still far enough away that a
+   * hold could be released for nothing.
+   */
+  const holdable =
+    may(context, "booking") &&
+    canHold({
+      refundable: session.cancellation.refundable,
+      freeCancellationUntil: session.cancellation.freeUntil,
+    }).ok;
+
+  async function book(asHold = false) {
     if (!session || session === "gone") return;
     setBusy(true);
     setError(null);
@@ -237,6 +252,15 @@ function TradeCheckout({
         },
         consents: { terms: true, cancellation: true, localFees: true, mandatory: true, marketing: false },
         payment: { method: "credit", token: "account", threeDsStatus: "notRequired" },
+        /*
+         * A hold is the same supplier order with different money.
+         *
+         * Neither supplier will hold a room without booking it, so this books
+         * it — on a refundable rate only — and reserves the cost instead of
+         * charging it. Something cancels it inside the free window unless an
+         * issuer confirms it first.
+         */
+        hold: asHold,
       }),
     });
     const body = (await res.json()) as {
@@ -461,7 +485,7 @@ function TradeCheckout({
             {error && <Alert tone="critical">{error}</Alert>}
 
             <Button
-              onClick={book}
+              onClick={() => book(false)}
               loading={busy}
               disabled={
                 !accepted ||
@@ -480,6 +504,37 @@ function TradeCheckout({
             >
               {t("agency.confirmOnAccount")}
             </Button>
+
+            {/*
+              Holding is offered only when it is actually possible.
+              A non-refundable rate cannot be held by either supplier, and
+              showing the button anyway would be promising something we would
+              then have to refuse.
+            */}
+            {holdable && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => book(true)}
+                  loading={busy}
+                  disabled={
+                    !accepted ||
+                    !firstName.trim() ||
+                    !surname.trim() ||
+                    others.some((guest) => !guest.firstName.trim()) ||
+                    !affordable ||
+                    rechecking ||
+                    recheck?.requiresAcceptance === true ||
+                    recheck?.outcome === "unavailable"
+                  }
+                  className="w-full"
+                >
+                  {t("agency.hold")}
+                </Button>
+                <p className="text-muted text-xs">{t("agency.holdHelp")}</p>
+              </>
+            )}
+
             <p className="text-muted text-xs">{t("agency.noCardNote")}</p>
           </Card>
         </div>

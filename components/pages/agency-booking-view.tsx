@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { TradeVoucher } from "@/components/agency/trade-voucher";
-import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
+import { may, refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Field, Input, Modal, SectionHeading, Select, Skeleton, cx } from "@/components/ui";
 import { formatDate, formatDateTime, formatDeadline, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
@@ -45,6 +45,17 @@ function Detail({
   const [data, setData] = useState<Payload | null | "missing">(null);
   const [quote, setQuote] = useState<CancellationQuote | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
+  /*
+   * How close the stay is, measured when the booking arrives rather than during
+   * render — reading the clock while rendering is impure, and this is a value
+   * that only changes meaningfully once a day.
+   *
+   * The client asked for travel within seven days to stand out, and the reason
+   * is operational: inside a week a cancellation is usually chargeable and an
+   * amendment usually is not possible. It marks the bookings an agent should
+   * look at today.
+   */
+  const [daysToTravel, setDaysToTravel] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -58,6 +69,10 @@ function Detail({
     });
     const body = (await res.json()) as { ok: boolean; data?: Payload };
     setData(body.ok && body.data ? body.data : "missing");
+    if (body.ok && body.data) {
+      const checkIn = new Date(`${body.data.booking.checkIn}T00:00:00Z`).getTime();
+      setDaysToTravel(Math.ceil((checkIn - Date.now()) / 86400000));
+    }
   }
 
   useEffect(() => {
@@ -132,6 +147,27 @@ function Detail({
   }
 
   const cancellable = booking.capabilities.cancelAllowed && booking.status !== "cancelled";
+  const held = trade.status === "held";
+  const canIssue = may(context, "issue");
+
+
+  async function issue() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
+    setBusy(false);
+    if (!body.ok) {
+      setError(body.error?.message ?? t("error.temporaryService"));
+      return;
+    }
+    setNotice(t("agency.issued"));
+    refreshAgency();
+    await load();
+  }
 
   return (
     <div className="space-y-4">
@@ -146,20 +182,44 @@ function Detail({
             <span className="font-mono">{booking.reference}</span>
           </p>
         </div>
-        {cancellable && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setChangeOpen(true)}>
-              {t("agency.requestChange")}
+        <div className="flex flex-wrap gap-2">
+          {/* A hold is not a sale until someone with the permission says so. */}
+          {held && canIssue && (
+            <Button onClick={issue} loading={busy}>
+              {t("agency.issue")}
             </Button>
-            <Button variant="ghost" onClick={askQuote} loading={busy}>
-              {t("agency.cancelBooking")}
-            </Button>
-          </div>
-        )}
+          )}
+          {cancellable && (
+            <>
+              <Button variant="secondary" onClick={() => setChangeOpen(true)}>
+                {t("agency.requestChange")}
+              </Button>
+              <Button variant="ghost" onClick={askQuote} loading={busy}>
+                {t("agency.cancelBooking")}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {notice && <Alert tone="success">{notice}</Alert>}
       {error && <Alert tone="critical">{error}</Alert>}
+
+      {/*
+        A hold says when it disappears, in the same place an agent looks for
+        the reference. Everything else about it reads like a booking, which is
+        exactly why the deadline has to be impossible to miss.
+      */}
+      {held && trade.holdExpiresAt && (
+        <Alert tone="warning" title={t("agency.holdReleasedSoon")}>
+          {t("agency.holdUntil", { when: formatDateTime(trade.holdExpiresAt, locale) })} ·{" "}
+          {t("agency.heldNotCharged")}
+        </Alert>
+      )}
+
+      {daysToTravel !== null && daysToTravel >= 0 && daysToTravel <= 7 && (
+        <Alert tone="warning">{t("agency.travellingSoon", { days: daysToTravel })}</Alert>
+      )}
 
       <Card className="grid gap-4 p-5 sm:grid-cols-4">
         <Figure label={t("agency.statusLabel")} value={<Badge tone={tone(trade.status)}>{status(t, trade.status)}</Badge>} />
