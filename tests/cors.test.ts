@@ -84,3 +84,62 @@ describe("preflight", () => {
     expect(preflight(request("https://admin.example"))).toBeNull();
   });
 });
+
+describe("every call to the API asks for its cookie", () => {
+  /*
+   * The failure this catches is invisible in development and total in
+   * production. `fetch` defaults to `same-origin` credentials, which sends
+   * nothing to another origin and — worse — discards the `Set-Cookie` that
+   * comes back. Combined and local builds are same-origin, so the default is
+   * correct there and the omission cannot be noticed; on a separated portal it
+   * means sign-in succeeds, the session is dropped on the floor, and the agent
+   * is returned to the sign-in screen they just completed, with no error in the
+   * console and a 200 in the network tab.
+   *
+   * It was found by signing in to a deployed portal, and only because the
+   * symptom was strange enough to chase. A grep is a poor kind of test, but the
+   * alternative here is a browser against two real origins, and this catches
+   * the whole class in the place it actually gets introduced: someone adding a
+   * fetch and not thinking about an origin they cannot see locally.
+   */
+  it("passes credentials on every fetch through apiUrl", async () => {
+    const { readdir, readFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+
+    const walk = async (dir: string): Promise<string[]> => {
+      const entries = await readdir(dir, { withFileTypes: true });
+      const out: string[] = [];
+      for (const entry of entries) {
+        if (["node_modules", ".next", ".git"].includes(entry.name)) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...(await walk(full)));
+        else if (/\.tsx?$/.test(entry.name)) out.push(full);
+      }
+      return out;
+    };
+
+    const offenders: string[] = [];
+    for (const file of await walk(process.cwd())) {
+      const source = await readFile(file, "utf8");
+      if (!source.includes("apiUrl(")) continue;
+
+      for (const match of source.matchAll(/fetch\(\s*apiUrl\(/g)) {
+        // Walk to the matching paren so the whole call is examined, not a
+        // fixed window that a long URL or a multi-line body would outrun.
+        let depth = 0;
+        let end = match.index + "fetch".length;
+        while (end < source.length) {
+          if (source[end] === "(") depth += 1;
+          else if (source[end] === ")" && --depth === 0) break;
+          end += 1;
+        }
+        if (!source.slice(match.index, end + 1).includes("credentials")) {
+          const line = source.slice(0, match.index).split("\n").length;
+          offenders.push(`${file.replace(process.cwd() + "/", "")}:${line}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});

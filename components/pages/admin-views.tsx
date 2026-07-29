@@ -26,6 +26,7 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
     setError(null);
     const res = await fetch(apiUrl("/api/admin/session"), {
       method: "POST",
+      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
     });
@@ -44,6 +45,7 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
     setError(null);
     const res = await fetch(apiUrl("/api/admin/session"), {
       method: "PUT",
+      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
     });

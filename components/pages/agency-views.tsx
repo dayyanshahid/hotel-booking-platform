@@ -55,6 +55,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
     setError(null);
     const res = await fetch(apiUrl("/api/agency/session"), {
       method: "POST",
+      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
     });
@@ -90,6 +91,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
     setError(null);
     const res = await fetch(apiUrl("/api/agency/session"), {
       method: "PUT",
+      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
     });
