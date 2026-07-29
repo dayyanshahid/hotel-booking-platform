@@ -293,7 +293,8 @@ export function Field({
   children,
   className,
 }: {
-  label: string;
+  /** Text, or a node when a label needs to carry a badge alongside it. */
+  label: ReactNode;
   htmlFor: string;
   hint?: string;
   error?: string;

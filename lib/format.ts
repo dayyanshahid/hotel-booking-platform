@@ -24,8 +24,31 @@ export const FX_FROM_SAR: Record<CurrencyCode, number> = Object.fromEntries(
   CURRENCY_CODES.map((code) => [code, CURRENCY_TABLE[code].rateFromSar]),
 ) as Record<CurrencyCode, number>;
 
+/**
+ * Where a rate actually comes from.
+ *
+ * The built-in table is the floor, not the authority: an operator maintains the
+ * rates the platform charges on, and those live in a server-only module this
+ * file cannot import — it is shared with client components. So the server
+ * injects a resolver instead, and anything that has not been told otherwise
+ * keeps using the table exactly as before.
+ */
+let rateResolver: (currency: CurrencyCode) => number = (currency) => FX_FROM_SAR[currency];
+
+/** Server-side only. Called when the operator's rates are loaded. */
+export function __setRateResolver(resolver: ((currency: CurrencyCode) => number) | null): void {
+  rateResolver = resolver ?? ((currency) => FX_FROM_SAR[currency]);
+}
+
+/** Units of `currency` per one SAR, as currently in force. */
+export function rateFromSar(currency: CurrencyCode): number {
+  const rate = rateResolver(currency);
+  // A resolver that returns nonsense must not zero every price on the site.
+  return Number.isFinite(rate) && rate > 0 ? rate : FX_FROM_SAR[currency];
+}
+
 export function convertFromSar(amountSar: number, currency: CurrencyCode): number {
-  return Math.round(amountSar * FX_FROM_SAR[currency]);
+  return Math.round(amountSar * rateFromSar(currency));
 }
 
 export const isSupportedCurrency = isCurrencyCode;
@@ -37,8 +60,8 @@ export const isSupportedCurrency = isCurrencyCode;
  */
 export function convertCurrency(amount: number, from: CurrencyCode, to: CurrencyCode): number {
   if (from === to) return Math.round(amount);
-  const inSar = amount / FX_FROM_SAR[from];
-  return Math.round(inSar * FX_FROM_SAR[to]);
+  const inSar = amount / rateFromSar(from);
+  return Math.round(inSar * rateFromSar(to));
 }
 
 export function formatMoney(amount: number, currency: CurrencyCode, locale: Locale): string {

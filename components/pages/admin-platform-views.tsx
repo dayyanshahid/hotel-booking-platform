@@ -9,6 +9,12 @@ import type { Locale } from "@/lib/types";
 
 /* ------------------------------------------------------------ settings */
 
+interface FxRow {
+  currency: string;
+  perSar: number;
+  overridden: boolean;
+}
+
 interface SettingsPayload {
   markupPercent: number;
   deployedDefault: number;
@@ -16,6 +22,8 @@ interface SettingsPayload {
   updatedAt?: string;
   updatedBy?: string;
   range: { min: number; max: number };
+  fx: FxRow[];
+  fxRange: { min: number; max: number };
 }
 
 export function AdminSettingsView({ locale }: { locale: Locale }) {
@@ -115,7 +123,89 @@ function Settings({ locale }: { locale: Locale }) {
           {t("common.save")}
         </Button>
       </Card>
+
+      <FxRates rows={data.fx} onSaved={() => void load()} />
     </div>
+  );
+}
+
+/**
+ * The rates the platform charges on.
+ *
+ * The built-in table calls itself indicative, which was honest while every
+ * price was simulated. It is not honest now — the suppliers quote in their own
+ * currencies and this is what turns their number into the one on an agency's
+ * invoice — so an operator sets it, and every change is audited.
+ *
+ * Rates are edited as a set and saved together: an operator adjusting a
+ * currency pair usually has a second one in mind, and one round trip per box
+ * would audit three changes for one decision.
+ */
+function FxRates({ rows, onSaved }: { rows: FxRow[]; onSaved: () => void }) {
+  const { t } = useApp();
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const dirty = Object.keys(draft).length > 0;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    const res = await fetch("/api/admin/settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ fxRates: draft }),
+    });
+    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
+    setBusy(false);
+    if (!body.ok) {
+      setError(body.error?.message ?? t("admin.fxRange"));
+      return;
+    }
+    setDraft({});
+    setSaved(true);
+    onSaved();
+  }
+
+  return (
+    <Card className="space-y-3 p-5">
+      <SectionHeading title={t("admin.fx")} description={t("admin.fxBody")} />
+      {error && <Alert tone="critical">{error}</Alert>}
+      {saved && <Alert tone="success">{t("admin.fxSaved")}</Alert>}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((row) => (
+          <Field
+            key={row.currency}
+            label={
+              <span className="flex items-center gap-2">
+                {row.currency}
+                <Badge tone={row.overridden ? "brand" : "neutral"}>
+                  {row.overridden ? t("admin.fxOverridden") : t("admin.fxBuiltIn")}
+                </Badge>
+              </span>
+            }
+            htmlFor={`fx-${row.currency}`}
+            hint={t("admin.fxPerSar")}
+          >
+            <Input
+              id={`fx-${row.currency}`}
+              inputMode="decimal"
+              value={draft[row.currency] ?? String(row.perSar)}
+              onChange={(e) => setDraft((held) => ({ ...held, [row.currency]: e.target.value }))}
+            />
+          </Field>
+        ))}
+      </div>
+
+      <Button onClick={save} loading={busy} disabled={!dirty}>
+        {t("admin.fxSave")}
+      </Button>
+    </Card>
   );
 }
 

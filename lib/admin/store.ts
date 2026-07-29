@@ -54,6 +54,14 @@ export interface AuditEntry {
 export interface PlatformSettings {
   /** Percent added to supplier net to reach the public price. */
   markupPercent: number;
+  /**
+   * Rates of exchange the operator maintains, as units per SAR.
+   *
+   * Only the currencies actually set are stored; everything else falls back to
+   * the built-in table. Keeping the overrides sparse means an operator who
+   * cares about three currencies is not made responsible for sixty.
+   */
+  fxRates?: Record<string, number>;
   /** Set when an operator has overridden the deployed default. */
   updatedAt?: string;
   updatedBy?: string;
