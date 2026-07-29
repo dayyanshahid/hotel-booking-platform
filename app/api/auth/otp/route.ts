@@ -1,4 +1,4 @@
-import { fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
+import { echoOtp, fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { issueOtp, verifyOtp } from "@/lib/server/store";
 
 /**
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   }
   const purpose = body.purpose ?? "signin";
   const code = await issueOtp(body.email, purpose);
-  return ok({ sent: true, email: body.email.toLowerCase(), purpose, demoCode: code });
+  return ok({ sent: true, email: body.email.toLowerCase(), purpose, demoCode: echoOtp(code) });
 }
 
 export async function PUT(req: Request) {

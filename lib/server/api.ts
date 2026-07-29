@@ -39,6 +39,31 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ ok: true, data }, init);
 }
 
+/**
+ * Whether a one-time code may be shown to whoever asked for it.
+ *
+ * Returning the code in the response is what makes the whole app walkable
+ * without a mail server, and on a public deployment it is an authentication
+ * bypass: the code's only job is to prove the person holds the inbox, and
+ * handing it back to the caller proves nothing at all. Anyone who can guess
+ * a colleague's work address becomes that colleague — on the operator console
+ * as readily as on the agency portal.
+ *
+ * So it follows the build, not a flag someone has to remember. Development and
+ * test echo it; a production build does not, unless somebody deliberately sets
+ * `DEMO_SIGN_IN=1` on a deployment that holds nothing real. Defaulting closed
+ * means the dangerous case is the one that requires an explicit decision.
+ */
+export function mayEchoOtp(): boolean {
+  if (process.env.NODE_ENV !== "production") return true;
+  return process.env.DEMO_SIGN_IN?.trim() === "1";
+}
+
+/** The code when it may be echoed, and nothing when it may not. */
+export function echoOtp(code: string | undefined): string | undefined {
+  return mayEchoOtp() ? code : undefined;
+}
+
 export function fail(
   category: ErrorCategory,
   messageKey: string,

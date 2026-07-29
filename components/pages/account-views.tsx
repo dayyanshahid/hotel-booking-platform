@@ -57,7 +57,7 @@ export function SignInView({ locale }: { locale: Locale }) {
   async function send() {
     setBusy(true);
     setError("");
-    const res = await api<{ demoCode: string }>("/api/auth/otp", {
+    const res = await api<{ demoCode?: string }>("/api/auth/otp", {
       method: "POST",
       body: JSON.stringify({ email, purpose: "signin" }),
     });
@@ -66,7 +66,7 @@ export function SignInView({ locale }: { locale: Locale }) {
       setError(res.error.message);
       return;
     }
-    setDemoCode(res.data.demoCode);
+    setDemoCode(res.data.demoCode ?? "");
     setStage("code");
   }
 

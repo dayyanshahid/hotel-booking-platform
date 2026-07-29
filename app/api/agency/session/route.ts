@@ -1,4 +1,4 @@
-import { fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
+import { echoOtp, fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { issueOtp, verifyOtp } from "@/lib/server/store";
 import { getAgency, getAgentByEmail } from "@/lib/agency/store";
 import { permissionOf } from "@/lib/agency/types";
@@ -42,9 +42,10 @@ export async function POST(req: Request) {
 
   const code = agent?.active && !skipsOtp ? await issueOtp(body.email.toLowerCase(), "agency") : undefined;
 
-  // `demoCode` mirrors the consumer flow so the portal can be walked end-to-end
-  // in this environment; a real deployment delivers it out-of-band only.
-  return ok({ sent: true, email: body.email.toLowerCase(), demoCode: code, codeRequired: !skipsOtp });
+  // Echoed only where `mayEchoOtp` allows it — a demo environment with nothing
+  // real behind it. Anywhere else this is absent and the code goes to the inbox
+  // it was issued for, which is the only thing that makes it worth asking for.
+  return ok({ sent: true, email: body.email.toLowerCase(), demoCode: echoOtp(code), codeRequired: !skipsOtp });
 }
 
 export async function PUT(req: Request) {

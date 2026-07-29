@@ -1,4 +1,4 @@
-import { fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
+import { echoOtp, fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { issueOtp, verifyOtp } from "@/lib/server/store";
 import { endAdminSession, isAdminConfigured, isAdminEmail, startAdminSession } from "@/lib/admin/session";
 import { appendAudit } from "@/lib/admin/store";
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
   const allowed = isAdminEmail(body.email);
   const code = allowed ? await issueOtp(body.email.toLowerCase(), "admin") : undefined;
-  return ok({ sent: true, email: body.email.toLowerCase(), demoCode: code });
+  return ok({ sent: true, email: body.email.toLowerCase(), demoCode: echoOtp(code) });
 }
 
 export async function PUT(req: Request) {

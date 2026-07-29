@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { echoOtp, mayEchoOtp } from "@/lib/server/api";
 import { POST as searchRoute } from "@/app/api/hotels/search/route";
 import { POST as availabilityRoute } from "@/app/api/hotels/[slug]/availability/route";
 import { POST as recheckRoute } from "@/app/api/rates/recheck/route";
@@ -424,5 +425,45 @@ describe("fixed demo sign-in code", () => {
     // And it is single use, across instances too.
     __resetOtpCache();
     expect(await verifyOtp("across@example.com", "signin", code)).toBe(false);
+  });
+});
+
+describe("one-time codes are not handed back to the caller", () => {
+  const NODE_ENV = process.env.NODE_ENV;
+  const DEMO_SIGN_IN = process.env.DEMO_SIGN_IN;
+
+  afterEach(() => {
+    vi.stubEnv("NODE_ENV", NODE_ENV ?? "test");
+    if (DEMO_SIGN_IN === undefined) delete process.env.DEMO_SIGN_IN;
+    else process.env.DEMO_SIGN_IN = DEMO_SIGN_IN;
+  });
+
+  const asProduction = () => vi.stubEnv("NODE_ENV", "production");
+
+  it("withholds the code on a production build", () => {
+    // The bug this exists to prevent: the code is the only proof that the
+    // person asking holds the inbox, and returning it in the response proves
+    // nothing — anyone who knows a colleague's address becomes that colleague.
+    asProduction();
+    delete process.env.DEMO_SIGN_IN;
+    expect(mayEchoOtp()).toBe(false);
+    expect(echoOtp("123456")).toBeUndefined();
+  });
+
+  it("echoes it in development, so the app is walkable without a mail server", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(echoOtp("123456")).toBe("123456");
+  });
+
+  it("opens only on a deliberate, exact opt-in", () => {
+    asProduction();
+    // Anything short of the exact value stays shut: a half-set variable is far
+    // likelier to be an accident than a decision.
+    for (const value of ["", "0", "true", "yes", "01"]) {
+      process.env.DEMO_SIGN_IN = value;
+      expect(mayEchoOtp()).toBe(false);
+    }
+    process.env.DEMO_SIGN_IN = "1";
+    expect(mayEchoOtp()).toBe(true);
   });
 });

@@ -210,7 +210,7 @@ export function BookingOutcomeView({
                   loading={creatingAccount}
                   onClick={async () => {
                     setCreatingAccount(true);
-                    const res = await api<{ demoCode: string }>("/api/auth/otp", {
+                    const res = await api<{ demoCode?: string }>("/api/auth/otp", {
                       method: "POST",
                       body: JSON.stringify({ email: booking.contact.email, purpose: "signin" }),
                     });

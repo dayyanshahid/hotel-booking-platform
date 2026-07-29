@@ -1,4 +1,4 @@
-import { fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
+import { echoOtp, fail, isEmail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { getBooking, issueOtp, verifyOtp } from "@/lib/server/store";
 
 /**
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     sent: true,
     email: body.email.toLowerCase(),
     // Only present when the pair actually matches — never reveals existence.
-    demoCode: code,
+    demoCode: echoOtp(code),
   });
 }
 

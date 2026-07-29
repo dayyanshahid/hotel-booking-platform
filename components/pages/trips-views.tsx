@@ -185,7 +185,7 @@ export function BookingLookupView({ locale }: { locale: Locale }) {
                   setError(res.error.message);
                   return;
                 }
-                setDemoCode(res.data.demoCode);
+                setDemoCode(res.data.demoCode ?? "");
                 setStage("verify");
               }}
             >
@@ -535,13 +535,13 @@ function CancelFlow({
               loading={busy}
               onClick={async () => {
                 setBusy(true);
-                const res = await api<{ demoCode: string }>("/api/auth/otp", {
+                const res = await api<{ demoCode?: string }>("/api/auth/otp", {
                   method: "POST",
                   body: JSON.stringify({ email: booking.contact.email, purpose: "cancel" }),
                 });
                 setBusy(false);
                 if (res.ok) {
-                  setDemoCode(res.data.demoCode);
+                  setDemoCode(res.data.demoCode ?? "");
                   setStage("otp");
                 }
               }}
