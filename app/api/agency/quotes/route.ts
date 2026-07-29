@@ -44,6 +44,24 @@ interface Body {
   customerEmail?: string;
   notes?: string;
   offerIds: string[];
+  /**
+   * A margin for this quote only, as a percentage on cost.
+   *
+   * Omitted means the agency's standing rule applies, which is what almost
+   * every quote wants. This exists for the ones that do not.
+   */
+  markupPercent?: number;
+}
+
+/**
+ * What this quote sells at.
+ *
+ * The standing rule unless the agent named a margin for this one, and never
+ * less than cost either way.
+ */
+function quoteSell(cost: number, standardSell: number, markupPercent?: number): number {
+  if (markupPercent === undefined) return standardSell;
+  return Math.max(cost, Math.round(cost * (1 + markupPercent / 100)));
 }
 
 export async function POST(req: Request) {
@@ -58,6 +76,11 @@ export async function POST(req: Request) {
   const session = guard.session;
 
   const body = await readJson<Body>(req);
+  /** A per-quote margin, as a percentage on cost. Absent means the usual rule. */
+  const markupPercent =
+    typeof body?.markupPercent === "number" && Number.isFinite(body.markupPercent)
+      ? Math.min(500, Math.max(0, body.markupPercent))
+      : undefined;
   if (!body?.customerName?.trim() || !Array.isArray(body.offerIds) || !body.offerIds.length) {
     return fail("validation", "error.validation", locale, { status: 422, fields: { customerName: "required" } });
   }
@@ -91,7 +114,20 @@ export async function POST(req: Request) {
       rooms: offer.intent.rooms.length,
       guests: offer.intent.rooms.reduce((sum, r) => sum + r.adults + r.childrenAges.length, 0),
       cost: view.cost,
-      sell: view.sell,
+      /*
+       * The agency's standing markup, unless this quote says otherwise.
+       *
+       * A margin rule set in settings is the right default and the wrong answer
+       * often enough to matter: a repeat corporate client gets sharpened, a
+       * one-off booking with work in it gets loaded. Without this an agent
+       * either quoted the wrong number or changed the agency-wide rule for one
+       * customer and forgot to change it back.
+       *
+       * Never below cost. An agent can give away all of their margin and no
+       * more — a quote that loses money is not a discount, it is a mistake, and
+       * the credit line settles at cost regardless of what was charged.
+       */
+      sell: quoteSell(view.cost, view.sell, markupPercent),
       currency: view.currency,
       cancellation:
         policy.refundable && policy.freeUntil

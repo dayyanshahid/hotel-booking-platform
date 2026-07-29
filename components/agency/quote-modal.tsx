@@ -29,6 +29,14 @@ export function QuoteModal({
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [notes, setNotes] = useState("");
+  /*
+   * A margin for this quote alone.
+   *
+   * Empty means the agency's standing rule, which is what an agent wants
+   * almost every time — so it is an optional field rather than a decision they
+   * are made to take on every quote.
+   */
+  const [markup, setMarkup] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -53,7 +61,13 @@ export function QuoteModal({
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: apiCredentials(),
-      body: JSON.stringify({ customerName, customerEmail: customerEmail || undefined, notes, offerIds }),
+      body: JSON.stringify({
+        customerName,
+        customerEmail: customerEmail || undefined,
+        notes,
+        offerIds,
+        markupPercent: markup.trim() === "" ? undefined : Number(markup),
+      }),
     });
     const body = (await res.json()) as {
       ok: boolean;
@@ -101,6 +115,17 @@ export function QuoteModal({
         </Field>
         <Field label={t("agency.customerEmail")} htmlFor="q-email">
           <Input id="q-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+        </Field>
+        <Field label={t("agency.quoteMarkup")} htmlFor="q-markup" hint={t("agency.quoteMarkupHint")}>
+          <Input
+            id="q-markup"
+            type="number"
+            min={0}
+            inputMode="decimal"
+            placeholder={t("agency.quoteMarkupDefault")}
+            value={markup}
+            onChange={(e) => setMarkup(e.target.value)}
+          />
         </Field>
         <Field label={t("agency.quoteNotes")} htmlFor="q-notes">
           <Input id="q-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />

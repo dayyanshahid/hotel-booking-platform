@@ -277,3 +277,35 @@ describe("naming every occupant", () => {
     expect(fields.filter((f) => f.type === "child").every((f) => f.roomIndex === 1)).toBe(true);
   });
 });
+
+describe("a margin for one quote", () => {
+  /**
+   * The agency's standing rule is the right default and the wrong answer often
+   * enough to matter — a repeat corporate client gets sharpened, a one-off with
+   * work in it gets loaded. Without a per-quote margin an agent either quoted
+   * the wrong number or changed the agency-wide rule for one customer and
+   * forgot to change it back.
+   */
+  function quoteSell(cost: number, standardSell: number, markupPercent?: number): number {
+    if (markupPercent === undefined) return standardSell;
+    return Math.max(cost, Math.round(cost * (1 + markupPercent / 100)));
+  }
+
+  it("uses the agency's usual margin when none is given", () => {
+    expect(quoteSell(1000, 1150)).toBe(1150);
+  });
+
+  it("applies a margin named for this quote", () => {
+    expect(quoteSell(1000, 1150, 20)).toBe(1200);
+    expect(quoteSell(1000, 1150, 5)).toBe(1050);
+  });
+
+  it("never sells below cost", () => {
+    /*
+     * An agent may give away all of their margin and no more. The credit line
+     * settles at cost whatever was charged, so a quote under it is not a
+     * discount — it is the agency paying for someone's holiday.
+     */
+    expect(quoteSell(1000, 1150, 0)).toBe(1000);
+  });
+});
