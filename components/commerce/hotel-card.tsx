@@ -130,7 +130,14 @@ export function HotelCard({
                 </Link>
               </h3>
               <p className="text-muted mt-0.5 text-xs wrap-anywhere">
-                <span className="text-brand-500 underline">{card.neighborhood}</span>, {card.locality}
+                {/* A supplier that places a property in a city but not a
+                    district leaves this blank; the comma has to go with it. */}
+                {card.neighborhood && (
+                  <>
+                    <span className="text-brand-500 underline">{card.neighborhood}</span>,{" "}
+                  </>
+                )}
+                {card.locality}
                 {card.landmarkDistance && (
                   <>
                     {" · "}

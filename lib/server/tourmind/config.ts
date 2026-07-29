@@ -51,7 +51,16 @@ export function getTourmindConfig(): TourmindConfig {
     markupPercent: num(process.env.PLATFORM_MARKUP_PERCENT, 12),
     agentRefPrefix: process.env.TOURMIND_AGENT_REF_PREFIX ?? "SPT",
     timeouts: {
-      search: num(process.env.TOURMIND_SEARCH_TIMEOUT_MS, 8000),
+      /*
+       * Twelve seconds, from measurement rather than taste.
+       *
+       * Availability for twenty hotels is a three-megabyte response that
+       * usually lands in about two and a half seconds — but their server has a
+       * long tail, and at eight seconds the whole supplier was dropped from a
+       * page often enough to notice. It runs concurrently with Hotelbeds, so
+       * the budget only bites when this one is genuinely slow.
+       */
+      search: num(process.env.TOURMIND_SEARCH_TIMEOUT_MS, 12000),
       /*
        * The re-check is not a browse call and must not share its budget.
        *

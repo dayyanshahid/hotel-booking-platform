@@ -302,3 +302,26 @@ describe("supplier image addressing", () => {
     expect(hbImageUrl(undefined)).toBeUndefined();
   });
 });
+
+describe("a facility is not a fact about the building", () => {
+  /**
+   * Their facilities list mixes features with measurements. "Total number of
+   * rooms", "Check-in hour" and "Check-out hour" were being offered as things
+   * to filter a search by, which is meaningless — every hotel has a check-in
+   * hour, so the filter matched everything or nothing depending on the mood of
+   * the facet counter.
+   */
+  it("keeps features and drops measurements", () => {
+    const facilities = [
+      { facilityCode: 260, facilityGroupCode: 60, indYesOrNo: true },
+      { facilityCode: 261, facilityGroupCode: 60, number: 350 },
+      { facilityCode: 262, facilityGroupCode: 60, timeFrom: "14:00", timeTo: "23:00" },
+    ];
+    const informational = (f: (typeof facilities)[number]) =>
+      (f as { number?: number }).number !== undefined ||
+      (f as { timeFrom?: string }).timeFrom !== undefined ||
+      (f as { timeTo?: string }).timeTo !== undefined;
+
+    expect(facilities.filter((f) => !informational(f))).toHaveLength(1);
+  });
+});

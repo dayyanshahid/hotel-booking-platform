@@ -17,6 +17,12 @@
 /** Where each supplier's photography actually lives. Not client-visible. */
 const ORIGINS: Record<string, string> = {
   hb: "https://photos.hotelbeds.com/giata",
+  /*
+   * TourMind publish over plain HTTP. Fetching it here rather than from the
+   * browser is what makes that acceptable: the page stays HTTPS, no mixed
+   * content is loaded, and their hostname is as hidden as the other one.
+   */
+  tm: "http://tm-lodging-content.tourmind.cn",
 };
 
 /**

@@ -27,10 +27,31 @@ import type { TmError } from "./types";
 const CACHE_DIR = process.env.TOURMIND_CACHE_DIR ?? path.join(dataDir(), "tourmind");
 const HOTELS_FILE = "hotels.json";
 
+/*
+ * Content is cached per city, not with the index.
+ *
+ * Their photography and amenity lists turn nine thousand records into
+ * twenty-seven megabytes, and the index is read on every cold start to answer
+ * "which of their hotels are in this city". Parsing every property's pictures
+ * to answer that is work nobody asked for.
+ *
+ * So the index stays lean and the content is sharded by our city slug — the
+ * only scope a search or a property page ever needs. One city loads once.
+ */
+const CONTENT_DIR = "content";
+
 /** How close a supplier property must be to a city centre to count as in it. */
 const MATCH_RADIUS_KM = 30;
 
-export interface TourmindHotelRecord {
+/** The heavy half: what a property page and a result card show. */
+export interface TourmindHotelContent {
+  phone?: string;
+  description?: { location?: string; headline?: string };
+  amenities?: string[];
+  images?: { caption?: string; hero?: boolean; large?: string; small?: string }[];
+}
+
+export interface TourmindHotelRecord extends TourmindHotelContent {
   hotelId: number;
   name: string;
   countryCode: string;
@@ -41,6 +62,18 @@ export interface TourmindHotelRecord {
   address?: string;
   /** Our city slug, resolved at sync time so a request never does geometry. */
   citySlug?: string;
+}
+
+interface TmImageLink {
+  method?: string;
+  href?: string;
+}
+
+interface TmImage {
+  caption?: string;
+  hero_image?: boolean;
+  category?: number;
+  links?: Record<string, TmImageLink>;
 }
 
 interface TmHotelInfo {
@@ -60,6 +93,35 @@ interface TmHotelInfo {
   Longitude?: string;
   StarRating?: string;
   Address?: string;
+  Phone?: string;
+  Description?: { Location?: string; Headline?: string; Rooms?: string; Attractions?: string };
+  AmenitiesHotel?: { name?: string }[];
+  AmenitiesRoom?: { name?: string }[];
+  Images?: TmImage[];
+}
+
+/**
+ * How much of their content to keep.
+ *
+ * All of it would be honest and unusable: the catalogue runs to nine thousand
+ * properties, and every one carries dozens of images with three links each.
+ * These are the counts a property page can actually show.
+ */
+const MAX_IMAGES = 8;
+const MAX_AMENITIES = 20;
+/** Their location paragraph runs long; a card and a page show the opening. */
+const MAX_DESCRIPTION = 400;
+
+/** Their image host, reduced to a path our own proxy serves. */
+function imagePath(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  const match = /^https?:\/\/tm-lodging-content\.tourmind\.cn\/(.+)$/.exec(url.trim());
+  return match?.[1];
+}
+
+function names(list: { name?: string }[] | undefined, limit: number): string[] | undefined {
+  const out = [...new Set((list ?? []).map((item) => item.name?.trim()).filter((n): n is string => Boolean(n)))];
+  return out.length ? out.slice(0, limit) : undefined;
 }
 
 interface TmHotelStaticListResponse {
@@ -124,12 +186,68 @@ async function readCache(): Promise<TourmindHotelRecord[] | null> {
   }
 }
 
+/** The content keys, stripped from the index copy of a record. */
+const CONTENT_KEYS = ["phone", "description", "amenities", "images"] as const;
+
+function splitContent(record: TourmindHotelRecord): {
+  lean: TourmindHotelRecord;
+  content: TourmindHotelContent | null;
+} {
+  const lean = { ...record };
+  const content: TourmindHotelContent = {};
+  let any = false;
+  for (const key of CONTENT_KEYS) {
+    if (record[key] !== undefined) {
+      (content as Record<string, unknown>)[key] = record[key];
+      any = true;
+    }
+    delete lean[key];
+  }
+  return { lean, content: any ? content : null };
+}
+
 async function writeCache(records: TourmindHotelRecord[]): Promise<void> {
-  await fs.mkdir(CACHE_DIR, { recursive: true });
-  await fs.writeFile(path.join(CACHE_DIR, HOTELS_FILE), JSON.stringify(records), "utf8");
+  await fs.mkdir(path.join(CACHE_DIR, CONTENT_DIR), { recursive: true });
+
+  const index: TourmindHotelRecord[] = [];
+  const byCity = new Map<string, Record<string, TourmindHotelContent>>();
+  for (const record of records) {
+    const { lean, content } = splitContent(record);
+    index.push(lean);
+    if (!content || !record.citySlug) continue;
+    const bucket = byCity.get(record.citySlug) ?? {};
+    bucket[String(record.hotelId)] = content;
+    byCity.set(record.citySlug, bucket);
+  }
+
+  await fs.writeFile(path.join(CACHE_DIR, HOTELS_FILE), JSON.stringify(index), "utf8");
+  await Promise.all(
+    [...byCity.entries()].map(([city, bucket]) =>
+      fs.writeFile(path.join(CACHE_DIR, CONTENT_DIR, `${city}.json`), JSON.stringify(bucket), "utf8"),
+    ),
+  );
 }
 
 let memo: TourmindHotelRecord[] | null = null;
+
+/** One city's content, read once and held. */
+const contentMemo = new Map<string, Record<string, TourmindHotelContent>>();
+
+async function contentForCity(citySlug: string): Promise<Record<string, TourmindHotelContent>> {
+  const held = contentMemo.get(citySlug);
+  if (held) return held;
+  let bucket: Record<string, TourmindHotelContent> = {};
+  try {
+    const raw = await fs.readFile(path.join(CACHE_DIR, CONTENT_DIR, `${citySlug}.json`), "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object") bucket = parsed as Record<string, TourmindHotelContent>;
+  } catch {
+    // No content synced for this city: the records still work, with a drawing
+    // in place of photography rather than someone else's photograph.
+  }
+  contentMemo.set(citySlug, bucket);
+  return bucket;
+}
 
 /** Cached records, or an empty list when the catalogue has never been synced. */
 export async function tourmindHotels(): Promise<TourmindHotelRecord[]> {
@@ -138,10 +256,18 @@ export async function tourmindHotels(): Promise<TourmindHotelRecord[]> {
   return memo;
 }
 
-/** Their hotel ids for one of our cities, cheapest lookup we can offer. */
+/**
+ * Their properties in one of our cities, content included.
+ *
+ * The only place content is joined back on, because it is the only scope that
+ * needs it: a search prices one city and a property page opens one property.
+ */
 export async function tourmindHotelsInCity(citySlug: string): Promise<TourmindHotelRecord[]> {
   const all = await tourmindHotels();
-  return all.filter((hotel) => hotel.citySlug === citySlug);
+  const inCity = all.filter((hotel) => hotel.citySlug === citySlug);
+  if (!inCity.length) return inCity;
+  const content = await contentForCity(citySlug);
+  return inCity.map((hotel) => ({ ...hotel, ...(content[String(hotel.hotelId)] ?? {}) }));
 }
 
 /* ----------------------------------------------------------------- sync */
@@ -155,6 +281,25 @@ function toRecord(info: TmHotelInfo): TourmindHotelRecord | null {
   // 0,0 is in the Atlantic and is what an unset coordinate looks like.
   if (lat === 0 && lng === 0) return null;
   const stars = Number(info.StarRating);
+  // Hero images first: their flag is the only ordering signal they give.
+  const images = (info.Images ?? [])
+    .map((image) => ({
+      caption: image.caption,
+      hero: image.hero_image === true,
+      large: imagePath(image.links?.["1000px"]?.href),
+      small: imagePath(image.links?.["350px"]?.href),
+    }))
+    .filter((image) => image.large || image.small)
+    .sort((a, b) => Number(b.hero) - Number(a.hero))
+    .slice(0, MAX_IMAGES);
+
+  const description = info.Description
+    ? {
+        location: info.Description.Location?.trim().slice(0, MAX_DESCRIPTION) || undefined,
+        headline: info.Description.Headline?.trim().slice(0, MAX_DESCRIPTION) || undefined,
+      }
+    : undefined;
+
   return {
     hotelId,
     name: info.Name ?? "",
@@ -164,6 +309,10 @@ function toRecord(info: TmHotelInfo): TourmindHotelRecord | null {
     lng,
     stars: Number.isFinite(stars) && stars > 0 ? stars : undefined,
     address: info.Address,
+    phone: info.Phone?.trim() || undefined,
+    description: description && Object.values(description).some(Boolean) ? description : undefined,
+    amenities: names(info.AmenitiesHotel, MAX_AMENITIES),
+    images: images.length ? images : undefined,
   };
 }
 

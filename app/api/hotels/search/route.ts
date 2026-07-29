@@ -10,6 +10,12 @@ interface Body {
   sort?: SortKey;
   page?: number;
   pageSize?: number;
+  /**
+   * `live` searches only the contracted suppliers, which is what the trade
+   * portal asks for — an agent cannot sell a demonstration property. It only
+   * ever narrows the result set, so there is nothing to guard here.
+   */
+  supply?: "all" | "live";
 }
 
 /** POST /api/hotels/search — normalized canonical hotels and offer summaries. */
@@ -31,6 +37,7 @@ export async function POST(req: Request) {
     pageSize: body.pageSize,
     scenario,
     locale,
+    supply: body.supply === "live" ? "live" : "all",
   });
 
   if (response.completeness === "empty") {

@@ -12,7 +12,12 @@ import { TripPrompt } from "@/components/search/trip-prompt";
 import { Icon } from "@/components/ui/icons";
 import { HotelCard, HotelCardSkeleton } from "@/components/commerce/hotel-card";
 import { ResultsMap } from "@/components/commerce/results-map";
-import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/commerce/filters-panel";
+import {
+  ActiveFilterChips,
+  FiltersPanel,
+  LIVE_SUPPLY_FILTERS,
+  SortControl,
+} from "@/components/commerce/filters-panel";
 import { PageHeader, TradePrices } from "@/components/agency/ui";
 import { QuoteModal } from "@/components/agency/quote-modal";
 import Link from "next/link";
@@ -156,6 +161,15 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       credentials: "same-origin",
       body: JSON.stringify({
         intent,
+        /*
+         * Contracted supply only.
+         *
+         * The portal used to search the same catalogue the public site does,
+         * demonstration inventory included, and an agent quoting one of those
+         * to a customer had a property nobody could book. Everything on this
+         * page now comes from Hotelbeds or TourMind.
+         */
+        supply: "live",
         filters: nextFilters,
         // Margin is ours, not the supplier's: the server has no concept of it,
         // so it ranks by its own default and we reorder what comes back.
@@ -290,6 +304,12 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 onChange={(next) => void run({ sort: next })}
                 // The one question only this side of the platform can ask.
                 extra={[{ id: "marginDesc", label: t("agency.sortMargin") }]}
+                /*
+                 * Guest rating needs a review score and best value needs a
+                 * quality score; neither supplier publishes either, so both
+                 * would sort a page by zero and look as though they had worked.
+                 */
+                omit={["rating", "bestValue"]}
               />
               <div
                 className="surface-sunken inline-flex gap-1 rounded-[var(--radius-pill)] p-1"
@@ -365,6 +385,8 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 filters={filters}
                 onChange={(next) => void run({ filters: next })}
                 currency={(applied?.currency ?? seed.currency) as CurrencyCode}
+                // Only what the two suppliers actually publish.
+                supported={LIVE_SUPPLY_FILTERS}
               />
             </Card>
           )}
@@ -501,6 +523,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
             filters={filters}
             onChange={(next) => void run({ filters: next })}
             currency={(applied?.currency ?? seed.currency) as CurrencyCode}
+            supported={LIVE_SUPPLY_FILTERS}
           />
         )}
         <div className="mt-4">

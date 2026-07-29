@@ -212,6 +212,15 @@ export interface SearchOptions {
   pageSize?: number;
   scenario: ScenarioId;
   locale: Locale;
+  /**
+   * Which inventory to search.
+   *
+   * The public site sells everything the platform holds, demonstration
+   * catalogue included. A trade portal must not: an agent quoting a property to
+   * a customer has to be able to book it, and a demo property is a promise
+   * nobody can keep. `live` restricts a search to the two contracted suppliers.
+   */
+  supply?: "all" | "live";
 }
 
 /** Whether a live supplier answered, failed, or was never asked. */
@@ -224,7 +233,10 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const resolved = resolveDestination(intent);
   const effectiveIntent: SearchIntent = { ...intent, destinationId: resolved.destinationId };
 
-  const responses = await fetchFromSources(effectiveIntent, scenario);
+  const liveOnly = options.supply === "live";
+  // A live-only search never asks the simulated sources at all, so it costs
+  // nothing to exclude them rather than filtering them out afterwards.
+  const responses = liveOnly ? [] : await fetchFromSources(effectiveIntent, scenario);
   const healthy = responses.filter((r) => r.status === "ok");
   const failedCount = responses.length - healthy.length;
 
@@ -387,10 +399,31 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
   const catCount = count(cards.map((c) => c.category));
   const hoodCount = count(cards.map((c) => c.neighborhood));
   const typeCount = count(cards.map((c) => c.propertyType));
+  /*
+   * Labels come from the data, not from our own catalogue.
+   *
+   * The facet list used to look every code up in AMENITY_CATALOG and fall back
+   * to the code itself, so a Hotelbeds facility read "10:70" and an unmapped
+   * board read "CE" — while the very same amenity showed its proper name on
+   * the card two inches away. Every source already resolves a label; this
+   * keeps the one it resolved.
+   */
   const amenityCount = new Map<string, number>();
-  for (const c of cards) for (const a of c.topAmenities) amenityCount.set(a.code, (amenityCount.get(a.code) ?? 0) + 1);
+  const amenityLabel = new Map<string, string>();
+  const bySlugForAmenities = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
+  for (const c of cards) {
+    // The card shows four; the filter should offer everything the property
+    // actually has, or ticking an amenity hides hotels that do have it.
+    const all = bySlugForAmenities.get(c.slug)?.hotel.amenities ?? [];
+    const list = all.length ? all.map((a) => ({ code: a.code, label: a.label })) : c.topAmenities;
+    for (const a of list) {
+      amenityCount.set(a.code, (amenityCount.get(a.code) ?? 0) + 1);
+      if (a.label) amenityLabel.set(a.code, a.label);
+    }
+  }
   const bySlug = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
   const boardCount = new Map<string, number>();
+  const boardLabel = new Map<string, string>();
   const payCount = new Map<string, number>();
   for (const card of cards) {
     const offers = bySlug.get(card.slug)?.offers ?? [];
@@ -398,6 +431,12 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
       ? new Set(offers.map((offer) => offer.board.code))
       : new Set([card.offerSummary.boardCode]);
     for (const code of boards) boardCount.set(code, (boardCount.get(code) ?? 0) + 1);
+    for (const offer of offers) {
+      if (offer.board.label) boardLabel.set(offer.board.code, offer.board.label);
+    }
+    if (!offers.length && card.offerSummary.boardSummary) {
+      boardLabel.set(card.offerSummary.boardCode, card.offerSummary.boardSummary);
+    }
 
     const timings = offers.length
       ? new Set(offers.map((offer) => offer.paymentTiming))
@@ -407,14 +446,32 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
 
   return {
     priceRange: { min: prices.length ? Math.min(...prices) : 0, max: prices.length ? Math.max(...prices) : 0 },
-    categories: [...catCount.entries()].map(([value, c]) => ({ value, count: c })).sort((a, b) => b.value - a.value),
-    neighborhoods: [...hoodCount.entries()].map(([value, c]) => ({ value, count: c })).sort((a, b) => b.count - a.count),
+    // A property whose supplier gave no star rating is not a "0-star hotel";
+    // it is a property with no rating, and it must not appear as a filter.
+    categories: [...catCount.entries()]
+      .filter(([value]) => value > 0)
+      .map(([value, c]) => ({ value, count: c }))
+      .sort((a, b) => b.value - a.value),
+    // A supplier that places a property in a city but not a district leaves
+    // this blank, and a nameless filter row is not a choice anyone can make.
+    neighborhoods: [...hoodCount.entries()]
+      .filter(([value]) => value.trim().length > 0)
+      .map(([value, c]) => ({ value, count: c }))
+      .sort((a, b) => b.count - a.count),
     amenities: [...amenityCount.entries()]
-      .map(([code, c]) => ({ code, label: localized(AMENITY_CATALOG[code]?.label, locale) || code, count: c }))
+      .map(([code, c]) => ({
+        code,
+        label: amenityLabel.get(code) || localized(AMENITY_CATALOG[code]?.label, locale) || code,
+        count: c,
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 12),
     boards: [...boardCount.entries()]
-      .map(([code, c]) => ({ code, label: localized(BOARD_CATALOG[code]?.label, locale) || code, count: c }))
+      .map(([code, c]) => ({
+        code,
+        label: localized(BOARD_CATALOG[code]?.label, locale) || boardLabel.get(code) || code,
+        count: c,
+      }))
       .sort((a, b) => b.count - a.count),
     propertyTypes: [...typeCount.entries()].map(([value, c]) => ({ value, count: c })),
     paymentTiming: [...payCount.entries()].map(([value, c]) => ({ value: value as HotelResultCard["offerSummary"]["paymentTiming"], count: c })),

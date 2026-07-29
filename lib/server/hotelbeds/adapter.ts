@@ -22,6 +22,7 @@ import {
   hbImageUrl,
   toNumber,
   type HbCancellationPolicy,
+  type HbContentFacility,
   type HbContentHotel,
   type HbHotel,
   type HbRate,
@@ -293,8 +294,21 @@ export function buildCanonicalHotelFromContent(
   const categoryLabel = types.categories[content.categoryCode ?? ""] ?? content.categoryCode ?? "";
   const stars = Number.parseInt(String(content.categoryCode ?? "").replace(/\D/g, ""), 10);
 
+  /*
+   * A facility a guest can filter on, not a fact about the building.
+   *
+   * Their facilities list mixes features with measurements: "Wi-fi" sits beside
+   * "Total number of rooms", "Check-in hour" and "Check-out hour". Those three
+   * were being offered as things to filter a search by, which is meaningless —
+   * every hotel has a check-in hour. A facility carrying a count or a time is
+   * information; a facility that is simply present is a feature.
+   */
+  const informational = (facility: HbContentFacility) =>
+    facility.number !== undefined || facility.timeFrom !== undefined || facility.timeTo !== undefined;
+
   const amenities: Amenity[] = (content.facilities ?? [])
     .filter((facility) => FACILITY_GROUPS_SHOWN.has(facility.facilityGroupCode ?? -1))
+    .filter((facility) => !informational(facility))
     .slice(0, 40)
     .map((facility) => ({
       code: `${facility.facilityGroupCode}:${facility.facilityCode}`,

@@ -5,6 +5,7 @@ import { cityFor, distanceKm } from "@/lib/server/tourmind/catalogue";
 import { isTourmindSlug, tourmindSlug } from "@/lib/server/tourmind/search";
 import { TourmindError } from "@/lib/server/tourmind/client";
 import { isIndeterminate, mapTourmindError } from "@/lib/server/tourmind/errors";
+import { LIVE_SUPPLY_FILTERS } from "@/components/commerce/filters-panel";
 import liveRate from "./fixtures/tourmind-rate.json";
 import staticList from "./fixtures/tourmind-static-list.json";
 import { __recordFromStatic as recordFrom } from "@/lib/server/tourmind/catalogue";
@@ -414,5 +415,30 @@ describe("a thousand rates for one property", () => {
     expect(offers.length).toBeLessThanOrEqual(40);
     // Cheapest first, so the cap keeps what a guest would have chosen anyway.
     expect(offers[0].net).toBe(500);
+  });
+});
+
+describe("only what the suppliers publish", () => {
+  /**
+   * The trade portal offers a filter for every one of these and the two
+   * contracted suppliers answer none of them: neither publishes a guest review
+   * score, neither marks a room accessible in the data we hold, and payment
+   * timing is a consumer concern where an agency settles on account. A control
+   * that silently matches nothing is worse than an absent one — an agent reads
+   * the empty result as "no availability".
+   */
+  it("offers no filter the live suppliers cannot answer", () => {
+    expect(LIVE_SUPPLY_FILTERS).not.toContain("rating");
+    expect(LIVE_SUPPLY_FILTERS).not.toContain("accessible");
+    expect(LIVE_SUPPLY_FILTERS).not.toContain("payLater");
+  });
+
+  it("offers the ones they do", () => {
+    // Price, star rating, board and cancellation come from both suppliers;
+    // zone, property type, facilities and promotions from Hotelbeds, and
+    // amenities now from TourMind's static list as well.
+    for (const key of ["price", "stars", "board", "refundable", "amenities"]) {
+      expect(LIVE_SUPPLY_FILTERS).toContain(key);
+    }
   });
 });

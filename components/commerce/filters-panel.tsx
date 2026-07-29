@@ -7,18 +7,76 @@ import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/t
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 
 /** Filter set from §5.4, rendered as a sidebar on desktop and a sheet on mobile. */
+/**
+ * Which filters a surface offers.
+ *
+ * Not every filter can be answered by every source. The public site sells a
+ * catalogue that carries guest review scores and accessible-room flags; our two
+ * contracted suppliers publish neither, so offering those controls on a trade
+ * screen would be offering a filter that silently matches nothing — worse than
+ * omitting it, because an agent reads an empty result as "no availability".
+ */
+export type FilterKey =
+  | "price"
+  | "stars"
+  | "rating"
+  | "neighborhood"
+  | "propertyType"
+  | "amenities"
+  | "refundable"
+  | "payLater"
+  | "accessible"
+  | "deals"
+  | "board";
+
+const ALL_FILTERS: FilterKey[] = [
+  "price",
+  "stars",
+  "rating",
+  "neighborhood",
+  "propertyType",
+  "amenities",
+  "refundable",
+  "payLater",
+  "accessible",
+  "deals",
+  "board",
+];
+
+/**
+ * What Hotelbeds and TourMind between them can actually answer.
+ *
+ * Star rating, board, price and cancellation come from both. Zone, property
+ * type, facilities and promotions come from Hotelbeds, and amenities now come
+ * from TourMind's static list too. Guest rating, accessible rooms and payment
+ * timing are not in either contract as data we hold, so they are not offered.
+ */
+export const LIVE_SUPPLY_FILTERS: FilterKey[] = [
+  "price",
+  "stars",
+  "board",
+  "refundable",
+  "amenities",
+  "neighborhood",
+  "propertyType",
+  "deals",
+];
+
 export function FiltersPanel({
   facets,
   filters,
   onChange,
   currency,
+  supported = ALL_FILTERS,
 }: {
   facets: SearchFacets;
   filters: SearchFilters;
   onChange: (next: SearchFilters) => void;
   currency: CurrencyCode;
+  supported?: FilterKey[];
 }) {
   const { t, locale } = useApp();
+  const shows = (key: FilterKey) => supported.includes(key);
 
   const set = (patch: Partial<SearchFilters>) => onChange({ ...filters, ...patch });
   const toggleIn = <T,>(list: T[] | undefined, value: T): T[] => {
@@ -28,6 +86,7 @@ export function FiltersPanel({
 
   return (
     <div className="space-y-6">
+      {shows("price") && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.price")}</legend>
         <div className="mt-2">
@@ -47,7 +106,9 @@ export function FiltersPanel({
           />
         </div>
       </fieldset>
+      )}
 
+      {shows("stars") && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.stars")}</legend>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -70,7 +131,9 @@ export function FiltersPanel({
           ))}
         </div>
       </fieldset>
+      )}
 
+      {shows("rating") && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.rating")}</legend>
         <Select
@@ -85,7 +148,9 @@ export function FiltersPanel({
           <option value="7">7+</option>
         </Select>
       </fieldset>
+      )}
 
+      {shows("neighborhood") && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.neighborhood")}</legend>
         <div className="mt-2 space-y-1">
@@ -103,6 +168,7 @@ export function FiltersPanel({
           ))}
         </div>
       </fieldset>
+      )}
 
       {/*
         Property type is a different product, not a cheaper hotel: someone
@@ -110,7 +176,7 @@ export function FiltersPanel({
         thing entirely. The backend already faceted on this — nothing surfaced
         it while the catalogue was six cities of hotels.
       */}
-      {facets.propertyTypes.length > 1 && (
+      {shows("propertyType") && facets.propertyTypes.length > 1 && (
         <fieldset>
           <legend className="text-sm font-semibold">{t("filters.propertyType")}</legend>
           <div className="mt-2 space-y-1">
@@ -130,6 +196,32 @@ export function FiltersPanel({
         </fieldset>
       )}
 
+      {/*
+        Board is one of the few things every supplier states, and the panel has
+        never offered it — the facet was computed and thrown away. On a trade
+        screen it is among the first questions a customer asks.
+      */}
+      {shows("board") && facets.boards.length > 1 && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.board")}</legend>
+          <div className="mt-2 space-y-1">
+            {facets.boards.map((board) => (
+              <Checkbox
+                key={board.code}
+                checked={filters.boards?.includes(board.code) ?? false}
+                onChange={() => set({ boards: toggleIn(filters.boards, board.code) })}
+                label={
+                  <span className="flex items-center gap-2">
+                    {board.label} <Badge tone="neutral">{board.count}</Badge>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {shows("amenities") && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.amenities")}</legend>
         <div className="mt-2 space-y-1">
@@ -147,44 +239,42 @@ export function FiltersPanel({
           ))}
         </div>
       </fieldset>
+      )}
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">{t("common.filters")}</legend>
-        <Checkbox
-          checked={filters.refundableOnly ?? false}
-          onChange={(e) => set({ refundableOnly: e.target.checked })}
-          label={t("filters.cancellation")}
-        />
-        <Checkbox
-          checked={filters.payLaterOnly ?? false}
-          onChange={(e) => set({ payLaterOnly: e.target.checked })}
-          label={t("filters.payment")}
-        />
-        <Checkbox
-          checked={filters.accessibleOnly ?? false}
-          onChange={(e) => set({ accessibleOnly: e.target.checked })}
-          label={t("filters.accessible")}
-        />
-        <Checkbox
-          checked={filters.dealsOnly ?? false}
-          onChange={(e) => set({ dealsOnly: e.target.checked })}
-          label={t("filters.deals")}
-        />
+        {shows("refundable") && (
+          <Checkbox
+            checked={filters.refundableOnly ?? false}
+            onChange={(e) => set({ refundableOnly: e.target.checked })}
+            label={t("filters.cancellation")}
+          />
+        )}
+        {shows("payLater") && (
+          <Checkbox
+            checked={filters.payLaterOnly ?? false}
+            onChange={(e) => set({ payLaterOnly: e.target.checked })}
+            label={t("filters.payment")}
+          />
+        )}
+        {shows("accessible") && (
+          <Checkbox
+            checked={filters.accessibleOnly ?? false}
+            onChange={(e) => set({ accessibleOnly: e.target.checked })}
+            label={t("filters.accessible")}
+          />
+        )}
+        {shows("deals") && (
+          <Checkbox
+            checked={filters.dealsOnly ?? false}
+            onChange={(e) => set({ dealsOnly: e.target.checked })}
+            label={t("filters.deals")}
+          />
+        )}
       </fieldset>
 
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.propertyType")}</legend>
-        <div className="mt-2 space-y-1">
-          {facets.propertyTypes.map((type) => (
-            <Checkbox
-              key={type.value}
-              checked={filters.propertyTypes?.includes(type.value) ?? false}
-              onChange={() => set({ propertyTypes: toggleIn(filters.propertyTypes, type.value) })}
-              label={`${type.value} (${type.count})`}
-            />
-          ))}
-        </div>
-      </fieldset>
+      {/* Property type is rendered once, above. This block was a second copy
+          of the same control that shipped with the panel. */}
 
       <Button variant="secondary" className="w-full" onClick={() => onChange({})}>
         {t("common.reset")}
@@ -205,10 +295,17 @@ export function SortControl<T extends string = SortKey>({
   value,
   onChange,
   extra = [],
+  omit = [],
 }: {
   value: T;
   onChange: (next: T) => void;
   extra?: { id: T; label: string }[];
+  /**
+   * Sorts this surface cannot honour. Guest rating orders by a review score,
+   * and neither contracted supplier publishes one — the control would look
+   * like it worked and change nothing.
+   */
+  omit?: string[];
 }) {
   const { t } = useApp();
   const options: { id: string; label: string }[] = [
@@ -220,7 +317,7 @@ export function SortControl<T extends string = SortKey>({
     { id: "flexible", label: t("results.sortFlexible") },
     { id: "bestValue", label: t("results.sortBestValue") },
     ...extra,
-  ];
+  ].filter((option) => !omit.includes(option.id));
   return (
     <label className="flex items-center gap-2 text-sm">
       <span className="whitespace-nowrap">{t("common.sort")}</span>
