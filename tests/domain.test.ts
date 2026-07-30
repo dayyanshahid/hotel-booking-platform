@@ -10,6 +10,7 @@ import { formatMoney, nightsBetween } from "@/lib/format";
 import { intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import type { SearchIntent } from "@/lib/types";
 import { BOARD_CATALOG, canonicalBoard, localized, titleCaseBoard } from "@/lib/data/catalog";
+import { scoreSupply } from "@/lib/server/normalize";
 
 const intent: SearchIntent = {
   destinationId: "dest-riyadh",
@@ -400,5 +401,96 @@ describe("one board vocabulary, whichever supplier is selling", () => {
     expect(titleCaseBoard("SELF CATERING")).toBe("Self catering");
     // Already-quiet text is left as it is.
     expect(titleCaseBoard("Room only")).toBe("Room only");
+  });
+});
+
+describe("ranking is blind to which supplier sold the room", () => {
+  /*
+   * Measured across five live cities before this existed: TourMind held the
+   * last eighteen positions of every result set and never once appeared in the
+   * first twelve — including in Istanbul, where it was the cheaper supplier.
+   * The cause was that each adapter filled in its own scores. Hotelbeds set
+   * quality and flexibility; TourMind set a row of zeroes; and both left price
+   * at zero, so the thirty per cent of "recommended" we publish as being about
+   * price was about nothing.
+   *
+   * An agent works the first page. A supplier that cannot reach it is a
+   * supplier we are not selling.
+   */
+  function hotel(name: string, total: number, opts: { category?: number; refundable?: boolean } = {}) {
+    const offer = {
+      offerId: `of-${name}`,
+      canonicalRoomId: `${name}::room`,
+      board: { code: "RO", label: "Room only", detail: "" },
+      paymentTiming: "payLater" as const,
+      cancellation: { refundable: opts.refundable ?? true, timezone: "UTC", steps: [] },
+      price: { total, currency: "USD" },
+      comments: [],
+      badges: [],
+      capabilities: {
+        recheckRequired: false, cancellationQuote: true, modifyAllowed: false,
+        guaranteeEligible: false, instantConfirmation: true,
+      },
+      expiresAt: new Date(0).toISOString(),
+      roomsCovered: 1,
+      scores: { price: 0, flexibility: 0, quality: 0, location: 0, fit: 0 },
+    };
+    return {
+      hotel: { name, category: opts.category ?? 4, review: undefined },
+      rooms: [],
+      offers: [offer],
+      sourceCount: 1,
+    };
+  }
+
+  const intent = { rooms: [{ adults: 2, childrenAges: [] }] };
+
+  it("gives two identical rooms identical scores, whoever supplied them", () => {
+    const supply = [hotel("from-tourmind", 200), hotel("from-hotelbeds", 200)];
+    scoreSupply(supply as never, intent as never);
+    expect(supply[0].offers[0].scores).toEqual(supply[1].offers[0].scores);
+  });
+
+  it("scores the cheaper room higher on price", () => {
+    const supply = [hotel("cheap", 100), hotel("dear", 900)];
+    scoreSupply(supply as never, intent as never);
+    expect(supply[0].offers[0].scores.price).toBeGreaterThan(supply[1].offers[0].scores.price);
+  });
+
+  it("stops one outlier from flattening everything below it", () => {
+    /*
+     * The reason this is a percentile and not a min-max stretch. On a linear
+     * scale a single five-thousand-dollar suite squashes a hundred-dollar room
+     * and a three-hundred-dollar room to within a rounding error of each other,
+     * and price stops separating anything.
+     */
+    const supply = [hotel("a", 100), hotel("b", 300), hotel("c", 5000)];
+    scoreSupply(supply as never, intent as never);
+    const [a, b] = [supply[0].offers[0].scores.price, supply[1].offers[0].scores.price];
+    expect(a - b).toBeGreaterThan(0.3);
+  });
+
+  it("no longer leaves price out of a ranking that claims to weigh it", () => {
+    /*
+     * The defect was that every price score was zero, so the published "30% of
+     * recommended is your stay total" was decoration. The invariant is that
+     * price separates the list — not that every entry is above zero, since the
+     * dearest option is cheaper than nothing else and a percentile says so.
+     */
+    const supply = [hotel("a", 100), hotel("b", 300), hotel("c", 500)];
+    scoreSupply(supply as never, intent as never);
+    const scores = supply.map((h) => h.offers[0].scores.price);
+    expect(new Set(scores).size).toBe(scores.length);
+    expect(Math.max(...scores)).toBeGreaterThan(0);
+  });
+
+  it("rewards flexibility and quality on their own terms", () => {
+    const supply = [hotel("flex", 200), hotel("nrf", 200, { refundable: false })];
+    scoreSupply(supply as never, intent as never);
+    expect(supply[0].offers[0].scores.flexibility).toBeGreaterThan(supply[1].offers[0].scores.flexibility);
+
+    const stars = [hotel("five", 200, { category: 5 }), hotel("two", 200, { category: 2 })];
+    scoreSupply(stars as never, intent as never);
+    expect(stars[0].offers[0].scores.quality).toBeGreaterThan(stars[1].offers[0].scores.quality);
   });
 });

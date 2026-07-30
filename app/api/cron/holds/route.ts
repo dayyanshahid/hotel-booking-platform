@@ -1,7 +1,11 @@
 import { fail, localeFrom, ok } from "@/lib/server/api";
 import { appendAudit } from "@/lib/admin/store";
 import { currentAdmin } from "@/lib/admin/session";
-import { sweepExpiredHolds, holdsDueWithin } from "@/lib/server/holds-sweep";
+import {
+  holdsDueWithin,
+  reconcileUnconfirmedCancellations,
+  sweepExpiredHolds,
+} from "@/lib/server/holds-sweep";
 import { notifyHoldsDue, HOLD_WARNING_WINDOW_MS } from "@/lib/server/hold-alerts";
 
 /**
@@ -45,6 +49,13 @@ export async function GET(req: Request) {
   const due = await holdsDueWithin(HOLD_WARNING_WINDOW_MS);
   const warned = await notifyHoldsDue(due, locale);
   const swept = await sweepExpiredHolds({ locale });
+  /*
+   * After the sweep, because both can move credit and the sweep is the one with
+   * a deadline attached. This has no deadline — it is asking the supplier again
+   * about a cancellation we lost track of — but every run it does not happen is
+   * another day an agency's limit is short by a stay nobody can account for.
+   */
+  const reconciled = await reconcileUnconfirmedCancellations({ locale });
 
   /*
    * Audited when a person ran it, not when the scheduler did.
@@ -58,11 +69,13 @@ export async function GET(req: Request) {
       actor: operator.email,
       action: "holds.sweep",
       subject: "platform",
-      detail: `Ran the hold sweep by hand — ${swept.cancelled.length} cancelled, ${swept.failed.length} could not be`,
+      detail:
+        `Ran the hold sweep by hand — ${swept.cancelled.length} cancelled, ${swept.failed.length} could not be, ` +
+        `${reconciled.released.length} unconfirmed cancellation(s) settled`,
     });
   }
 
-  return ok({ warned, ...swept });
+  return ok({ warned, ...swept, reconciled });
 }
 
 export const dynamic = "force-dynamic";

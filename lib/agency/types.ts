@@ -330,6 +330,17 @@ export interface AgencyBooking {
   issuedBy?: string;
   /** The agency's own reference for this sale, if they recorded one. */
   customerReference?: string;
+  /**
+   * A cancellation we asked for and could not confirm.
+   *
+   * The credit stays committed while this is set, because releasing headroom
+   * against a cancellation that may not have happened lets the same money be
+   * spent twice. But it cannot simply stay committed for ever: without a mark
+   * here the booking looked untouched, the agency's limit was quietly short by
+   * the cost of a stay nobody could account for, and no screen or job knew to
+   * go and find out. The sweeper reads this and asks the supplier again.
+   */
+  cancellationUnconfirmedAt?: string;
 }
 
 /* ------------------------------------------------------------ quotations */

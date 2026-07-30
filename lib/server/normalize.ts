@@ -396,6 +396,72 @@ function valueScore(o: Offer): number {
   return o.scores.price * 0.4 + o.scores.flexibility * 0.2 + o.scores.quality * 0.25 + o.scores.fit * 0.15;
 }
 
+/**
+ * Score every offer on the page, from one place, after the sources are merged.
+ *
+ * Each adapter used to fill these in itself, and they disagreed. Hotelbeds set
+ * quality and flexibility and left price at zero; TourMind set the whole
+ * structure to zeroes. Since `recommended` is mostly price, quality and
+ * flexibility, a TourMind property could not outrank a Hotelbeds one at any
+ * price — measured across five cities, TourMind held the last eighteen
+ * positions of every result set and never once appeared in the first twelve,
+ * including in Istanbul where it was the cheaper supplier. An agent working the
+ * first page of results never saw it, and the better margin went unsold.
+ *
+ * Price was zero for both, so the thirty per cent of `recommended` and forty
+ * per cent of `bestValue` that we publish as being about price was not about
+ * anything at all.
+ *
+ * Doing it here rather than in the adapters is the point: a score is a claim
+ * about how one offer compares with another, which no adapter can make because
+ * none of them can see the others.
+ */
+export function scoreSupply(hotels: NormalizedHotel[], intent: SearchIntent): void {
+  const totals = hotels
+    .flatMap((h) => h.offers.map((o) => o.price.total))
+    .filter((total) => Number.isFinite(total) && total > 0)
+    .sort((a, b) => a - b);
+
+  /*
+   * Percentile rather than a min-max stretch. One five-thousand-dollar suite in
+   * a list of hundred-dollar rooms flattens a linear scale until every real
+   * option scores about the same; a rank is unmoved by it. It is also the
+   * honest reading of the criterion we publish — this rate is cheaper than
+   * four-fifths of what your search returned.
+   */
+  const priceScore = (total: number): number => {
+    if (!totals.length || !Number.isFinite(total)) return 0.5;
+    let cheaperThan = 0;
+    for (const candidate of totals) {
+      if (candidate > total) cheaperThan += 1;
+    }
+    return cheaperThan / totals.length;
+  };
+
+  const roomsWanted = Math.max(1, intent.rooms.length);
+
+  for (const hotel of hotels) {
+    // A licensed guest score is a better quality signal than a star rating,
+    // because stars are self-declared. Falls back to the rating when there is
+    // no review, rather than scoring an unreviewed property as zero.
+    const review = hotel.hotel.review;
+    const quality =
+      review && review.scale > 0 ? review.score / review.scale : hotel.hotel.category / 5;
+
+    for (const offer of hotel.offers) {
+      offer.scores = {
+        price: priceScore(offer.price.total),
+        flexibility: offer.cancellation.refundable ? 1 : 0.15,
+        quality: Math.min(1, Math.max(0, quality)),
+        location: offer.scores.location || 0.6,
+        // An offer that covers the whole party is a fit; one that covers part
+        // of it is not, and should not headline a card as though it were.
+        fit: offer.roomsCovered >= roomsWanted ? 1 : offer.roomsCovered / roomsWanted,
+      };
+    }
+  }
+}
+
 export function buildResultCard(n: NormalizedHotel, intent: SearchIntent, locale: Locale): HotelResultCard {
   // Accessible rooms are a limited resource: they never become the headline
   // offer unless the customer asked for one (§5.4, §12.1).

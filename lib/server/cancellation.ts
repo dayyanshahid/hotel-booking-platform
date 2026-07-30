@@ -193,10 +193,27 @@ export async function cancelBooking({
    * money be spent twice.
    */
   const trade = await getAgencyBooking(updated.reference);
-  if (trade && !uncertain) {
-    const retained = Math.round(trade.cost * (quote.fee / Math.max(1, booking.price.total)));
-    await releaseBooking(trade.agencyId, trade.reference, trade.cost, retained, trade.currency, now);
-    await saveAgencyBooking({ ...trade, status: "cancelled" });
+  if (trade) {
+    if (uncertain) {
+      /*
+       * Marked, not released, and above all not forgotten.
+       *
+       * The credit has to stay committed — we do not know whether the room is
+       * still ours. What used to happen is that nothing was written down at
+       * all: the booking looked untouched, the agency was quietly short of the
+       * cost of that stay, and there was no job or screen whose business it was
+       * to find out. The sweeper picks this up and asks the supplier again.
+       */
+      await saveAgencyBooking({ ...trade, cancellationUnconfirmedAt: now });
+    } else {
+      const retained = Math.round(trade.cost * (quote.fee / Math.max(1, booking.price.total)));
+      await releaseBooking(trade.agencyId, trade.reference, trade.cost, retained, trade.currency, now);
+      await saveAgencyBooking({
+        ...trade,
+        status: "cancelled",
+        cancellationUnconfirmedAt: undefined,
+      });
+    }
   }
 
   await saveBooking(updated, updated.contact.email);

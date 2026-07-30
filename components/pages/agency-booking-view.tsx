@@ -235,6 +235,21 @@ function Detail({
       {error && <Alert tone="critical">{error}</Alert>}
 
       {/*
+        A cancellation we asked for and could not confirm.
+
+        Worth a line of its own because the agency is paying for it: the credit
+        stays committed until the supplier tells us the room is not ours, so an
+        agent who sees "cancelled" on their screen and a shortfall on their
+        limit deserves to know the two are the same booking. It resolves itself
+        — the sweeper asks again — and saying so stops anyone cancelling twice.
+      */}
+      {trade.cancellationUnconfirmedAt && trade.status !== "cancelled" && (
+        <Alert tone="warning" title={t("agency.cancelUnconfirmed")}>
+          {t("agency.cancelUnconfirmedBody")}
+        </Alert>
+      )}
+
+      {/*
         A hold says when it disappears, in the same place an agent looks for
         the reference. Everything else about it reads like a booking, which is
         exactly why the deadline has to be impossible to miss.

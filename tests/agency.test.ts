@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import { releaseBooking } from "@/lib/agency/bookings";
 import { applyAgencyMarkup, agencyOfferView, marginPercent, policyFrom } from "@/lib/agency/pricing";
 import { agencyCost, viewOffer } from "@/lib/agency/rates";
 import { decodeSession, encodeSession } from "@/lib/agency/session";
@@ -307,5 +308,64 @@ describe("a margin for one quote", () => {
      * discount — it is the agency paying for someone's holiday.
      */
     expect(quoteSell(1000, 1150, 0)).toBe(1000);
+  });
+});
+
+describe("credit after a cancellation", () => {
+  beforeEach(async () => {
+    __resetAgencies({ agencies: [agency] });
+    await saveAgency(agency);
+  });
+
+  const commit = async (reference: string, cost: number) =>
+    appendLedger({
+      id: `led_${reference}`,
+      agencyId: agency.id,
+      at: "2026-02-01T00:00:00.000Z",
+      amount: -cost,
+      currency: "USD",
+      kind: "booking",
+      reference,
+      note: "Test booking",
+    });
+
+  it("returns only what the supplier did not keep", async () => {
+    /*
+     * Committed 30,000, the supplier kept 5,000, so 25,000 comes back and the
+     * agency still owes the fee. Handing back the whole cost would credit them
+     * with headroom they do not have, and the shortfall would only surface at
+     * the end of the month when the statement refused to reconcile.
+     */
+    await commit("NZ-FEE-0001", 30_000);
+    await releaseBooking(agency.id, "NZ-FEE-0001", 30_000, 5_000, "USD", "2026-02-02T00:00:00.000Z");
+    expect((await agencyBalance(agency.id))?.used).toBe(5_000);
+    expect((await agencyBalance(agency.id))?.available).toBe(95_000);
+  });
+
+  it("returns everything when the cancellation was free", async () => {
+    await commit("NZ-FREE-0001", 30_000);
+    await releaseBooking(agency.id, "NZ-FREE-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
+    expect((await agencyBalance(agency.id))?.available).toBe(100_000);
+  });
+
+  it("cannot pay an agency twice for one cancellation", async () => {
+    /*
+     * The reconciler runs on a schedule and the agent can cancel by hand, so
+     * two paths reach this for the same booking. Keyed on the reference, a
+     * second release is a no-op — the alternative is an agency whose limit
+     * grows every time a cron fires.
+     */
+    await commit("NZ-DUP-0001", 30_000);
+    for (let i = 0; i < 4; i += 1) {
+      await releaseBooking(agency.id, "NZ-DUP-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
+    }
+    expect((await agencyBalance(agency.id))?.available).toBe(100_000);
+  });
+
+  it("keeps the credit committed when the fee swallowed the whole cost", async () => {
+    await commit("NZ-NRF-0001", 30_000);
+    await releaseBooking(agency.id, "NZ-NRF-0001", 30_000, 30_000, "USD", "2026-02-02T00:00:00.000Z");
+    // A non-refundable room that was cancelled anyway still has to be paid for.
+    expect((await agencyBalance(agency.id))?.available).toBe(70_000);
   });
 });

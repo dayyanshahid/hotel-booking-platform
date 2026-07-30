@@ -19,7 +19,7 @@ import {
 import { HOTEL_SEEDS, getHotelSeed, hotelsInDestination } from "../data/hotels";
 import { addDays, nightsBetween } from "../format";
 import { createTranslator } from "../i18n";
-import { buildResultCard, normalizeHotel, type NormalizedHotel } from "./normalize";
+import { buildResultCard, normalizeHotel, scoreSupply, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
 import { primeMarkup } from "./platform";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
@@ -317,6 +317,14 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
 
   normalized.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);
   const liveStatuses = [tourmindOutcome.status, hotelbedsOutcome.status];
+
+  /*
+   * Score once, across everything, before anything is ranked or a lead offer is
+   * chosen. Ranking is a comparison, and until the sources are merged there is
+   * nothing to compare against — which is why leaving it to the adapters gave
+   * one supplier a full set of scores and the other a row of zeroes.
+   */
+  scoreSupply(normalized, effectiveIntent);
 
   let cards = normalized.map((n) => buildResultCard(n, effectiveIntent, locale));
 
