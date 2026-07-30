@@ -6,7 +6,13 @@ import { fetchFromSources } from "@/lib/server/suppliers";
 import { runSearch, suggest } from "@/lib/server/search";
 import { HOTEL_SEEDS, getHotelSeed } from "@/lib/data/hotels";
 import { destinationFromPrice, hotelFromPrice } from "@/lib/server/from-price";
-import { formatMoney, nightsBetween } from "@/lib/format";
+import {
+  comparableTotal,
+  formatMoney,
+  isPerRoomTotal,
+  nightsBetween,
+  partyEstimate,
+} from "@/lib/format";
 import { intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import type { SearchIntent } from "@/lib/types";
 import { BOARD_CATALOG, canonicalBoard, localized, titleCaseBoard } from "@/lib/data/catalog";
@@ -492,5 +498,61 @@ describe("ranking is blind to which supplier sold the room", () => {
     const stars = [hotel("five", 200, { category: 5 }), hotel("two", 200, { category: 2 })];
     scoreSupply(stars as never, intent as never);
     expect(stars[0].offers[0].scores.quality).toBeGreaterThan(stars[1].offers[0].scores.quality);
+  });
+
+  /*
+   * Measured live, three rooms in Dubai: every Hotelbeds property returned the
+   * same figure as a one-room search while TourMind returned three times its
+   * own, so raw totals put a $65 single room ahead of three rooms at $227 — the
+   * cheaper option really cost $249. Sorting by price put one supplier's entire
+   * inventory at the cheap end of every multi-room search.
+   */
+  const party = { rooms: [{ adults: 2, childrenAges: [] }, { adults: 2, childrenAges: [] }, { adults: 2, childrenAges: [] }] };
+
+  function priced(name: string, total: number, roomsCovered: number) {
+    const h = hotel(name, total);
+    Object.assign(h.offers[0].price, { roomsCovered, roomsRequested: 3 });
+    h.offers[0].roomsCovered = roomsCovered;
+    return h;
+  }
+
+  it("scores a party total against a per-room total on the same basis", () => {
+    // $227 for all three rooms is $76 a room, so it beats $80 for one.
+    const supply = [priced("whole-party", 227, 3), priced("one-room", 80, 1)];
+    scoreSupply(supply as never, party as never);
+    expect(supply[0].offers[0].scores.price).toBeGreaterThan(supply[1].offers[0].scores.price);
+  });
+
+  it("does not reward a rate for covering less of the party", () => {
+    // The same money, buying three rooms or one. Three is not the worse deal.
+    const supply = [priced("three", 300, 3), priced("one", 300, 1)];
+    scoreSupply(supply as never, party as never);
+    expect(supply[0].offers[0].scores.price).toBeGreaterThan(supply[1].offers[0].scores.price);
+    // And `fit` says outright which of them houses the group.
+    expect(supply[0].offers[0].scores.fit).toBe(1);
+    expect(supply[1].offers[0].scores.fit).toBeCloseTo(1 / 3);
+  });
+});
+
+describe("a total says how many rooms it buys", () => {
+  it("reduces either shape to one comparable number", () => {
+    expect(comparableTotal({ total: 300, roomsCovered: 3 })).toBe(100);
+    expect(comparableTotal({ total: 100, roomsCovered: 1 })).toBe(100);
+    // Absent means one, not "however many were asked for".
+    expect(comparableTotal({ total: 100 })).toBe(100);
+  });
+
+  it("flags only the totals that buy fewer rooms than the search wanted", () => {
+    expect(isPerRoomTotal({ roomsCovered: 1, roomsRequested: 3 })).toBe(true);
+    expect(isPerRoomTotal({ roomsCovered: 3, roomsRequested: 3 })).toBe(false);
+    expect(isPerRoomTotal({ roomsCovered: 1, roomsRequested: 1 })).toBe(false);
+  });
+
+  it("estimates the party in whole units, from the per-room figure", () => {
+    // 307 buys one of three, so the party is about 921 — and every surface that
+    // shows this number states the condition that goes with it.
+    expect(partyEstimate({ total: 307, roomsCovered: 1, roomsRequested: 3 })).toBe(921);
+    // Already covers the party: the estimate is the total, not a multiple of it.
+    expect(partyEstimate({ total: 480, roomsCovered: 3, roomsRequested: 3 })).toBe(480);
   });
 });

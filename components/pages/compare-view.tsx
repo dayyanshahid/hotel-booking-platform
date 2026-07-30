@@ -4,7 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Card, Checkbox, EmptyState, Photo, Skeleton, cx } from "@/components/ui";
-import { distanceLabel, formatDeadline, formatMoney, guestCount } from "@/lib/format";
+import {
+  comparableTotal,
+  distanceLabel,
+  formatDeadline,
+  formatMoney,
+  guestCount,
+  isPerRoomTotal,
+} from "@/lib/format";
 import { href, hotelHref } from "@/lib/nav";
 import type { CanonicalHotel, CanonicalRoom, Locale, Offer, SearchIntent } from "@/lib/types";
 
@@ -87,8 +94,24 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
   const rows: { key: string; label: string; values: (string | null)[] }[] = [
     {
       key: "price",
-      label: t("common.total"),
-      values: entries.map((e) => (e.best ? formatMoney(e.best.price.total, e.best.price.currency, locale) : null)),
+      /*
+       * A comparison table is the one place a mixed denominator is least
+       * forgivable, because the whole point of the column is that the numbers
+       * can be read against each other. When any of them buys one room of
+       * several, the row says so in its own label.
+       */
+      label: entries.some((e) => e.best && isPerRoomTotal(e.best.price))
+        ? `${t("common.total")} — ${t("rate.perRoom")}`
+        : t("common.total"),
+      values: entries.map((e) =>
+        e.best
+          ? formatMoney(
+              isPerRoomTotal(e.best.price) ? Math.round(comparableTotal(e.best.price)) : e.best.price.total,
+              e.best.price.currency,
+              locale,
+            )
+          : null,
+      ),
     },
     {
       key: "nightly",

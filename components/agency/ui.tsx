@@ -392,6 +392,7 @@ export function TradePrices({
   locale,
   publicPrice,
   compact = false,
+  perRoomOf,
 }: {
   cost: number;
   sell: number;
@@ -400,8 +401,18 @@ export function TradePrices({
   locale: Locale;
   publicPrice?: number;
   compact?: boolean;
+  /**
+   * Rooms the search asked for, when this rate only covers one of them.
+   *
+   * The estimate is computed from `sell` rather than reusing the consumer note,
+   * because that one multiplies the public price. Putting a public party total
+   * under an agency sell price would show an agent two figures from different
+   * books and invite them to quote the wrong one.
+   */
+  perRoomOf?: number;
 }) {
   const { t } = useApp();
+  const rooms = perRoomOf && perRoomOf > 1 ? perRoomOf : 0;
   return (
     <div className={cx("text-end", compact ? "space-y-0.5" : "space-y-1")}>
       {publicPrice !== undefined && (
@@ -421,6 +432,17 @@ export function TradePrices({
         <span>{t("agency.margin")}</span>
         <Money amount={margin} currency={currency} locale={locale} size="sm" tone="positive" />
       </p>
+      {rooms > 0 && (
+        <>
+          <p className="text-caution-700 text-xs font-medium">{t("rate.perRoomOf", { rooms })}</p>
+          <p className="text-muted text-xs">
+            {t("rate.partyEstimate", {
+              amount: formatMoney(Math.round(sell * rooms), currency as CurrencyCode, locale),
+              rooms,
+            })}
+          </p>
+        </>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ import {
   getDestination,
 } from "../data/destinations";
 import { HOTEL_SEEDS, getHotelSeed, hotelsInDestination } from "../data/hotels";
-import { addDays, nightsBetween } from "../format";
+import { addDays, comparableTotal, nightsBetween } from "../format";
 import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, scoreSupply, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
@@ -480,7 +480,9 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
  * because those describe the property or its lead price rather than its rates.
  */
 function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: NormalizedHotel[]): SearchFacets {
-  const prices = cards.map((c) => c.price.total);
+  // Per room, so the range spans one kind of number and the filter that reads
+  // it back compares like with like.
+  const prices = cards.map((c) => comparableTotal(c.price));
   const count = <T extends string | number>(values: T[]) => {
     const map = new Map<T, number>();
     for (const v of values) map.set(v, (map.get(v) ?? 0) + 1);
@@ -536,7 +538,17 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
   }
 
   return {
-    priceRange: { min: prices.length ? Math.min(...prices) : 0, max: prices.length ? Math.max(...prices) : 0 },
+    /*
+     * Whole units. Dividing a party total by three rooms gives 56.333…, and a
+     * range whose ends are fractions of a currency's smallest unit reads as a
+     * rounding error on screen. Rounded outwards so the extremes stay inside
+     * their own range — a ceiling rounded down would exclude the priciest
+     * result from a filter set to the maximum.
+     */
+    priceRange: {
+      min: prices.length ? Math.floor(Math.min(...prices)) : 0,
+      max: prices.length ? Math.ceil(Math.max(...prices)) : 0,
+    },
     // A property whose supplier gave no star rating is not a "0-star hotel";
     // it is a property with no rating, and it must not appear as a filter.
     categories: [...catCount.entries()]
@@ -590,8 +602,15 @@ function applyFilters(entries: Entry[], f: SearchFilters, normalized: Normalized
   const byHotel = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
 
   return entries.filter(({ card, distance }) => {
-    if (f.minPrice != null && card.price.total < f.minPrice) return false;
-    if (f.maxPrice != null && card.price.total > f.maxPrice) return false;
+    /*
+     * The same denominator the facet's range was built from.
+     *
+     * Filtering on `total` against a range built from mixed totals meant the
+     * slider's own maximum excluded results: a three-room party total sat above
+     * a ceiling derived partly from one-room prices.
+     */
+    if (f.minPrice != null && comparableTotal(card.price) < f.minPrice) return false;
+    if (f.maxPrice != null && comparableTotal(card.price) > f.maxPrice) return false;
     if (f.categories?.length && !f.categories.includes(card.category)) return false;
     if (f.minRating != null && (card.review?.score ?? 0) < f.minRating) return false;
     if (f.neighborhoods?.length && !f.neighborhoods.includes(card.neighborhood)) return false;
@@ -637,13 +656,28 @@ function applyFilters(entries: Entry[], f: SearchFilters, normalized: Normalized
   });
 }
 
+/**
+ * Sorting by price, on a number that means the same thing for every supplier.
+ *
+ * `price.total` does not: Hotelbeds prices a rate per room, TourMind and the
+ * simulated source price the whole party. On a three-room search that put every
+ * Hotelbeds property at the cheap end of "price, low to high" — a room at $83
+ * ranked ahead of three rooms at $227, and the cheaper one was really $249.
+ * Reducing to per room is the only common denominator that invents nothing;
+ * multiplying the other way would quote three rooms at a rate that may have one
+ * left.
+ */
+function sortPrice(card: HotelResultCard): number {
+  return comparableTotal(card.price);
+}
+
 function applySort(entries: Entry[], sort: SortKey): Entry[] {
   const copy = [...entries];
   switch (sort) {
     case "priceAsc":
-      return copy.sort((a, b) => a.card.price.total - b.card.price.total);
+      return copy.sort((a, b) => sortPrice(a.card) - sortPrice(b.card));
     case "priceDesc":
-      return copy.sort((a, b) => b.card.price.total - a.card.price.total);
+      return copy.sort((a, b) => sortPrice(b.card) - sortPrice(a.card));
     case "rating":
       return copy.sort((a, b) => (b.card.review?.score ?? 0) - (a.card.review?.score ?? 0));
     case "distance":
@@ -652,7 +686,7 @@ function applySort(entries: Entry[], sort: SortKey): Entry[] {
       return copy.sort(
         (a, b) =>
           Number(b.card.offerSummary.refundable) - Number(a.card.offerSummary.refundable) ||
-          a.card.price.total - b.card.price.total,
+          sortPrice(a.card) - sortPrice(b.card),
       );
     case "bestValue":
       return copy.sort((a, b) => valueOf(b.card) - valueOf(a.card));

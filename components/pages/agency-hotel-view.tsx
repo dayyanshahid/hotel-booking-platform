@@ -10,6 +10,7 @@ import { TradePrices } from "@/components/agency/ui";
 import { QuoteModal } from "@/components/agency/quote-modal";
 import { SearchBar } from "@/components/search/search-bar";
 import { RoomBlock } from "@/components/commerce/rate-card";
+import { PerRoomNote } from "@/components/commerce/price";
 import {
   Accordion,
   Alert,
@@ -27,7 +28,15 @@ import {
   scoreBand,
 } from "@/components/ui";
 import { Icon, amenityIcon } from "@/components/ui/icons";
-import { addDays, distanceLabel, formatDate, formatMoney, guestCount, todayIso } from "@/lib/format";
+import {
+  addDays,
+  distanceLabel,
+  formatDate,
+  formatMoney,
+  guestCount,
+  isPerRoomTotal,
+  todayIso,
+} from "@/lib/format";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type {
@@ -337,12 +346,16 @@ function HotelDetail({
                 currency={lowestQuote.currency}
                 locale={locale}
                 publicPrice={lowest.price.total}
+                perRoomOf={isPerRoomTotal(lowest.price) ? lowest.price.roomsRequested : undefined}
               />
             </div>
           ) : lowest ? (
-            <p className="mt-2 text-lg font-bold">
-              {formatMoney(lowest.price.total, lowest.price.currency as CurrencyCode, locale)}
-            </p>
+            <div className="mt-2">
+              <p className="text-lg font-bold">
+                {formatMoney(lowest.price.total, lowest.price.currency as CurrencyCode, locale)}
+              </p>
+              <PerRoomNote price={lowest.price} />
+            </div>
           ) : (
             <p className="text-muted mt-2 text-sm">{t("hotel.noRooms")}</p>
           )}
@@ -530,6 +543,7 @@ function HotelDetail({
                           currency={quote.currency}
                           locale={locale}
                           publicPrice={offer.price.total}
+                          perRoomOf={isPerRoomTotal(offer.price) ? offer.price.roomsRequested : undefined}
                         />
                       ) : (
                         // The rate is real; the agency's cost is a second call.

@@ -12,7 +12,7 @@ import { BOARD_CATALOG, localized } from "../data/catalog";
 import { buildHotel, buildRooms, getHotelSeed, type HotelSeed } from "../data/hotels";
 import { getDestination } from "../data/destinations";
 import { ROOM_TEMPLATES } from "../data/rooms";
-import { addDays, nightsBetween } from "../format";
+import { addDays, comparableTotal, nightsBetween } from "../format";
 import { computePrice, hash01, type BoardCode, type RateClass } from "./pricing";
 import type { RawOffer } from "./suppliers";
 import type { ScenarioId } from "./scenarios";
@@ -417,8 +417,18 @@ function valueScore(o: Offer): number {
  * none of them can see the others.
  */
 export function scoreSupply(hotels: NormalizedHotel[], intent: SearchIntent): void {
+  /*
+   * Per room, because the totals are not the same kind of number.
+   *
+   * Hotelbeds prices a rate per room and TourMind prices the whole party, so on
+   * a three-room search a Hotelbeds total is a third of a TourMind one for the
+   * same stay. Comparing them raw scored every Hotelbeds rate as cheaper than
+   * almost everything, which fed `price` into both `bestValue` and
+   * `recommended` — the default ranking was wrong in one supplier's favour on
+   * every multi-room search, and nothing on the page said so.
+   */
   const totals = hotels
-    .flatMap((h) => h.offers.map((o) => o.price.total))
+    .flatMap((h) => h.offers.map((o) => comparableTotal(o.price)))
     .filter((total) => Number.isFinite(total) && total > 0)
     .sort((a, b) => a - b);
 
@@ -450,7 +460,7 @@ export function scoreSupply(hotels: NormalizedHotel[], intent: SearchIntent): vo
 
     for (const offer of hotel.offers) {
       offer.scores = {
-        price: priceScore(offer.price.total),
+        price: priceScore(comparableTotal(offer.price)),
         flexibility: offer.cancellation.refundable ? 1 : 0.15,
         quality: Math.min(1, Math.max(0, quality)),
         location: offer.scores.location || 0.6,

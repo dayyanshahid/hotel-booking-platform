@@ -7,7 +7,14 @@ import { Alert, Badge, Button, Card, Modal, SectionHeading, Select, Field, Input
 import { SearchBar } from "@/components/search/search-bar";
 import { searchParamsFromIntent } from "@/lib/nav";
 import { TripPrompt } from "@/components/search/trip-prompt";
-import { addDays, formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
+import {
+  addDays,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  isPerRoomTotal,
+  todayIso,
+} from "@/lib/format";
 import type { AuditEntry } from "@/lib/admin/store";
 import type { CurrencyCode, HotelResultCard, Locale, SearchFilters, SearchIntent, SearchResponse } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -712,6 +719,11 @@ function SupplyProbe() {
                       <td className="py-2 pe-3 wrap-anywhere">{card.offerSummary.boardSummary}</td>
                       <td className="py-2 text-end font-semibold whitespace-nowrap">
                         {formatMoney(card.price.total, card.price.currency as CurrencyCode, locale)}
+                        {isPerRoomTotal(card.price) && (
+                          <span className="text-caution-700 ms-1 text-xs font-medium">
+                            / {t("rate.perRoom")}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

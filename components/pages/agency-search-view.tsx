@@ -21,7 +21,15 @@ import {
 import { PageHeader, TradePrices } from "@/components/agency/ui";
 import { QuoteModal } from "@/components/agency/quote-modal";
 import Link from "next/link";
-import { addDays, formatDate, formatMoney, guestCount, nightsBetween, todayIso } from "@/lib/format";
+import {
+  addDays,
+  formatDate,
+  formatMoney,
+  guestCount,
+  isPerRoomTotal,
+  nightsBetween,
+  todayIso,
+} from "@/lib/format";
 import { countLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
@@ -130,6 +138,26 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   /** Offers the agent has set aside for a quote, in the order they picked them. */
   const [basket, setBasket] = useState<string[]>([]);
   const [quoteOpen, setQuoteOpen] = useState(false);
+
+  /**
+   * How much of the party the basket currently houses.
+   *
+   * A rate that covers one room contributes one, whatever the search asked for.
+   * An offer picked from an earlier page and no longer on screen counts as one
+   * rather than as nothing: undercounting would nag about a basket that is
+   * already complete, and the conservative direction here is to assume less
+   * coverage, not more.
+   */
+  const basketCoverage = (() => {
+    const byOfferId = new Map((data?.results ?? []).map((card) => [card.offerSummary.offerId, card]));
+    return {
+      wanted: Math.max(1, (applied ?? seed).rooms.length),
+      covered: basket.reduce(
+        (sum, offerId) => sum + Math.max(1, byOfferId.get(offerId)?.price.roomsCovered ?? 1),
+        0,
+      ),
+    };
+  })();
 
   /**
    * One entry point for every way the page can change.
@@ -374,11 +402,26 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       {basket.length > 0 && (
         <div className="sticky top-2 z-20">
           <Card className="border-brand-300 bg-brand-50/90 flex flex-wrap items-center justify-between gap-3 p-3 backdrop-blur">
-            <p className="flex items-center gap-2 text-sm">
+            <p className="flex flex-wrap items-center gap-2 text-sm">
               <span className="bg-brand-600 grid size-6 place-items-center rounded-full text-xs font-bold text-white">
                 {basket.length}
               </span>
               {t("agency.selectedRates")}
+              {/*
+                Rooms, not rates — the number that decides whether this basket
+                houses the party. A rate can cover one room, so five rates and
+                five rooms are different facts, and the quote built from here
+                totals correctly either way. Said while the agent is still
+                picking, which is the only point at which it is cheap to fix.
+              */}
+              <span
+                className={cx(
+                  "text-xs font-medium",
+                  basketCoverage.covered < basketCoverage.wanted ? "text-caution-700" : "text-muted",
+                )}
+              >
+                {t("agency.basketCovers", basketCoverage)}
+              </span>
             </p>
             <div className="flex gap-2">
               <Button size="sm" onClick={() => setQuoteOpen(true)}>
@@ -453,6 +496,9 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             currency={currency}
                             locale={locale}
                             publicPrice={card.price.total}
+                            perRoomOf={
+                              isPerRoomTotal(card.price) ? card.price.roomsRequested : undefined
+                            }
                           />
                         ) : (
                           // Priced a moment behind the card: the rate is real,

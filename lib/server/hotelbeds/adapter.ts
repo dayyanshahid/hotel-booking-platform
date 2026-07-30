@@ -59,7 +59,26 @@ function buildPrice(
   const display: CurrencyCode = intent.currency;
   const ar = locale === "ar";
   const nights = Math.max(1, nightsBetween(intent.checkIn, intent.checkOut));
-  const guests = intent.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
+
+  /*
+   * What this rate actually buys, from the rate itself.
+   *
+   * `net` is the price of `rate.rooms` room(s) at `rate.adults`/`rate.children`
+   * occupancy — the supplier says so on the rate. This used to sum the whole
+   * party instead, so a one-room net was labelled as covering seven guests and
+   * a three-room search quoted a third of the stay.
+   *
+   * The party is still worth carrying, because the gap between the two is what
+   * the results page has to disclose.
+   */
+  const roomsCovered = Math.max(1, toNumber(rate.rooms, 1));
+  const partyRooms = intent.rooms.length;
+  const rateAdults = toNumber(rate.adults, 0);
+  const rateChildren = toNumber(rate.children, 0);
+  const perParty = intent.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
+  // Fall back to the party only when the rate declares no occupancy at all,
+  // which is the one case where we genuinely do not know any better.
+  const guests = rateAdults + rateChildren > 0 ? rateAdults + rateChildren : perParty;
 
   const { total: markedUpNet } = applyMarkup(netRaw);
   const total = convertCurrency(markedUpNet, supplierCurrency, display);
@@ -154,6 +173,8 @@ function buildPrice(
             : "Conversion is indicative and fixed at payment.",
       nights,
       guests,
+      roomsCovered,
+      roomsRequested: partyRooms,
     },
   };
 }
@@ -616,13 +637,23 @@ export async function adaptAvailability(
           instantConfirmation: rate.rateType === "BOOKABLE",
         },
         expiresAt,
-        roomsCovered: intent.rooms.length,
+        /*
+         * What the rate actually covers, which the price already worked out.
+         *
+         * This said `intent.rooms.length` — the same object asserting it covered
+         * three rooms in one field and one room in the next. `scoreSupply` reads
+         * this one to score how well an offer fits the party, so a single room
+         * scored a perfect fit for a group of seven and headlined the card.
+         */
+        roomsCovered: pricing.price.roomsCovered,
         scores: {
           price: 0,
           flexibility: cancellation.refundable ? 1 : 0.15,
           quality: canonical.category / 5,
           location: 0.6,
-          fit: 1,
+          // Overwritten by `scoreSupply` against the whole result set; a local
+          // guess of 1 here would be a claim this code is not able to make.
+          fit: 0,
         },
       };
 

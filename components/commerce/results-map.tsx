@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card, Photo, cx } from "@/components/ui";
-import { formatMoney } from "@/lib/format";
+import { PerRoomNote } from "./price";
+import { comparableTotal, formatMoney, isPerRoomTotal } from "@/lib/format";
 import { hotelHref } from "@/lib/nav";
 import type { HotelResultCard, SearchFilters, SearchIntent } from "@/lib/types";
 
@@ -50,6 +51,19 @@ export function ResultsMap({
       west: Math.min(...lngs) - padLng,
     };
   }, [cards]);
+
+  /*
+   * A map is a comparison, so every pin has to carry the same kind of number.
+   *
+   * On a multi-room search some sources price the whole party and some price one
+   * room, so the raw totals put a $65 single room beside a $227 three-room stay
+   * as though the first were cheaper — the ranking bug, drawn to scale. When any
+   * pin is a per-room figure they all become per-room, and one caption above the
+   * map says so rather than a label on every pin.
+   */
+  const perRoomPins = cards.some((card) => isPerRoomTotal(card.price));
+  const pinAmount = (card: HotelResultCard) =>
+    perRoomPins ? Math.round(comparableTotal(card.price)) : card.price.total;
 
   const W = 800;
   const H = 560;
@@ -122,7 +136,7 @@ export function ResultsMap({
               const { x, y } = project(first.coordinates.lat, first.coordinates.lng);
               const isCluster = group.length > 1;
               const active = group.some((c) => c.slug === selected);
-              const cheapest = group.reduce((a, b) => (a.price.total <= b.price.total ? a : b));
+              const cheapest = group.reduce((a, b) => (pinAmount(a) <= pinAmount(b) ? a : b));
               return (
                 <g key={i} transform={`translate(${x} ${y})`}>
                   <foreignObject x={-46} y={-18} width={110} height={40} style={{ overflow: "visible" }}>
@@ -136,7 +150,7 @@ export function ResultsMap({
                       )}
                     >
                       {isCluster ? `${group.length} · ` : ""}
-                      {formatMoney(cheapest.price.total, cheapest.price.currency, locale)}
+                      {formatMoney(pinAmount(cheapest), cheapest.price.currency, locale)}
                     </button>
                   </foreignObject>
                 </g>
@@ -154,7 +168,7 @@ export function ResultsMap({
           </Button>
         </div>
 
-        <div className="absolute top-3 start-3">
+        <div className="absolute top-3 start-3 flex flex-col items-start gap-2">
           <Button
             size="sm"
             onClick={() => {
@@ -164,6 +178,12 @@ export function ResultsMap({
           >
             {t("results.searchArea")}
           </Button>
+          {/* Said once for the whole map rather than crowded onto every pin. */}
+          {perRoomPins && (
+            <span className="surface hairline text-caution-700 rounded-[var(--radius-pill)] border px-2.5 py-1 text-xs font-medium">
+              {t("rate.perRoom")}
+            </span>
+          )}
         </div>
 
         {selectedCard && (
@@ -185,6 +205,9 @@ export function ResultsMap({
                 <p className="tabular mt-1 text-sm font-bold">
                   {formatMoney(selectedCard.price.total, selectedCard.price.currency, locale)}
                 </p>
+                {/* The callout has room for the whole caveat, so it carries it
+                    rather than the bare per-room figure the pin shows. */}
+                <PerRoomNote price={selectedCard.price} />
                 <div className="mt-1 flex items-center gap-2">
                   <Badge tone={selectedCard.offerSummary.refundable ? "positive" : "critical"}>
                     {selectedCard.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
@@ -219,7 +242,7 @@ export function ResultsMap({
                 <span className="truncate">
                   {card.name} — {card.neighborhood}
                 </span>
-                <span className="font-semibold">{formatMoney(card.price.total, card.price.currency, locale)}</span>
+                <span className="font-semibold">{formatMoney(pinAmount(card), card.price.currency, locale)}</span>
               </button>
             </li>
           ))}

@@ -103,6 +103,17 @@ export function buildPrice(
             : "Conversion is indicative and fixed at payment.",
       nights,
       guests,
+      /*
+       * Their `TotalPrice` covers every room the search asked for.
+       *
+       * Measured, not assumed: the same Dubai property came back at $154 for
+       * one room and $481 for three — 3.0× — while Hotelbeds returned the same
+       * figure for both. Their rate payload carries no occupancy at all, so
+       * there is nothing on it to read this from; the request's `PaxRooms` is
+       * the only record of what was priced.
+       */
+      roomsCovered: intent.rooms.length,
+      roomsRequested: intent.rooms.length,
     },
   };
 }

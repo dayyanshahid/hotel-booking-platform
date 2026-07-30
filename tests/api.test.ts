@@ -467,3 +467,79 @@ describe("one-time codes are not handed back to the caller", () => {
     expect(mayEchoOtp()).toBe(true);
   });
 });
+
+describe("a multi-room search never presents one room as the party", () => {
+  /*
+   * The defect, end to end. The simulated source prices the whole party, so
+   * these searches exercise the invariant rather than the supplier: whatever a
+   * total covers, `roomsCovered` says so, and the filter range the page hands
+   * back is expressed in the same units the filter compares against.
+   *
+   * The live half of this is covered by the ranking tests in `domain`, which can
+   * put a per-room and a party total side by side without a network.
+   */
+  const party = {
+    ...INTENT,
+    rooms: [
+      { adults: 2, childrenAges: [] },
+      { adults: 2, childrenAges: [] },
+      { adults: 2, childrenAges: [8] },
+    ],
+  };
+
+  it("declares what every total buys, and what the search asked for", async () => {
+    const res = await searchRoute(req("/api/hotels/search", { intent: party }));
+    const body = await json<{
+      results: { price: { total: number; roomsCovered: number; roomsRequested: number; guests: number } }[];
+      facets: { priceRange: { min: number; max: number } };
+    }>(res);
+
+    expect(body.data.results.length).toBeGreaterThan(0);
+    for (const card of body.data.results) {
+      // Never absent and never zero: a missing denominator is what let the two
+      // numbers be assumed equal in the first place.
+      expect(card.price.roomsCovered).toBeGreaterThan(0);
+      expect(card.price.roomsRequested).toBe(3);
+      // A total can cover the party or part of it, never more than was asked.
+      expect(card.price.roomsCovered).toBeLessThanOrEqual(card.price.roomsRequested);
+      // Guests are the occupancy of what is covered, not the party, so a
+      // one-room total is never labelled as sleeping seven.
+      expect(card.price.guests).toBeGreaterThan(0);
+    }
+  });
+
+  it("hands back a filter range in whole units on the same basis it filters", async () => {
+    const res = await searchRoute(req("/api/hotels/search", { intent: party }));
+    const body = await json<{
+      results: { price: { total: number; roomsCovered: number } }[];
+      facets: { priceRange: { min: number; max: number } };
+    }>(res);
+    const { min, max } = body.data.facets.priceRange;
+
+    // Dividing a party total by three rooms gives 56.333…; a range whose ends
+    // are fractions of a cent reads as a rounding error on screen.
+    expect(Number.isInteger(min)).toBe(true);
+    expect(Number.isInteger(max)).toBe(true);
+
+    // Every result sits inside the range the page offers to filter by. It did
+    // not when the range was built per room and compared against party totals:
+    // the slider's own maximum excluded results.
+    const perRoom = body.data.results.map((c) => c.price.total / Math.max(1, c.price.roomsCovered));
+    for (const value of perRoom) {
+      expect(value).toBeGreaterThanOrEqual(min);
+      expect(value).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it("filters on that range without excluding its own extremes", async () => {
+    const open = await searchRoute(req("/api/hotels/search", { intent: party }));
+    const openBody = await json<{ totalCount: number; facets: { priceRange: { max: number } } }>(open);
+
+    // Filtering at the ceiling must keep everything the unfiltered page had.
+    const capped = await searchRoute(
+      req("/api/hotels/search", { intent: party, filters: { maxPrice: openBody.data.facets.priceRange.max } }),
+    );
+    const cappedBody = await json<{ totalCount: number }>(capped);
+    expect(cappedBody.data.totalCount).toBe(openBody.data.totalCount);
+  });
+});

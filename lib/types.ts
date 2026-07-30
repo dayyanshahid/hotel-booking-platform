@@ -73,7 +73,7 @@ export interface ChargeLine {
 
 export interface PriceStack {
   currency: CurrencyCode;
-  /** Complete stay total for the searched occupancy — the primary price. §3.1 */
+  /** Complete stay total for what `roomsCovered` describes — the primary price. §3.1 */
   total: number;
   /** Secondary only. */
   nightlyAverage: number;
@@ -88,7 +88,24 @@ export interface PriceStack {
   chargeCurrency?: CurrencyCode;
   fxBasis?: string;
   nights: number;
+  /** Guests this total covers — the occupancy of `roomsCovered`, not the party. */
   guests: number;
+  /**
+   * How many rooms this total buys, and how many the search asked for.
+   *
+   * These were the same number by assumption and the assumption was wrong. A
+   * supplier prices a rate per room; a search for three rooms returned one
+   * room's total, and the card printed it under "total for 3 nights, 7 guests".
+   * The same figure came out of a one-room search and a three-room search of
+   * the same property, so an agent quoting a group under-quoted it by two
+   * thirds and only found out at the counter.
+   *
+   * Kept as two fields rather than one ratio because the interesting case is
+   * when they disagree: that is a price that needs qualifying, and a party that
+   * still needs rooms found for it.
+   */
+  roomsCovered: number;
+  roomsRequested: number;
 }
 
 /* ------------------------------------------------------------------- hotels */

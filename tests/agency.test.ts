@@ -369,3 +369,67 @@ describe("credit after a cancellation", () => {
     expect((await agencyBalance(agency.id))?.available).toBe(70_000);
   });
 });
+
+describe("a quote says how many rooms it actually sells", () => {
+  /*
+   * The worst place this bug landed. A quote line recorded `rooms` from the
+   * search and priced one room, so the printed document read "3 × Deluxe twin ·
+   * 7 guests" over a figure that bought one — and the total was arithmetically
+   * correct for the lines listed, which is exactly what made it convincing.
+   * It was signed, emailed, and discovered at the counter in front of the
+   * customer.
+   *
+   * These cover the reading a line supports rather than the route, because the
+   * route needs a live offer in the store and the invariant is about the shape:
+   * a line covers what it covers, and a basket covers the sum of its lines.
+   */
+  type Line = { rooms: number; roomsCovered?: number; sell: number };
+
+  /** What the quote view computes to decide whether to warn the agent. */
+  function coverage(items: Line[]): { wanted: number; quoted: number; short: boolean } {
+    const wanted = Math.max(...items.map((i) => i.rooms ?? 1), 1);
+    const quoted = items.reduce((sum, i) => sum + (i.roomsCovered ?? 1), 0);
+    return { wanted, quoted, short: items.length > 0 && quoted < wanted };
+  }
+
+  it("flags a three-room enquiry quoted from a single per-room rate", () => {
+    const result = coverage([{ rooms: 3, roomsCovered: 1, sell: 307 }]);
+    expect(result).toEqual({ wanted: 3, quoted: 1, short: true });
+  });
+
+  it("clears once there is a line for every room", () => {
+    const result = coverage([
+      { rooms: 3, roomsCovered: 1, sell: 307 },
+      { rooms: 3, roomsCovered: 1, sell: 307 },
+      { rooms: 3, roomsCovered: 1, sell: 412 },
+    ]);
+    expect(result).toEqual({ wanted: 3, quoted: 3, short: false });
+  });
+
+  it("clears for one line that genuinely covers the party", () => {
+    // TourMind and the simulated source price all three rooms at once.
+    expect(coverage([{ rooms: 3, roomsCovered: 3, sell: 921 }]).short).toBe(false);
+  });
+
+  it("reads a stored line with no coverage recorded as covering one room", () => {
+    /*
+     * Quotes saved before the field existed. Falling back to `rooms` would
+     * restate the original assumption and silently re-approve the under-quote;
+     * falling back to one warns on a document that may be fine, which is the
+     * error worth making.
+     */
+    expect(coverage([{ rooms: 3, sell: 307 }]).short).toBe(true);
+    expect(coverage([{ rooms: 1, sell: 307 }]).short).toBe(false);
+  });
+
+  it("totals the lines and not the rooms they claim", () => {
+    // The money was never the broken half — three lines at 307 is 921, and a
+    // single line at 307 is 307 however many rooms its label mentioned.
+    const items: Line[] = [
+      { rooms: 3, roomsCovered: 1, sell: 307 },
+      { rooms: 3, roomsCovered: 1, sell: 307 },
+      { rooms: 3, roomsCovered: 1, sell: 307 },
+    ];
+    expect(items.reduce((sum, i) => sum + i.sell, 0)).toBe(921);
+  });
+});

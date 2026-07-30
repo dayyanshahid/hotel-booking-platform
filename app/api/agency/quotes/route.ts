@@ -112,7 +112,10 @@ export async function POST(req: Request) {
       // it carries the words rather than "BB".
       boardLabel: localized(BOARD_CATALOG[offer.board]?.label, locale) || offer.board,
       rooms: offer.intent.rooms.length,
-      guests: offer.intent.rooms.reduce((sum, r) => sum + r.adults + r.childrenAges.length, 0),
+      // What the money buys, from the price that was quoted — never assumed
+      // equal to what the search asked for.
+      roomsCovered: Math.max(1, offer.price.roomsCovered ?? 1),
+      guests: offer.price.guests,
       cost: view.cost,
       /*
        * The agency's standing markup, unless this quote says otherwise.

@@ -376,8 +376,22 @@ export interface AgencyQuoteItem {
   nights: number;
   roomName: string;
   boardLabel: string;
+  /** Rooms the search this came from asked for — context, not what is priced. */
   rooms: number;
   guests: number;
+  /**
+   * Rooms this line's money actually buys.
+   *
+   * The line used to record `rooms` from the search and price one room, so a
+   * quote sent to a customer read "3 rooms, 7 guests — $307" over a figure that
+   * bought one room. That is the same defect as the results page had, except
+   * written down, signed and emailed: the agent found out at the counter, in
+   * front of the customer, having already been agreed.
+   *
+   * A line covers what it covers. Three rooms is three lines, which is what the
+   * basket has always been able to hold.
+   */
+  roomsCovered: number;
   cost: number;
   sell: number;
   currency: string;

@@ -3,8 +3,52 @@
 import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Modal, cx } from "@/components/ui";
-import { formatDeadline, formatMoney } from "@/lib/format";
+import { formatDeadline, formatMoney, isPerRoomTotal, partyEstimate } from "@/lib/format";
 import type { CancellationPolicy, PriceStack as PriceStackType } from "@/lib/types";
+
+/**
+ * Says so when a total buys one room and the search asked for several.
+ *
+ * Hotelbeds prices a rate per room; a three-room search of the same property
+ * returned the same figure as a one-room search, and every surface printed it as
+ * the price. An agent quoting a group under-quoted it by two thirds and found
+ * out at the counter.
+ *
+ * The per-room figure stays primary because it is the one the supplier stands
+ * behind and the one a rate can actually be bought at. The party number sits
+ * underneath as an estimate with its condition stated — a rate with two left
+ * cannot fill three rooms, so presenting the multiple as firm would swap one
+ * wrong number for another.
+ *
+ * Renders nothing at all on a single-room search, which is most of them.
+ */
+export function PerRoomNote({
+  price,
+  className,
+  showEstimate = true,
+}: {
+  price: PriceStackType;
+  className?: string;
+  showEstimate?: boolean;
+}) {
+  const { t, locale } = useApp();
+  if (!isPerRoomTotal(price)) return null;
+
+  const rooms = price.roomsRequested;
+  return (
+    <span className={cx("block", className)}>
+      <span className="text-caution-700 block text-xs font-medium">{t("rate.perRoomOf", { rooms })}</span>
+      {showEstimate && (
+        <span className="text-muted block text-xs">
+          {t("rate.partyEstimate", {
+            amount: formatMoney(partyEstimate(price), price.currency, locale),
+            rooms,
+          })}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * Total price is the default (§3.1). The complete stay total is primary, the
@@ -47,6 +91,9 @@ export function PriceBlock({
       <p className="text-muted text-xs">
         {t("rate.nightlyAverage", { amount: formatMoney(price.nightlyAverage, price.currency, locale) })}
       </p>
+      {/* Directly under the total it qualifies — a caveat further down the card
+          is one an agent reads after they have already said the number. */}
+      <PerRoomNote price={price} className="mt-1" />
       {payAtProperty > 0 && (
         <p className="text-caution-700 mt-1 text-xs font-medium">
           + {formatMoney(payAtProperty, price.currency, locale)} {t("rate.payAtProperty")}

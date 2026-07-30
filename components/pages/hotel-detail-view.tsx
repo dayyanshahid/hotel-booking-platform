@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { RoomBlock } from "@/components/commerce/rate-card";
-import { PriceBlock } from "@/components/commerce/price";
+import { PerRoomNote, PriceBlock } from "@/components/commerce/price";
 import {
   Accordion,
   Alert,
@@ -586,6 +586,7 @@ export function HotelDetailView({
               <p className="text-muted truncate text-xs">
                 {t("rate.totalFor", { nights: lowest.price.nights, guests: lowest.price.guests })}
               </p>
+              <PerRoomNote price={lowest.price} showEstimate={false} />
             </>
           ) : (
             <p className="text-muted text-xs">{t("common.loading")}</p>

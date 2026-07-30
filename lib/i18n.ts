@@ -254,7 +254,12 @@ const en: Dict = {
   "results.saveHotel": "Save hotel",
   "results.savedHotel": "Saved",
 
-  "filters.price": "Total price for stay",
+  // The facet range is built per room, because that is the only denominator
+  // every supplier's total reduces to. On a one-room search it is the same
+  // number as the stay total; on a three-room search it is not, and a legend
+  // reading "total price for stay" over a per-room range is the mismatch that
+  // put a party total outside its own filter's maximum.
+  "filters.price": "Price per room, for the stay",
   "filters.stars": "Property class",
   "filters.rating": "Guest rating",
   "filters.neighborhood": "Area",
@@ -323,6 +328,9 @@ const en: Dict = {
   "rate.estimated": "estimated",
   "rate.totalFor": "Total for {nights} nights, {guests} guests",
   "rate.nightlyAverage": "{amount} average per night",
+  "rate.perRoom": "Per room",
+  "rate.perRoomOf": "Per room — your search needs {rooms}",
+  "rate.partyEstimate": "About {amount} for {rooms} rooms, if all {rooms} are free at this rate",
   "rate.conditions": "Rate conditions",
   "rate.conditionsFull": "Full conditions from the property",
   "rate.mandatory": "You must accept this condition to book.",
@@ -1093,6 +1101,9 @@ const en: Dict = {
   "agency.preparedFor": "Prepared for",
   "agency.validUntil": "Valid until",
   "agency.quoteFooter": "Prices are held until the date shown and are subject to availability at the time of booking.",
+  "agency.basketCovers": "covers {covered} of {wanted} rooms",
+  "agency.quoteShortRooms": "This quote does not cover every room",
+  "agency.quoteShortRoomsBody": "The lines add up to {quoted} of the {wanted} rooms searched, because a supplier prices a rate per room. Add a line for each remaining room before sending this — the total below is correct for what is listed, which is what makes it easy to send short.",
   "agency.markAccepted": "Mark accepted",
   "agency.markDeclined": "Mark declined",
   "agency.quoteStatus.open": "Open",
@@ -1423,7 +1434,7 @@ const ar: Dict = {
   "results.saveHotel": "احفظ الفندق",
   "results.savedHotel": "محفوظ",
 
-  "filters.price": "إجمالي سعر الإقامة",
+  "filters.price": "السعر للغرفة الواحدة، لكامل الإقامة",
   "filters.stars": "تصنيف العقار",
   "filters.rating": "تقييم النزلاء",
   "filters.neighborhood": "المنطقة",
@@ -1492,6 +1503,9 @@ const ar: Dict = {
   "rate.estimated": "تقديري",
   "rate.totalFor": "الإجمالي لـ {nights} ليالٍ، {guests} ضيوف",
   "rate.nightlyAverage": "{amount} متوسط الليلة",
+  "rate.perRoom": "للغرفة الواحدة",
+  "rate.perRoomOf": "للغرفة الواحدة — بحثك يحتاج {rooms} غرف",
+  "rate.partyEstimate": "نحو {amount} لـ {rooms} غرف، إذا توفّرت كلها بهذا السعر",
   "rate.conditions": "شروط السعر",
   "rate.conditionsFull": "الشروط الكاملة من العقار",
   "rate.mandatory": "يجب قبول هذا الشرط لإتمام الحجز.",
@@ -2262,6 +2276,9 @@ const ar: Dict = {
   "agency.preparedFor": "مُعد لـ",
   "agency.validUntil": "صالح حتى",
   "agency.quoteFooter": "الأسعار محجوزة حتى التاريخ المذكور وتخضع للتوافر عند الحجز.",
+  "agency.basketCovers": "تغطي {covered} من {wanted} غرف",
+  "agency.quoteShortRooms": "هذا العرض لا يغطي كل الغرف",
+  "agency.quoteShortRoomsBody": "البنود تغطي {quoted} من {wanted} غرف مطلوبة، لأن المورّد يسعّر الغرفة الواحدة. أضف بندًا لكل غرفة متبقية قبل الإرسال — الإجمالي أدناه صحيح لما هو مدرج، وهذا ما يجعل إرساله ناقصًا سهلًا.",
   "agency.markAccepted": "تعليم كمقبول",
   "agency.markDeclined": "تعليم كمرفوض",
   "agency.quoteStatus.open": "مفتوح",

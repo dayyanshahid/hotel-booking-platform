@@ -180,5 +180,11 @@ export function computePrice(input: PriceInput): PriceStack {
           : "Conversion is indicative and fixed at payment.",
     nights,
     guests,
+    // `netStaySar` is multiplied by `roomCount`, so this total buys the whole
+    // party. The simulated source and TourMind agree on that; Hotelbeds prices
+    // per room, which is why the two numbers have to be declared rather than
+    // assumed equal.
+    roomsCovered: roomCount,
+    roomsRequested: roomCount,
   };
 }

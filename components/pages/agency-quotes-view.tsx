@@ -149,6 +149,22 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const cost = quote.items.reduce((sum, item) => sum + item.cost, 0);
   const branding = brandingOf(context.agency);
 
+  /*
+   * Whether this quote actually houses the party it was built for.
+   *
+   * Each line buys `roomsCovered` rooms and the search wanted `rooms`, so a
+   * three-room enquiry quoted from a single per-room rate covers one third of it
+   * — and the document totals correctly, which is what made it convincing. The
+   * agent is told before they send it; the customer's copy is not marked up with
+   * our supply mechanics.
+   *
+   * Older stored quotes have no `roomsCovered`. They fall back to one rather
+   * than to `rooms`, because assuming full coverage is the bug itself.
+   */
+  const roomsWanted = Math.max(...quote.items.map((item) => item.rooms ?? 1), 1);
+  const roomsQuoted = quote.items.reduce((sum, item) => sum + (item.roomsCovered ?? 1), 0);
+  const shortRooms = quote.items.length > 0 && roomsQuoted < roomsWanted;
+
   return (
     <div className="space-y-4">
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
@@ -171,6 +187,15 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
           )}
         </div>
       </div>
+
+      {/* For the agent, before they send it — never on the printed copy. */}
+      {shortRooms && (
+        <div className="no-print">
+          <Alert tone="warning" title={t("agency.quoteShortRooms")}>
+            {t("agency.quoteShortRoomsBody", { quoted: roomsQuoted, wanted: roomsWanted })}
+          </Alert>
+        </div>
+      )}
 
       {/*
         The agent's own numbers, above the document rather than inside it. The
@@ -226,8 +251,14 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
                   {item.city} · {formatDate(item.checkIn, locale)} → {formatDate(item.checkOut, locale)} ·{" "}
                   {item.nights} {item.nights === 1 ? t("common.night") : t("common.nights")}
                 </p>
+                {/*
+                  The rooms this line buys, not the rooms the search wanted.
+                  It printed the latter over the former's price, so a customer
+                  agreed "3 × Deluxe twin" at the cost of one.
+                */}
                 <p className="text-muted wrap-anywhere">
-                  {item.rooms} × {item.roomName} · {item.boardLabel} · {item.guests} {t("common.guests")}
+                  {item.roomsCovered ?? 1} × {item.roomName} · {item.boardLabel} · {item.guests}{" "}
+                  {t("common.guests")}
                 </p>
                 <p className="text-muted text-xs">{item.cancellation}</p>
               </div>

@@ -169,3 +169,43 @@ export function distanceLabel(km: number, locale: Locale): string {
   if (km < 1) return `${formatNumber(Math.round(km * 1000), locale)} m`;
   return `${formatNumber(Math.round(km * 10) / 10, locale)} km`;
 }
+
+/**
+ * The figure two rates from different suppliers can be ranked against.
+ *
+ * Hotelbeds prices a rate per room; TourMind and the simulated source price the
+ * whole party. Sorting on `total` therefore compared one room against three and
+ * put every Hotelbeds property at the cheap end of a group search — the ranking
+ * was reliably wrong, in one supplier's favour, and nothing on the page said so.
+ *
+ * Per room is the common denominator both can be reduced to without inventing a
+ * number. Multiplying the other way would mean quoting three rooms at a rate
+ * that may only have one left.
+ */
+export function comparableTotal(price: { total: number; roomsCovered?: number }): number {
+  return price.total / Math.max(1, price.roomsCovered ?? 1);
+}
+
+/** True when a total buys fewer rooms than the search asked for. */
+export function isPerRoomTotal(price: { roomsCovered?: number; roomsRequested?: number }): boolean {
+  return (price.roomsRequested ?? 1) > (price.roomsCovered ?? 1);
+}
+
+/**
+ * What the whole party would cost at this rate — an estimate, and labelled as
+ * one wherever it is shown.
+ *
+ * It is arithmetic on a price the supplier quoted for fewer rooms, so it is
+ * exactly as true as the assumption that the remaining rooms are available at
+ * the same rate. Often they are; a rate with two left cannot fill three rooms,
+ * and the last room of an allocation is routinely the expensive one. So this
+ * never appears as *the* price — only beside the per-room total that is real,
+ * with the condition attached.
+ */
+export function partyEstimate(price: {
+  total: number;
+  roomsCovered?: number;
+  roomsRequested?: number;
+}): number {
+  return Math.round(comparableTotal(price) * Math.max(1, price.roomsRequested ?? 1));
+}
