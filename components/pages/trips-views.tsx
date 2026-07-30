@@ -269,13 +269,14 @@ export function BookingDetailView({
   const { t, track, account, toast } = useApp();
   const api = useApi();
   const [booking, setBooking] = useState<Booking | null>(null);
+  const [hotelConfirmation, setHotelConfirmation] = useState<string | undefined>();
   const [error, setError] = useState<ApiError | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
 
   const contact = email || account?.email || "";
 
   const load = useCallback(async () => {
-    const res = await api<{ booking: Booking }>(
+    const res = await api<{ booking: Booking; hotelConfirmationNumber?: string }>(
       `/api/bookings/${reference}?email=${encodeURIComponent(contact)}`,
     );
     if (!res.ok) {
@@ -283,6 +284,9 @@ export function BookingDetailView({
       return;
     }
     setBooking(res.data.booking);
+    // Kept once seen. A later load with the supplier unreachable must not strip
+    // the number off a voucher the guest is about to present at the desk.
+    if (res.data.hotelConfirmationNumber) setHotelConfirmation(res.data.hotelConfirmationNumber);
   }, [api, reference, contact]);
 
   useEffect(() => {
@@ -329,7 +333,11 @@ export function BookingDetailView({
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-5">
           {booking.status !== "failed" && booking.status !== "cancelled" && (
-            <BookingVoucher booking={booking} locale={locale} />
+            <BookingVoucher
+              booking={booking}
+              locale={locale}
+              hotelConfirmationNumber={hotelConfirmation}
+            />
           )}
 
           {booking.refund && booking.refund.status !== "none" && (

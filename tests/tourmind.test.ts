@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeTourmind } from "@/lib/server/tourmind/normalize";
 import { boardCodeFor, buildCancellation, buildPrice, remainingLabel } from "@/lib/server/tourmind/adapter";
 import { TM_MEAL_TO_BOARD } from "@/lib/server/tourmind/types";
 import { cityFor, distanceKm } from "@/lib/server/tourmind/catalogue";
@@ -440,5 +441,77 @@ describe("only what the suppliers publish", () => {
     for (const key of ["price", "stars", "board", "refundable", "amenities"]) {
       expect(LIVE_SUPPLY_FILTERS).toContain(key);
     }
+  });
+});
+
+describe("a TourMind rate can actually be bought", () => {
+  /** One property with a few rates, in the shape a search hands to the adapter. */
+  const roomType = (room: string, price: number, meal: string, refundable: boolean) => ({
+    RoomTypeCode: room,
+    Name: room,
+    RateInfos: [
+      {
+        RateCode: `${room}-${price}-${meal}-${refundable}`,
+        TotalPrice: price,
+        CurrencyCode: "CNY",
+        Refundable: refundable,
+        MealInfo: { MealType: meal },
+      },
+    ],
+  });
+
+  function result() {
+    const record = recordFrom(staticList.HotelStaticListResult.Hotels[0])!;
+    return {
+      slug: tourmindSlug(record.hotelId),
+      record,
+      offers: collapse(
+        {
+          HotelCode: String(record.hotelId),
+          RoomTypes: [
+            roomType("Superior Twin", 700, "1", true),
+            roomType("Deluxe King", 900, "2", false),
+          ],
+        },
+        intent,
+      ),
+    };
+  }
+
+  /*
+   * Found by trying to book one through the app rather than through a script.
+   *
+   * Every rate shown on a results page has to be resolvable at checkout, and
+   * only two things ever wrote one down: the seeded catalogue and Hotelbeds.
+   * TourMind rates were searched, ranked, priced and displayed, and then the
+   * checkout endpoint answered "this option changed or sold out" — every time,
+   * for every rate, from one of the two suppliers the business sells. The
+   * supplier was healthy and the search was correct; the rate simply never
+   * reached the store, so nothing could resolve it.
+   *
+   * These assert the two links that were missing, at the point they broke.
+   */
+  it("hands back a booking context for every offer it renders", () => {
+    const adapted = normalizeTourmind(result(), intent, "en");
+    expect(adapted.offers.length).toBeGreaterThan(0);
+    for (const offer of adapted.offers) {
+      const binding = adapted.contexts.get(offer.offerId);
+      // Without a binding the offer is unbuyable, however good it looks.
+      expect(binding, `offer ${offer.offerId} has no booking context`).toBeDefined();
+      expect(binding!.rateCode).toBeTruthy();
+      expect(binding!.hotelCode).toBeTruthy();
+      expect(binding!.net).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps the supplier's rate code off the offer the browser receives", () => {
+    // The binding exists so the rate code does not have to travel; that is only
+    // true if the offer itself carries none of it (§9.4).
+    const adapted = normalizeTourmind(result(), intent, "en");
+    const serialised = JSON.stringify(adapted.offers);
+    for (const binding of adapted.contexts.values()) {
+      expect(serialised).not.toContain(binding.rateCode);
+    }
+    expect(serialised.toLowerCase()).not.toContain("tourmind");
   });
 });

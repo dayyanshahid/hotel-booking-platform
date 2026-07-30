@@ -124,6 +124,32 @@ export async function POST(req: Request) {
   if (!body.consents?.terms || !body.consents?.cancellation) {
     fields.consents = locale === "ar" ? "يجب قبول الشروط وسياسة الإلغاء." : "Booking terms and the cancellation policy must be accepted.";
   }
+
+  /*
+   * Never more names than the rooms were priced for.
+   *
+   * `guests` means everyone *except* the lead, who is sent separately. Both of
+   * our clients build it that way and neither says so anywhere, so a caller
+   * that also includes the lead ends up with one occupant more than the
+   * allocation — the voucher prints the lead twice, and the extra name is sent
+   * to the supplier, where an over-occupied room is either refused or accepted
+   * and discovered by the guest at the desk.
+   *
+   * Only the upper bound is enforced. Fewer names is a real and legitimate
+   * case: a booking is often made before everyone travelling is known, and the
+   * lead alone is enough for both suppliers. More names than beds is never
+   * anything but a mistake, and it is not recoverable after the order is sent.
+   */
+  const bedsPriced = session.rooms.reduce(
+    (sum, room) => sum + room.adults + room.childrenAges.length,
+    0,
+  );
+  if (1 + (body.guests?.length ?? 0) > bedsPriced) {
+    fields.guests =
+      locale === "ar"
+        ? `عدد الأسماء أكثر من الغرف المحجوزة: الحد الأقصى ${bedsPriced} بما في ذلك الضيف الرئيسي.`
+        : `More names than the rooms were booked for — at most ${bedsPriced}, including the lead guest.`;
+  }
   if (Object.keys(fields).length) {
     return fail("validation", "error.validation", locale, { status: 422, fields });
   }

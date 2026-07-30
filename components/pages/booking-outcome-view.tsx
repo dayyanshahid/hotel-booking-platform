@@ -27,6 +27,7 @@ export function BookingOutcomeView({
   const [booking, setBooking] = useState<Booking | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [polling, setPolling] = useState(false);
+  const [hotelConfirmation, setHotelConfirmation] = useState<string | undefined>();
   const [creatingAccount, setCreatingAccount] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<() => Promise<void>>(async () => {});
@@ -37,13 +38,19 @@ export function BookingOutcomeView({
    * to pay again.
    */
   const poll = useCallback(async () => {
-    const res = await api<{ booking: Booking; polling: boolean }>(`/api/bookings/${reference}/status`);
+    const res = await api<{ booking: Booking; polling: boolean; hotelConfirmationNumber?: string }>(
+      `/api/bookings/${reference}/status`,
+    );
     if (!res.ok) {
       setError(res.error);
       return;
     }
     setBooking(res.data.booking);
     setPolling(res.data.polling);
+    // Only ever set, never cleared: the supplier can be unreachable on a later
+    // poll, and a number that vanished off a printed voucher is worse than one
+    // that arrived a few seconds late.
+    if (res.data.hotelConfirmationNumber) setHotelConfirmation(res.data.hotelConfirmationNumber);
     if (res.data.polling) {
       timerRef.current = setTimeout(() => void pollRef.current(), res.data.booking.reconciliation?.nextCheckMs ?? 4000);
     } else if (res.data.booking.status === "confirmed") {
@@ -165,7 +172,13 @@ export function BookingOutcomeView({
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="space-y-5">
-          {!failed && <BookingVoucher booking={booking} locale={locale} />}
+          {!failed && (
+            <BookingVoucher
+              booking={booking}
+              locale={locale}
+              hotelConfirmationNumber={hotelConfirmation}
+            />
+          )}
 
           <Card className="p-4">
             <SectionHeading title={t("bookingDetail.guests")} />

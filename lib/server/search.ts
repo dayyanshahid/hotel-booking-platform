@@ -21,6 +21,7 @@ import { addDays, nightsBetween } from "../format";
 import { createTranslator } from "../i18n";
 import { buildResultCard, normalizeHotel, scoreSupply, type NormalizedHotel } from "./normalize";
 import { fetchFromSources } from "./suppliers";
+import { rememberOffer } from "./store";
 import { primeMarkup } from "./platform";
 import { isHotelbedsEnabled } from "./hotelbeds/config";
 import {
@@ -289,7 +290,52 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
         const hotels = results
           .map((result) => normalizeTourmind(result, effectiveIntent, locale))
           .filter((adapted) => adapted.offers.length)
-          .map((adapted) => ({ ...adapted, sourceCount: 1 }));
+          .map((adapted) => {
+            /*
+             * Remember every rate, exactly as the Hotelbeds path does.
+             *
+             * Without this a TourMind room could be searched, ranked and shown
+             * with a price, and then refused at checkout: the offer id on the
+             * card resolved to nothing in the store, so the session endpoint
+             * answered "this option changed or sold out" every single time. The
+             * supplier was fine and the search was fine — the rate was simply
+             * never written down, so nothing could be bought from one of the
+             * two suppliers we sell.
+             */
+            for (const offer of adapted.offers) {
+              const binding = adapted.contexts.get(offer.offerId);
+              if (!binding) continue;
+              const room = adapted.rooms.find((r) => r.canonicalRoomId === offer.canonicalRoomId);
+              rememberOffer(offer.offerId, {
+                offerId: offer.offerId,
+                hotelSlug: adapted.hotel.slug,
+                roomKey: room?.canonicalRoomId ?? offer.canonicalRoomId,
+                canonicalRoomKey: offer.canonicalRoomId,
+                board: offer.board.code as never,
+                rateClass: offer.cancellation.refundable ? "flex" : "nrf",
+                sourceCode: "TM",
+                // Their CheckRoomRate is mandatory before an order, so every
+                // rate here has to be re-priced before it can be committed.
+                rateTypeInternal: "RECHECK",
+                conditionCodes: [],
+                memberRate: false,
+                guaranteeEligible: offer.capabilities.guaranteeEligible,
+                modifiable: offer.capabilities.modifyAllowed,
+                allotment: 0,
+                intent: effectiveIntent,
+                price: offer.price,
+                cancellation: offer.cancellation,
+                expiresAt: offer.expiresAt,
+                supplierRoomLabel: room?.name ?? offer.canonicalRoomId,
+                hotelName: adapted.hotel.name,
+                roomLabel: room?.name ?? offer.canonicalRoomId,
+                boardLabel: offer.board.label,
+                comments: offer.comments,
+                tourmind: binding,
+              });
+            }
+            return { ...adapted, sourceCount: 1 };
+          });
         return { status: "ok", hotels };
       } catch {
         // A live source failing degrades the page; it never empties it. The

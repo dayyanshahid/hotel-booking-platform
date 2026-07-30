@@ -63,7 +63,12 @@ export interface StoredOffer {
   canonicalRoomKey: string;
   board: BoardCode;
   rateClass: RateClass;
-  sourceCode: SourceCode | "HB";
+  /**
+   * Which shelf the rate came off: a seeded source, or one of the two live
+   * suppliers. `TM` was missing here, which was the type system correctly
+   * pointing out that TourMind rates were never being stored at all.
+   */
+  sourceCode: SourceCode | "HB" | "TM";
   rateTypeInternal: "BOOKABLE" | "RECHECK";
   conditionCodes: string[];
   memberRate: boolean;

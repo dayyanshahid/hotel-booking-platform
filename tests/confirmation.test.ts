@@ -8,6 +8,18 @@ import { describe, expect, it } from "vitest";
  * to see (§9.4), and a voucher is the one screen that leaves the building — so
  * the shape the front end receives is asserted here rather than trusted.
  */
+/** The whole of what a client may be told about a supplier's confirmation. */
+const permittedFields = [
+  "status",
+  "hotelConfirmationNumber",
+  "guests",
+  "rooms",
+  "checkIn",
+  "checkOut",
+  "bookedAt",
+  "unavailable",
+];
+
 describe("the confirmation contract", () => {
   it("carries no supplier identity, net rate or rate code", () => {
     /*
@@ -15,20 +27,39 @@ describe("the confirmation contract", () => {
      * the type permits, because a field that cannot be represented cannot be
      * leaked by a screen that renders it.
      */
-    const permitted = [
-      "status",
-      "hotelConfirmationNumber",
-      "guests",
-      "rooms",
-      "checkIn",
-      "checkOut",
-      "bookedAt",
-      "unavailable",
-    ];
     const forbidden = ["supplier", "source", "net", "rateKey", "rateCode", "reference", "totalNet"];
     for (const key of forbidden) {
-      expect(permitted).not.toContain(key);
+      expect(permittedFields).not.toContain(key);
     }
+  });
+
+  it("puts the property's own confirmation number within reach of a guest", () => {
+    /*
+     * The distinction the §9.4 rule turns on, and the one that was got wrong.
+     *
+     * The supplier's reference is theirs and stays internal. The property's
+     * confirmation number is the hotel's, and it is the only identifier the
+     * front desk recognises — withholding it from the guest while printing it
+     * on the agent's copy meant the person actually standing at reception at
+     * midnight had a reference the hotel had never seen.
+     */
+    expect(permittedFields).toContain("hotelConfirmationNumber");
+    expect(permittedFields).not.toContain("supplierReference");
+  });
+
+  it("omits the line entirely when the supplier has not got one yet", () => {
+    /*
+     * Their test environment returns an empty string routinely, and a real one
+     * does so until the property answers. Normalising it away means a caller
+     * can ask "is there one" rather than "is there one and is it non-empty" —
+     * and the voucher leaves the row out instead of printing a blank label a
+     * guest would read aloud as nothing.
+     */
+    const normalise = (raw: string | undefined) => raw?.trim() || undefined;
+    expect(normalise("")).toBeUndefined();
+    expect(normalise("   ")).toBeUndefined();
+    expect(normalise(undefined)).toBeUndefined();
+    expect(normalise(" ABC-123 ")).toBe("ABC-123");
   });
 });
 

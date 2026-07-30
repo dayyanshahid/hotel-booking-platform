@@ -8,10 +8,26 @@ import type { Booking, Locale } from "@/lib/types";
 /**
  * Mobile-friendly web voucher with a printable layout (§5.9).
  *
- * The customer-facing document carries the platform reference only — supplier
- * confirmation identifiers stay internal.
+ * Supplier identifiers stay internal: their reference, their net rate and their
+ * name are ours to reconcile with and none of a traveller's business (§9.4).
+ *
+ * The property's own confirmation number is a different thing and it belongs
+ * here. It used to be withheld under the same rule, which read as caution and
+ * was in fact the opposite: the trade voucher carried it, so an agent could
+ * quote it down the phone, while the guest actually standing at the desk at
+ * midnight had only a reference the hotel had never seen. It is printed
+ * whenever the supplier gives us one, and simply omitted when they do not,
+ * rather than shown as an empty label a guest would read out as nothing.
  */
-export function BookingVoucher({ booking, locale }: { booking: Booking; locale: Locale }) {
+export function BookingVoucher({
+  booking,
+  locale,
+  hotelConfirmationNumber,
+}: {
+  booking: Booking;
+  locale: Locale;
+  hotelConfirmationNumber?: string;
+}) {
   const { t } = useApp();
 
   return (
@@ -41,6 +57,13 @@ export function BookingVoucher({ booking, locale }: { booking: Booking; locale: 
             </Badge>
           </div>
         </div>
+
+        {hotelConfirmationNumber && (
+          <div className="bg-positive-50 mt-3 rounded-[var(--radius-control)] px-3 py-2">
+            <p className="text-muted text-xs">{t("agency.hotelConfirmation")}</p>
+            <p className="wrap-anywhere font-mono text-base font-bold">{hotelConfirmationNumber}</p>
+          </div>
+        )}
 
         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <div>

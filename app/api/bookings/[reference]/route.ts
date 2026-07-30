@@ -1,5 +1,6 @@
 import { fail, localeFrom, notFoundOrDemoState, ok } from "@/lib/server/api";
 import { getBooking } from "@/lib/server/store";
+import { fetchConfirmation } from "@/lib/server/confirmation";
 
 /**
  * GET /api/bookings/{reference} — full normalized booking record.
@@ -28,5 +29,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
     });
   }
 
-  return ok({ booking });
+  /*
+   * The property's own confirmation number rides along, for the same reason it
+   * is on the trade voucher: it is the one identifier a front desk recognises.
+   * Safe to include here because the caller has already proved the email on the
+   * booking. The supplier's own reference and net rate are not returned (§9.4).
+   */
+  const confirmation = await fetchConfirmation(reference);
+  return ok({ booking, hotelConfirmationNumber: confirmation.hotelConfirmationNumber });
 }

@@ -7,6 +7,7 @@ import { buildRequirements } from "@/lib/server/requirements";
 import { commentsFor } from "@/lib/server/normalize";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
 import { getOffer, getSession, saveSession } from "@/lib/server/store";
+import { countryForOffer } from "@/lib/agency/context";
 import type { CheckoutSession } from "@/lib/types";
 
 const TERMS_VERSION = "2026-07-01";
@@ -38,10 +39,19 @@ export async function POST(req: Request) {
   const seed = getHotelSeed(offer.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;
 
-  // Live-supply offers carry their own labels and country context; demo offers
-  // resolve theirs from the seed catalogue. Both produce the same session.
+  /*
+   * Live-supply offers carry their own labels; demo offers resolve theirs from
+   * the seed catalogue. Both produce the same session.
+   *
+   * The test here used to be `!offer.hotelbeds`, which excused one live
+   * supplier from needing a seeded hotel and left the other to fall through to
+   * a 404. A TourMind rate could be searched, ranked, priced and shown, and
+   * then refused the moment anyone tried to buy it — the checkout knew about
+   * exactly one of the two suppliers we sell.
+   */
+  const live = Boolean(offer.hotelbeds || offer.tourmind);
   const liveHotel = offer.hotelbeds ? await getHotelContent(offer.hotelbeds.hotelCode) : null;
-  if (!offer.hotelbeds && (!seed || !dest)) {
+  if (!live && (!seed || !dest)) {
     return fail("validation", "error.notFound", locale, { status: 404 });
   }
 
@@ -50,7 +60,16 @@ export async function POST(req: Request) {
     offer.hotelName ??
     liveHotel?.name?.content ??
     offer.hotelSlug;
-  const countryCode = seed ? dest!.countryCode : (liveHotel?.countryCode ?? "");
+  /*
+   * Which country the stay is in, for the requirement schema.
+   *
+   * Hotelbeds carries it on their content record. TourMind does not, but the
+   * offer's own intent does — both suppliers are searched by our geography, so
+   * the destination is ours either way. Without this a TourMind checkout asked
+   * for the wrong documents, or for none at all.
+   */
+  const countryCode =
+    (seed ? dest!.countryCode : liveHotel?.countryCode) || countryForOffer(offer) || "";
   const template = ROOM_TEMPLATES[offer.roomKey];
   const paymentTiming: CheckoutSession["paymentTiming"] = offer.rateClass === "nrf" ? "payNow" : "payLater";
 
@@ -75,7 +94,7 @@ export async function POST(req: Request) {
       countryCode,
       rooms: offer.intent.rooms,
       paymentTiming,
-      nationalityRequired: countryCode === "SA" && !offer.hotelbeds && (seed?.category ?? 0) >= 5,
+      nationalityRequired: countryCode === "SA" && !live && (seed?.category ?? 0) >= 5,
     }),
     capabilities: {
       recheckRequired: offer.rateTypeInternal === "RECHECK",

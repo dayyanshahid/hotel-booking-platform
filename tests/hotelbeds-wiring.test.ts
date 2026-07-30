@@ -328,6 +328,67 @@ describe("live booking wiring (§6.5)", () => {
     expect(result.error.category).toBe("availabilityChanged");
     expect(result.error.message).not.toMatch(/RATE NOT AVAILABLE|BOOKING_ERROR/);
   });
+
+  /*
+   * `guests` means everyone except the lead, who is sent separately. Both of
+   * our clients build it that way and neither says so anywhere, so the mistake
+   * is easy: include the lead again and the booking carries one occupant more
+   * than the room was priced for. The voucher then prints the lead twice, and
+   * the extra name goes to the supplier — an over-occupied room is either
+   * refused at the property or discovered by the guest at the desk, and by
+   * then the order exists.
+   *
+   * Caught here, where it is still a 422 and not a stay.
+   */
+  it("rejects a lead who is also listed among the guests", async () => {
+    const checkoutSessionId = await sessionForBooking();
+    calls = [];
+
+    const response = await bookingRoute(
+      req("/api/bookings", {
+        checkoutSessionId,
+        idempotencyKey: `idem_${Math.random()}`,
+        contact,
+        lead,
+        // The room is for two. Naming the lead here as well makes three.
+        guests: [
+          { roomIndex: 0, type: "adult", firstName: lead.firstName, surname: lead.surname },
+          { roomIndex: 0, type: "adult", firstName: "Bea", surname: "Traveller" },
+        ],
+        consents,
+        payment,
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    const body = await json<never>(response);
+    expect(body.ok).toBe(false);
+    // And nothing reached the supplier.
+    expect(calls.some((call) => call.url.endsWith("/bookings"))).toBe(false);
+  });
+
+  it("still allows a booking where only the lead is named", async () => {
+    /*
+     * The common case, and not an error: a stay is often booked before
+     * everyone travelling is known, and the lead alone is enough for both
+     * suppliers. Only the upper bound is enforced.
+     */
+    const checkoutSessionId = await sessionForBooking();
+    handler = () => ({ body: BOOKING_CONFIRMED });
+
+    const response = await bookingRoute(
+      req("/api/bookings", {
+        checkoutSessionId,
+        idempotencyKey: `idem_${Math.random()}`,
+        contact,
+        lead,
+        guests: [],
+        consents,
+        payment,
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
 });
 
 describe("live cancellation quote wiring (§6.6)", () => {
@@ -459,3 +520,4 @@ describe("content fetching is bounded, and never serial", () => {
     expect(peak).toBeGreaterThan(1);
   });
 });
+

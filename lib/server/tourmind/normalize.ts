@@ -1,5 +1,6 @@
 import { getDestination } from "@/lib/data/destinations";
 import { localized, BOARD_CATALOG } from "@/lib/data/catalog";
+import type { TourmindOfferBinding } from "../store";
 import type { TourmindHotelRecord } from "./catalogue";
 import { AMENITY_CATALOG } from "@/lib/data/catalog";
 import { sceneUrl } from "@/lib/illustration/scenes";
@@ -144,7 +145,20 @@ export function normalizeTourmind(
   result: TourmindResult,
   intent: SearchIntent,
   locale: Locale,
-): { hotel: CanonicalHotel; rooms: CanonicalRoom[]; offers: Offer[] } {
+): {
+  hotel: CanonicalHotel;
+  rooms: CanonicalRoom[];
+  offers: Offer[];
+  /**
+   * offerId → what booking this rate needs, server-side only.
+   *
+   * The same shape Hotelbeds' adapter returns, and for the same reason: the
+   * browser is handed an opaque offer id, and everything needed to buy the room
+   * — their rate code, the net, the currency — is looked up here rather than
+   * travelling through the client (§9.4).
+   */
+  contexts: Map<string, TourmindOfferBinding>;
+} {
   const { record, slug, offers: raw } = result;
   const destination = record.citySlug ? getDestination(record.citySlug) : undefined;
   const ar = locale === "ar";
@@ -241,8 +255,16 @@ export function normalizeTourmind(
     });
   }
 
+  const contexts = new Map<string, TourmindOfferBinding>();
+
   const offers: Offer[] = raw.map((offer, index) => {
     const board = BOARD_CATALOG[offer.boardCode];
+    contexts.set(`${slug}::o${index}`, {
+      rateCode: offer.rateCode,
+      hotelCode: offer.hotelCode,
+      net: offer.net,
+      supplierCurrency: offer.supplierCurrency,
+    });
     return {
       // Opaque and positional: the supplier's RateCode never leaves the server.
       offerId: `${slug}::o${index}`,
@@ -272,5 +294,5 @@ export function normalizeTourmind(
     };
   });
 
-  return { hotel, rooms, offers };
+  return { hotel, rooms, offers, contexts };
 }
