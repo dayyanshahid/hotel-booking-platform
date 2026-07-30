@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { may, type AgencyContext } from "@/components/agency/use-agency";
-import { TradePrices } from "@/components/agency/ui";
+import { RateQuantity, TradePrices } from "@/components/agency/ui";
 import { QuoteModal } from "@/components/agency/quote-modal";
 import { SearchBar } from "@/components/search/search-bar";
 import { RoomBlock } from "@/components/commerce/rate-card";
@@ -225,8 +225,33 @@ function HotelDetail({
   const heroImages = hotel.images.filter((i) => !i.roomId);
   const searchBack = `${href(locale, "/agency/search")}?${searchParamsFromIntent(intent).toString()}`;
 
-  function toggleBasket(offerId: string) {
-    setBasket((prev) => (prev.includes(offerId) ? prev.filter((id) => id !== offerId) : [...prev, offerId]));
+  /**
+   * A rate can fill more than one room, so the basket counts rather than toggles.
+   *
+   * Three rooms at the same rate is the ordinary group booking and it was the one
+   * thing the basket could not express: picking a rate a second time removed it.
+   * An agent had to find three *different* rates to book three rooms, which is
+   * not what they wanted and not what the party needed.
+   */
+  const roomsWanted = Math.max(1, intent.rooms.length);
+
+  function addToBasket(offerId: string) {
+    // Never past the party. The checkout refuses more rooms than the search
+    // asked for, so a stepper that went further would only teach the agent that
+    // the button lies.
+    setBasket((prev) => (prev.length >= roomsWanted ? prev : [...prev, offerId]));
+  }
+
+  function removeFromBasket(offerId: string) {
+    setBasket((prev) => {
+      const at = prev.lastIndexOf(offerId);
+      return at === -1 ? prev : [...prev.slice(0, at), ...prev.slice(at + 1)];
+    });
+  }
+
+  /** The one-click common case: this rate, for every room the search asked for. */
+  function fillBasketWith(offerId: string) {
+    setBasket(Array.from({ length: roomsWanted }, () => offerId));
   }
 
   return (
@@ -574,14 +599,14 @@ function HotelDetail({
                         </div>
                       ),
                     secondary: (offer) => (
-                      <Button
-                        size="md"
-                        variant={basket.includes(offer.offerId) ? "ghost" : "secondary"}
-                        onClick={() => toggleBasket(offer.offerId)}
-                      >
-                        {basket.includes(offer.offerId) && <Icon name="check" size={14} />}
-                        {basket.includes(offer.offerId) ? t("agency.inQuote") : t("agency.addToQuote")}
-                      </Button>
+                      <RateQuantity
+                        count={basket.filter((id) => id === offer.offerId).length}
+                        roomsWanted={roomsWanted}
+                        roomsHeld={basket.length}
+                        onAdd={() => addToBasket(offer.offerId)}
+                        onRemove={() => removeFromBasket(offer.offerId)}
+                        onFillAll={() => fillBasketWith(offer.offerId)}
+                      />
                     ),
                   }}
                 />

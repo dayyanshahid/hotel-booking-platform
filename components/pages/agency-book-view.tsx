@@ -71,6 +71,40 @@ function sumQuotes(quotes: AgencyOfferView[]): AgencyOfferView {
 }
 
 /**
+ * Rechecking a set: one call per distinct rate, and the least forgiving answer.
+ *
+ * CheckRate takes one rateKey per call, so a three-room set is up to three
+ * calls — but three rooms at the same rate is one rateKey and therefore one
+ * call, which is the ordinary group booking and the case worth not paying for
+ * three times. It also matters against a fifty-a-day evaluation key.
+ *
+ * Only the lead line used to be rechecked. The other two could have moved, sold
+ * out or changed their cancellation terms, and the agency's credit was committed
+ * against prices nobody had confirmed. The combined answer takes the worst of
+ * them: an agent who accepts is accepting for the whole set.
+ */
+const RECHECK_SEVERITY: Record<RecheckResult["outcome"], number> = {
+  unavailable: 4,
+  higher: 3,
+  policyChanged: 2,
+  lower: 1,
+  unchanged: 0,
+};
+
+function worstRecheck(results: RecheckResult[]): RecheckResult | null {
+  if (!results.length) return null;
+  const worst = results.reduce((a, b) =>
+    RECHECK_SEVERITY[b.outcome] > RECHECK_SEVERITY[a.outcome] ? b : a,
+  );
+  return {
+    ...worst,
+    // Any line needing a decision makes the set need one.
+    requiresAcceptance: results.some((result) => result.requiresAcceptance),
+    changeReasons: [...new Set(results.flatMap((result) => result.changeReasons))],
+  };
+}
+
+/**
  * The URL segment carries every rate being booked, comma separated.
  *
  * One room is one id and reads exactly as it always did. A set is
@@ -187,21 +221,23 @@ function TradeCheckout({
       // Ask the supplier whether the rate still stands, before the agent has
       // read a price out to anyone.
       setRechecking(true);
-      const refreshed = await fetch(apiUrl("/api/rates/recheck"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: apiCredentials(),
-        // Recheck addresses one rate. The lead line stands for the set here;
-        // rechecking each line independently is its own piece of work, and a
-        // set of identical rates moves together in practice.
-        body: JSON.stringify({
-          offerId: offerIdsFrom(offerId)[0],
-          checkoutSessionId: body.data.checkoutSessionId,
+      const sessionId = body.data.checkoutSessionId;
+      const distinct = [...new Set(offerIdsFrom(offerId))];
+      const refreshed = await Promise.all(
+        distinct.map(async (id) => {
+          const response = await fetch(apiUrl("/api/rates/recheck"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            credentials: apiCredentials(),
+            body: JSON.stringify({ offerId: id, checkoutSessionId: sessionId }),
+          });
+          const parsed = (await response.json()) as { ok: boolean; data?: RecheckResult };
+          return parsed.ok ? (parsed.data ?? null) : null;
         }),
-      });
-      const refreshedBody = (await refreshed.json()) as { ok: boolean; data?: RecheckResult };
+      );
       setRechecking(false);
-      if (refreshedBody.ok && refreshedBody.data) setRecheck(refreshedBody.data);
+      const combined = worstRecheck(refreshed.filter(Boolean) as RecheckResult[]);
+      if (combined) setRecheck(combined);
     })();
   }, [offerId]);
 
@@ -249,6 +285,25 @@ function TradeCheckout({
       setError(t("error.temporaryService"));
       return;
     }
+
+    /*
+     * The rest of the set, accepted too.
+     *
+     * Accepting the lead line and leaving the others un-committed would book two
+     * rooms at prices nobody agreed to. Distinct rates only, so a set of three
+     * identical rooms costs one more call rather than three.
+     */
+    const rest = [...new Set(offerIdsFrom(offerId))].slice(1);
+    await Promise.all(
+      rest.map((id) =>
+        fetch(apiUrl("/api/rates/recheck"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: apiCredentials(),
+          body: JSON.stringify({ offerId: id, checkoutSessionId: session.checkoutSessionId, accept: true }),
+        }),
+      ),
+    );
 
     const current = body.data.current;
     if (current) {

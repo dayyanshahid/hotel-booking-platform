@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Card, Skeleton, cx } from "@/components/ui";
+import { Button, Card, Skeleton, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, Locale } from "@/lib/types";
@@ -442,6 +442,87 @@ export function TradePrices({
             })}
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * How many rooms this rate is filling.
+ *
+ * The basket was a toggle, so three rooms at the same rate — the ordinary group
+ * booking — was the one thing it could not express: picking a rate a second time
+ * removed it. An agent had to find three *different* rates to book three rooms,
+ * which is neither what they wanted nor what the party needed.
+ *
+ * Unpicked, it reads as it always did. Picked, it becomes a count with a stepper,
+ * and while the basket is short of the party there is a one-click way to fill the
+ * rest with the same rate, which is what most groups are.
+ */
+export function RateQuantity({
+  count,
+  roomsWanted,
+  roomsHeld,
+  onAdd,
+  onRemove,
+  onFillAll,
+}: {
+  count: number;
+  /** Rooms the search asked for — the ceiling the checkout also enforces. */
+  roomsWanted: number;
+  /** Rooms already in the basket, across every rate. */
+  roomsHeld: number;
+  onAdd: () => void;
+  onRemove: () => void;
+  onFillAll: () => void;
+}) {
+  const { t } = useApp();
+  const full = roomsHeld >= roomsWanted;
+
+  if (count === 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="md" variant="secondary" onClick={onAdd} disabled={full}>
+          {t("agency.addToQuote")}
+        </Button>
+        {/* Only worth offering while it would actually do something. */}
+        {roomsWanted > 1 && roomsHeld === 0 && (
+          <Button size="sm" variant="quiet" onClick={onFillAll}>
+            {t("agency.useForAllRooms", { rooms: roomsWanted })}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hairline flex items-center gap-1 rounded-[var(--radius-pill)] border p-1">
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={t("agency.removeRoomAtRate")}
+          className="size-9 rounded-full text-lg leading-none"
+        >
+          −
+        </button>
+        <span aria-live="polite" className="min-w-14 text-center text-sm font-semibold">
+          {t("agency.roomsAtRate", { count })}
+        </span>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={full}
+          aria-label={t("agency.addRoomAtRate")}
+          className="size-9 rounded-full text-lg leading-none disabled:opacity-40"
+        >
+          +
+        </button>
+      </span>
+      {!full && roomsWanted > 1 && (
+        <Button size="sm" variant="quiet" onClick={onFillAll}>
+          {t("agency.useForAllRooms", { rooms: roomsWanted })}
+        </Button>
       )}
     </div>
   );

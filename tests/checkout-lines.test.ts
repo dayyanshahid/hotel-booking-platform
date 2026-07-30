@@ -145,3 +145,113 @@ describe("the set is held only until its first loss", () => {
     expect(mergeComments([withComment(), withComment(), other])).toHaveLength(1);
   });
 });
+
+describe("rechecking a set of rooms", () => {
+  /*
+   * CheckRate takes one rateKey per call, so a set is one call per *distinct*
+   * rate — three rooms at the same rate is one call, which is the ordinary group
+   * booking and the case worth not paying for three times against a fifty-a-day
+   * key.
+   *
+   * Only the lead line used to be rechecked. The other two could have moved,
+   * sold out, or changed their cancellation terms, and the agency's credit was
+   * committed against prices nobody had confirmed.
+   */
+  const SEVERITY = { unavailable: 4, higher: 3, policyChanged: 2, lower: 1, unchanged: 0 } as const;
+
+  type Outcome = keyof typeof SEVERITY;
+  interface Result {
+    outcome: Outcome;
+    requiresAcceptance: boolean;
+    changeReasons: string[];
+  }
+
+  function worst(results: Result[]): Result | null {
+    if (!results.length) return null;
+    const chosen = results.reduce((a, b) => (SEVERITY[b.outcome] > SEVERITY[a.outcome] ? b : a));
+    return {
+      ...chosen,
+      requiresAcceptance: results.some((result) => result.requiresAcceptance),
+      changeReasons: [...new Set(results.flatMap((result) => result.changeReasons))],
+    };
+  }
+
+  const ok: Result = { outcome: "unchanged", requiresAcceptance: false, changeReasons: [] };
+
+  it("reports the least forgiving answer in the set", () => {
+    const gone: Result = { outcome: "unavailable", requiresAcceptance: true, changeReasons: ["sold out"] };
+    expect(worst([ok, ok, gone])?.outcome).toBe("unavailable");
+    // Order must not matter: the worst is the worst wherever it sits.
+    expect(worst([gone, ok, ok])?.outcome).toBe("unavailable");
+  });
+
+  it("makes the whole set need a decision if any one room does", () => {
+    const dearer: Result = { outcome: "higher", requiresAcceptance: true, changeReasons: ["price rose"] };
+    const combined = worst([ok, dearer, ok]);
+    expect(combined?.requiresAcceptance).toBe(true);
+    // An agent accepting is accepting for every room, so they see why.
+    expect(combined?.changeReasons).toEqual(["price rose"]);
+  });
+
+  it("does not let a cheaper room hide a dearer one", () => {
+    // A drop on one line and a rise on another nets out to nothing on a total,
+    // which is exactly how a rise gets committed without anyone agreeing to it.
+    const cheaper: Result = { outcome: "lower", requiresAcceptance: false, changeReasons: [] };
+    const dearer: Result = { outcome: "higher", requiresAcceptance: true, changeReasons: ["price rose"] };
+    expect(worst([cheaper, dearer])?.outcome).toBe("higher");
+    expect(worst([cheaper, dearer])?.requiresAcceptance).toBe(true);
+  });
+
+  it("states each reason once, however many rooms carry it", () => {
+    const dearer: Result = { outcome: "higher", requiresAcceptance: true, changeReasons: ["price rose"] };
+    expect(worst([dearer, dearer, dearer])?.changeReasons).toEqual(["price rose"]);
+  });
+
+  it("says nothing when nothing answered", () => {
+    expect(worst([])).toBeNull();
+  });
+});
+
+describe("a rate can fill more than one room", () => {
+  /*
+   * The basket was a toggle, so picking a rate a second time removed it. Three
+   * rooms at the same rate — the ordinary group booking — was the one thing it
+   * could not express, and an agent had to hunt for three *different* rates to
+   * book three rooms.
+   */
+  function add(basket: string[], id: string, roomsWanted: number): string[] {
+    return basket.length >= roomsWanted ? basket : [...basket, id];
+  }
+  function remove(basket: string[], id: string): string[] {
+    const at = basket.lastIndexOf(id);
+    return at === -1 ? basket : [...basket.slice(0, at), ...basket.slice(at + 1)];
+  }
+  function fill(id: string, roomsWanted: number): string[] {
+    return Array.from({ length: roomsWanted }, () => id);
+  }
+
+  it("counts the same rate up instead of toggling it off", () => {
+    let basket: string[] = [];
+    basket = add(basket, "of_a", 3);
+    basket = add(basket, "of_a", 3);
+    expect(basket).toEqual(["of_a", "of_a"]);
+  });
+
+  it("stops at the rooms the search asked for", () => {
+    // The checkout refuses more rooms than were searched, so a stepper that went
+    // further would only teach the agent that the button lies.
+    let basket = fill("of_a", 3);
+    basket = add(basket, "of_b", 3);
+    expect(basket).toHaveLength(3);
+  });
+
+  it("removes one room rather than every room at that rate", () => {
+    const basket = remove(["of_a", "of_a", "of_b"], "of_a");
+    expect(basket).toEqual(["of_a", "of_b"]);
+  });
+
+  it("fills every room with one click, replacing whatever was there", () => {
+    expect(fill("of_a", 3)).toEqual(["of_a", "of_a", "of_a"]);
+    expect(fill("of_a", 1)).toEqual(["of_a"]);
+  });
+});
