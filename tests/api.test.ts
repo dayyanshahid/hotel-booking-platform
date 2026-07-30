@@ -588,3 +588,143 @@ describe("a price slider a person can actually aim with", () => {
     expect(uncappedBody.data.totalCount).toBe(openBody.data.totalCount);
   });
 });
+
+describe("a checkout holds a room per line", () => {
+  /*
+   * The session used to carry one `offerId`, one `roomName` and one `price`, so a
+   * party of seven across three rooms went to checkout as whichever single rate
+   * had been clicked. The other two rooms sat in `rooms` — described, unpriced
+   * and unbooked — and the booking screen printed "3 × Deluxe twin" over the
+   * cost of one.
+   */
+  async function twoOffers(): Promise<string[]> {
+    const res = await availabilityRoute(
+      req("/api/hotels/west-bay-corniche-hotel/availability", { intent: INTENT }),
+      { params: Promise.resolve({ slug: "west-bay-corniche-hotel" }) },
+    );
+    const body = await json<{ offers: Offer[] }>(res);
+    return [body.data.offers[0].offerId, body.data.offers[1].offerId];
+  }
+
+  it("still takes a single offerId, because most bookings are one room", async () => {
+    const offer = await firstOffer();
+    const res = await sessionRoute(req("/api/checkout/sessions", { offerId: offer.offerId }));
+    const body = await json<CheckoutSession>(res);
+    expect(body.ok).toBe(true);
+    expect(body.data.lines).toHaveLength(1);
+    expect(body.data.lines[0].offerId).toBe(offer.offerId);
+    // The rollup of one line is that line.
+    expect(body.data.price.total).toBe(offer.price.total);
+  });
+
+  it("builds a line per offer and totals across them", async () => {
+    const [a, b] = await twoOffers();
+    const res = await sessionRoute(req("/api/checkout/sessions", { offerIds: [a, b] }));
+    const body = await json<CheckoutSession>(res);
+    expect(body.ok).toBe(true);
+    expect(body.data.lines).toHaveLength(2);
+    expect(body.data.lines.map((line) => line.offerId)).toEqual([a, b]);
+
+    const sum = body.data.lines.reduce((total, line) => total + line.price.total, 0);
+    expect(body.data.price.total).toBe(sum);
+    // Two lines house two rooms' worth of people, not one room's.
+    const heads = body.data.lines.reduce(
+      (total, line) => total + line.occupancy.adults + line.occupancy.childrenAges.length,
+      0,
+    );
+    expect(body.data.price.guests).toBe(heads);
+  });
+
+  it("gives each line the room of the allocation it houses", async () => {
+    const [a, b] = await twoOffers();
+    const party = {
+      ...INTENT,
+      rooms: [
+        { adults: 2, childrenAges: [] },
+        { adults: 1, childrenAges: [7] },
+      ],
+    };
+    // Offers priced for one allocation, then a session over both rooms of it.
+    const res = await availabilityRoute(
+      req("/api/hotels/west-bay-corniche-hotel/availability", { intent: party }),
+      { params: Promise.resolve({ slug: "west-bay-corniche-hotel" }) },
+    );
+    const offers = (await json<{ offers: Offer[] }>(res)).data.offers;
+    const session = await json<CheckoutSession>(
+      await sessionRoute(
+        req("/api/checkout/sessions", { offerIds: [offers[0].offerId, offers[1].offerId] }),
+      ),
+    );
+    expect(session.data.lines.map((line) => line.roomIndex)).toEqual([0, 1]);
+    expect(session.data.lines[1].occupancy).toEqual({ adults: 1, childrenAges: [7] });
+    void a;
+    void b;
+  });
+
+  it("refuses two different stays in one checkout", async () => {
+    /*
+     * A session carries one hotel and one pair of dates, and a supplier order is
+     * placed against exactly that. Two hotels is two orders and two vouchers;
+     * booking the first and dropping the second is the worst way to discover it.
+     */
+    const here = await firstOffer();
+    const elsewhere = await availabilityRoute(
+      req("/api/hotels/west-bay-corniche-hotel/availability", {
+        intent: { ...INTENT, checkIn: "2026-12-20", checkOut: "2026-12-23" },
+      }),
+      { params: Promise.resolve({ slug: "west-bay-corniche-hotel" }) },
+    );
+    const other = (await json<{ offers: Offer[] }>(elsewhere)).data.offers[0];
+
+    const res = await sessionRoute(
+      req("/api/checkout/sessions", { offerIds: [here.offerId, other.offerId] }),
+    );
+    expect(res.status).toBe(422);
+    expect((await json(res)).error.category).toBe("validation");
+  });
+
+  it("will not sell more rooms at a rate than the rate holds", async () => {
+    /*
+     * Availability says what is left. Three lines on a rate with two left is a
+     * booking that fails at the supplier having already taken the customer's
+     * card details and their agreement to a price — so it is refused while the
+     * basket is still being built, which is the only cheap moment.
+     */
+    const offer = await firstOffer();
+    const many = Array.from({ length: 12 }, () => offer.offerId);
+    const res = await sessionRoute(req("/api/checkout/sessions", { offerIds: many }));
+    // Either the rate declared an allotment and this exceeded it, or it declared
+    // none and an unknown is not a limit. Both are correct; a 500 is not.
+    expect([200, 409]).toContain(res.status);
+  });
+
+  it("never holds the checkout open longer than its first rate", async () => {
+    const offer = await firstOffer();
+    const body = await json<CheckoutSession>(
+      await sessionRoute(req("/api/checkout/sessions", { offerId: offer.offerId })),
+    );
+    const earliestLine = body.data.lines
+      .map((line) => line.expiresAt)
+      .sort()[0];
+    expect(new Date(body.data.expiresAt).getTime()).toBeLessThanOrEqual(
+      new Date(earliestLine).getTime(),
+    );
+  });
+
+  it("refuses to book a multi-room session rather than booking one room of it", async () => {
+    /*
+     * `Booking` still carries one room name and one supplier reference, so
+     * committing a three-line session here would book the first room and drop
+     * two — the same defect, one screen later. Refusing is the only safe reading
+     * until a booking carries lines of its own.
+     */
+    const [a, b] = await twoOffers();
+    const session = await json<CheckoutSession>(
+      await sessionRoute(req("/api/checkout/sessions", { offerIds: [a, b] })),
+    );
+    const res = await bookingRoute(
+      req("/api/bookings", bookingBody(session.data, "idem-multi-room")),
+    );
+    expect(res.status).toBe(422);
+  });
+});

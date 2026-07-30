@@ -173,7 +173,8 @@ describe("live availability wiring", () => {
     const session = await json<CheckoutSession>(response);
     expect(session.ok).toBe(true);
     expect(session.data.hotelName).toBe("HOTEL PLAYA DE PALMA");
-    expect(session.data.roomName).toBe("DOUBLE STANDARD");
+    expect(session.data.lines).toHaveLength(1);
+    expect(session.data.lines[0].roomName).toBe("DOUBLE STANDARD");
     expect(session.data.capabilities.recheckRequired).toBe(true);
     expect(session.data.comments.length).toBeGreaterThan(0);
     expect(JSON.stringify(session.data)).not.toMatch(/rateKey|"RECHECK"/);

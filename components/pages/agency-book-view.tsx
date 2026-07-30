@@ -403,9 +403,17 @@ function TradeCheckout({
             <p className="text-muted text-sm">
               {formatDate(session.checkIn, locale)} → {formatDate(session.checkOut, locale)}
             </p>
-            <p className="text-muted text-sm wrap-anywhere">
-              {session.rooms.length} × {session.roomName} · {session.boardLabel}
-            </p>
+            {/*
+              One row per room actually being bought.
+              This read `{session.rooms.length} × {session.roomName}` — "3 ×
+              Deluxe twin" over a price that bought one, the same sentence the
+              quote printed and the same way an agent found out at the counter.
+            */}
+            {session.lines.map((line) => (
+              <p key={line.lineId} className="text-muted text-sm wrap-anywhere">
+                {line.roomName} · {line.boardLabel}
+              </p>
+            ))}
 
             <dl className="hairline space-y-1 border-t pt-3 text-sm">
               <div className="flex justify-between">

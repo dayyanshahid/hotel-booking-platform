@@ -177,7 +177,24 @@ export async function POST(req: Request) {
     });
   }
 
-  const offer = getOffer(session.offerId);
+  /*
+   * One line per booking, for now, and said out loud rather than assumed.
+   *
+   * The session can hold a room per line; `Booking` still carries one room name,
+   * one price and one supplier reference, so a three-line session committed here
+   * would book the first room and drop two — which is precisely the failure this
+   * work exists to remove, moved one screen later. Refusing is the only safe
+   * reading until a booking carries lines of its own.
+   *
+   * Nothing reaches this that a client can trigger by accident: the basket does
+   * not offer to book a multi-room set yet, and a single-room checkout is
+   * unaffected.
+   */
+  if (session.lines.length !== 1) {
+    return fail("validation", "checkout.oneRoomPerBooking", locale, { status: 422 });
+  }
+  const line = session.lines[0];
+  const offer = getOffer(line.offerId);
   const seed = getHotelSeed(session.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;
   const hotel = seed ? buildHotel(seed, locale) : null;
@@ -405,8 +422,8 @@ export async function POST(req: Request) {
     hotelCoordinates,
     checkIn: session.checkIn,
     checkOut: session.checkOut,
-    roomName: session.roomName,
-    boardLabel: session.boardLabel,
+    roomName: line.roomName,
+    boardLabel: line.boardLabel,
     rooms: session.rooms,
     guests: guestList(session.rooms, body),
     contact: {

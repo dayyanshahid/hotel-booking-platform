@@ -438,22 +438,73 @@ export interface RequirementField {
   group: "contact" | "lead" | "guest" | "billing" | "request";
 }
 
-export interface CheckoutSession {
-  checkoutSessionId: string;
+/**
+ * One room being bought, at one rate.
+ *
+ * A supplier prices a rate per room or per party depending on which supplier it
+ * is, so "the thing being bought" was never reliably one room — but the session
+ * held one `offerId`, one `roomName` and one `price`, which meant a party of
+ * seven across three rooms went to checkout as whichever single rate happened to
+ * be selected. The other two rooms were in `rooms`, described, unpriced and
+ * unbooked.
+ *
+ * A line is the unit that has a rate, a cancellation policy, an expiry and a
+ * supplier binding of its own. Three rooms is three lines.
+ */
+export interface SessionLine {
+  lineId: string;
   offerId: string;
-  hotelSlug: string;
-  hotelName: string;
+  /** Which entry of the session's allocation this line houses. */
+  roomIndex: number;
   roomName: string;
   boardLabel: string;
-  checkIn: string;
-  checkOut: string;
-  rooms: RoomAllocation[];
+  /** The occupancy this line sleeps — not the party. */
+  occupancy: RoomAllocation;
   price: PriceStack;
   cancellation: CancellationPolicy;
   paymentTiming: Offer["paymentTiming"];
   comments: RateComment[];
-  requirements: RequirementField[];
   capabilities: OfferCapabilities;
+  expiresAt: string;
+}
+
+export interface CheckoutSession {
+  checkoutSessionId: string;
+  hotelSlug: string;
+  hotelName: string;
+  checkIn: string;
+  checkOut: string;
+  /** The allocation searched for. `lines` is what is actually being bought. */
+  rooms: RoomAllocation[];
+  /**
+   * Every room in this checkout. Authoritative; never empty.
+   *
+   * The fields below it are rollups across these lines, and each rolls up in the
+   * direction that cannot overpromise — see the comments on each.
+   */
+  lines: SessionLine[];
+  /** The sum of every line. Guests and rooms describe the whole party. */
+  price: PriceStack;
+  /**
+   * The least forgiving line's policy, because this is what governs the booking
+   * as a unit. Three lines can have three deadlines, and one non-refundable line
+   * means the set cannot be cancelled freely — presenting the most generous of
+   * them as "the" policy is how a customer is told a booking is refundable when
+   * a third of it is not.
+   */
+  cancellation: CancellationPolicy;
+  /** `payNow` if any line demands it: the set settles on the strictest terms. */
+  paymentTiming: Offer["paymentTiming"];
+  /** Merged across lines, deduplicated — a condition stated once is enough. */
+  comments: RateComment[];
+  requirements: RequirementField[];
+  /**
+   * Conservative across lines: a capability holds only if every line has it, and
+   * `recheckRequired` is true if any single line needs one. A set that claims
+   * instant confirmation because two of three rates do is a set that fails.
+   */
+  capabilities: OfferCapabilities;
+  /** The earliest line's expiry. A set is only held as long as its first loss. */
   expiresAt: string;
   termsVersion: string;
   createdAt: string;

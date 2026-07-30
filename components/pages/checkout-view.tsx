@@ -149,7 +149,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
     setRechecking(true);
     const res = await api<RecheckResult>("/api/rates/recheck", {
       method: "POST",
-      body: JSON.stringify({ offerId: session.offerId, checkoutSessionId: session.checkoutSessionId }),
+      body: JSON.stringify({ offerId: session.lines[0].offerId, checkoutSessionId: session.checkoutSessionId }),
     });
     setRechecking(false);
     if (!res.ok) {
@@ -180,7 +180,7 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
     setRechecking(true);
     const res = await api<RecheckResult>("/api/rates/recheck", {
       method: "POST",
-      body: JSON.stringify({ offerId: session.offerId, checkoutSessionId: session.checkoutSessionId, accept: true }),
+      body: JSON.stringify({ offerId: session.lines[0].offerId, checkoutSessionId: session.checkoutSessionId, accept: true }),
     });
     setRechecking(false);
     if (!res.ok) return;
@@ -585,9 +585,13 @@ export function CheckoutView({ locale, sessionId }: { locale: Locale; sessionId:
           <Card className="p-4 lg:sticky lg:top-24">
             <p className="text-sm font-semibold">{t("checkout.orderSummary")}</p>
             <p className="mt-2 text-sm font-medium wrap-anywhere">{session.hotelName}</p>
-            <p className="text-muted text-sm wrap-anywhere">
-              {session.roomName} · {session.boardLabel}
-            </p>
+            {/* A room per line, because a set of three rooms described by one of
+                them is the defect this model replaced. */}
+            {session.lines.map((line) => (
+              <p key={line.lineId} className="text-muted text-sm wrap-anywhere">
+                {line.roomName} · {line.boardLabel}
+              </p>
+            ))}
             <p className="text-muted mt-1 text-sm">
               {formatDate(session.checkIn, locale)} → {formatDate(session.checkOut, locale)}
             </p>
