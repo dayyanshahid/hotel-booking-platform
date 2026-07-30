@@ -39,9 +39,13 @@ export function OccupancyPicker({
 
   const adults = rooms.reduce((s, r) => s + r.adults, 0);
   const children = rooms.reduce((s, r) => s + r.childrenAges.length, 0);
-  const summary = `${rooms.length} ${t("common.rooms")} · ${adults} ${t("common.adults")}${
-    children ? ` · ${children} ${t("common.children")}` : ""
-  }`;
+  // "1 Children" and "1 Rooms" is how a search bar tells an agent nobody
+  // proof-read it. Arabic has its own count rules, which `countLabel` owns.
+  const summary = [
+    `${rooms.length} ${rooms.length === 1 ? t("common.room") : t("common.rooms")}`,
+    `${adults} ${adults === 1 ? t("common.adult") : t("common.adults")}`,
+    ...(children ? [`${children} ${children === 1 ? t("common.child") : t("common.children")}`] : []),
+  ].join(" · ");
 
   function update(index: number, patch: Partial<RoomAllocation>) {
     onChange({
@@ -75,7 +79,20 @@ export function OccupancyPicker({
         <div
           role="dialog"
           aria-label={t("common.guests")}
-          className="surface hairline rise absolute inset-x-0 top-full z-30 mt-2 w-full rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-float)] sm:w-[420px]"
+          /*
+           * Anchored to the field's end once it has a width of its own.
+           *
+           * `inset-x-0` is right on a phone, where the panel is the width of the
+           * bar. On a desktop it pins the panel's start edge to a field that is
+           * the last one in the bar and then gives it 420px to grow into, so it
+           * ran sixty-four pixels past the right of a 1280 viewport: the plus
+           * buttons for adults and children were off-screen and the page scrolled
+           * sideways. An agent could open the picker and not add a guest.
+           *
+           * Logical properties, so RTL mirrors it rather than repeating the bug
+           * on the other side.
+           */
+          className="surface hairline rise absolute inset-x-0 top-full z-30 mt-2 w-full rounded-[var(--radius-card)] border p-4 shadow-[var(--shadow-float)] sm:start-auto sm:end-0 sm:w-[420px]"
         >
           <div className="max-h-[50vh] space-y-4 overflow-y-auto">
             {rooms.map((room, index) => (

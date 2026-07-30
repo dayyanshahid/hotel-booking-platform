@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import { beforeAll, describe, expect, it } from "vitest";
 import availabilityFixture from "./fixtures/hotelbeds-availability.json";
 import { signature, HotelbedsError } from "@/lib/server/hotelbeds/client";
@@ -323,5 +326,49 @@ describe("a facility is not a fact about the building", () => {
       (f as { timeTo?: string }).timeTo !== undefined;
 
     expect(facilities.filter((f) => !informational(f))).toHaveLength(1);
+  });
+});
+
+describe("the content that ships with the build", () => {
+  /*
+   * A deployment reads property content from `data-seed`, because `dataDir` is an
+   * empty `/tmp` on every cold start and content is the one thing this app cannot
+   * cheaply fetch again — it is a call per property against fifty a day.
+   *
+   * The seed is generated, gzipped and committed, which is exactly the shape of
+   * artefact that rots without anyone noticing: a truncated build, an empty
+   * bundle or a missing dictionary all look like a healthy repository and like a
+   * supplier that has gone quiet. So its contents are asserted rather than
+   * assumed. `npm run seed:build` rebuilds it.
+   */
+  const bundle = (() => {
+    try {
+      const packed = readFileSync(path.join(process.cwd(), "data-seed", "hotelbeds", "content.json.gz"));
+      return JSON.parse(gunzipSync(packed).toString("utf8")) as {
+        hotels?: Record<string, { code?: number; name?: { content?: string } }>;
+        types?: { facilities?: Record<string, string>; categories?: Record<string, string> };
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  it("is present, and holds named properties", () => {
+    expect(bundle).not.toBeNull();
+    const hotels = Object.values(bundle?.hotels ?? {});
+    expect(hotels.length).toBeGreaterThan(100);
+    // The adapter discards a record with no code or no name, so a seed full of
+    // them would pass a size check and contribute nothing.
+    for (const hotel of hotels) {
+      expect(typeof hotel.code).toBe("number");
+      expect(typeof hotel.name?.content).toBe("string");
+    }
+  });
+
+  it("carries the dictionaries that turn codes into labels", () => {
+    // Without these every amenity on a live property is dropped for having no
+    // label, and a five-star hotel renders with no category at all.
+    expect(Object.keys(bundle?.types?.facilities ?? {}).length).toBeGreaterThan(50);
+    expect(Object.keys(bundle?.types?.categories ?? {}).length).toBeGreaterThan(5);
   });
 });

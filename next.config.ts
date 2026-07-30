@@ -2,18 +2,23 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /**
-   * Ship the supplier catalogue with the functions that read it.
+   * Ship the supplier catalogues with the functions that read them.
    *
-   * The tracer follows `import`, and this is read at run time with
-   * `fs.readFile` on a path built from a city slug — so nothing in the build
-   * knows the files exist and none of them would be bundled. The failure would
-   * be quiet and total: the catalogue committed, present in the repository,
-   * missing from the deployment, and TourMind returning no supply while every
-   * log looks healthy.
+   * The tracer follows `import`, and these are read at run time with
+   * `fs.readFile` on paths built from a city slug or a hotel code — so nothing
+   * in the build knows the files exist and none of them would be bundled. The
+   * failure would be quiet and total: a catalogue committed, present in the
+   * repository, missing from the deployment, and a supplier returning no supply
+   * while every log looks healthy.
+   *
+   * Both seeds live here now. TourMind's is the city index, without which their
+   * availability call cannot be addressed at all; Hotelbeds' is property
+   * content, without which a cold instance pays a request per property out of an
+   * allowance of fifty a day and stops being able to search by the fourth.
    *
    * Matched against every route rather than the two that search today, because
    * the next thing to read a catalogue will not think to come back here, and
-   * 1.7 MB is cheap beside a supplier silently disappearing.
+   * 2.7 MB is cheap beside a supplier silently disappearing.
    */
   outputFileTracingIncludes: {
     "/**": ["./data-seed/**/*"],

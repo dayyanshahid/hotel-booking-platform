@@ -6,6 +6,7 @@ import { POST as bookingRoute } from "@/app/api/bookings/route";
 import { POST as quoteRoute } from "@/app/api/bookings/[reference]/cancellation-quotes/route";
 import { resetQuota } from "@/lib/server/hotelbeds/client";
 import { searchHotelbedsDestination } from "@/lib/server/hotelbeds/search";
+import { runSearch } from "@/lib/server/search";
 import { getOffer, getSupplierReference } from "@/lib/server/store";
 import { applyMarkup } from "@/lib/server/markup";
 import type { Booking, CheckoutSession, RecheckResult, SearchIntent } from "@/lib/types";
@@ -518,6 +519,133 @@ describe("content fetching is bounded, and never serial", () => {
     await search;
 
     expect(peak).toBeGreaterThan(1);
+  });
+});
+
+describe("content can never spend the searching allowance", () => {
+  /*
+   * The defect this covers is the one that emptied the trade portal.
+   *
+   * Content and availability drew on one undivided budget of fifty a day, and
+   * content costs a call per property. So a search of a city nobody had synced
+   * cost thirteen, four of them ended the allowance, and from then on every
+   * search in every city returned nothing — while the portal, which sells live
+   * supply only and has no catalogue to fall back on, said "no hotels match
+   * this search" and offered to try different dates.
+   *
+   * The rooms were there the whole time. We had spent the day's searches on
+   * photographs of them.
+   */
+  const QUOTA = 10;
+
+  beforeEach(() => {
+    process.env.HOTELBEDS_DAILY_QUOTA = String(QUOTA);
+    // Six of ten reserved, so content may spend four.
+    process.env.HOTELBEDS_AVAILABILITY_RESERVE = "6";
+    resetQuota();
+  });
+
+  afterEach(() => {
+    delete process.env.HOTELBEDS_DAILY_QUOTA;
+    delete process.env.HOTELBEDS_AVAILABILITY_RESERVE;
+  });
+
+  function uncachedAvailability(count: number) {
+    const template = (availabilityFixture as { hotels: { hotels: unknown[] } }).hotels.hotels[0];
+    return {
+      hotels: {
+        hotels: Array.from({ length: count }, (_, i) => ({
+          ...(template as Record<string, unknown>),
+          code: 800_000 + i,
+        })),
+      },
+    };
+  }
+
+  it("keeps searching after a day of browsing has used every content request", async () => {
+    let contentCalls = 0;
+    handler = (call) => {
+      if (call.url.includes("/hotel-content-api/")) {
+        contentCalls += 1;
+        return { body: { hotel: { code: 800_000, name: { content: "Named" } } } };
+      }
+      return { body: uncachedAvailability(8) };
+    };
+
+    // Four searches of uncached properties. Under the old single budget the
+    // first alone would have taken nine of ten.
+    for (let i = 0; i < 4; i += 1) {
+      const result = await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+      expect(result.status).toBe("ok");
+      expect(result.hotels).toHaveLength(8);
+    }
+
+    /*
+     * Content stopped at its own ceiling rather than at the key's.
+     *
+     * Three, not four: the reserve is what has to be left *unspent*, and the
+     * search's own availability call is spent first. Content gets what is above
+     * the floor after that, which is the point — the floor is never encroached
+     * on to buy a photograph.
+     */
+    expect(contentCalls).toBeGreaterThan(0);
+    expect(contentCalls).toBeLessThanOrEqual(QUOTA - 6);
+    // And the reserve is intact: four searches spent four of it, and the fifth
+    // — the one an agent with a customer on the phone is running — still works.
+    const after = await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+    expect(after.status).toBe("ok");
+    expect(after.hotels).toHaveLength(8);
+  });
+
+  it("tells a trade agent the supply failed, not that their dates did", async () => {
+    /*
+     * The screen this covers: 0 properties, a banner promising that "some
+     * options are still loading… more may appear", and underneath it "no hotels
+     * match this search — nothing available for those dates, try shifting them".
+     *
+     * Three statements, and only the count was true. Nothing was loading, the
+     * search matched fine, and the dates were never the problem — one supplier
+     * had gone quiet and the other holds nothing in this city. An agent acting
+     * on that page re-ran the search on different dates for a customer on the
+     * phone, which could not have worked however many times they tried it.
+     */
+    process.env.TOURMIND_USERNAME = "u";
+    process.env.TOURMIND_PASSWORD = "p";
+    process.env.TOURMIND_AGENT_CODE = "a";
+    handler = () => ({ status: 403, body: { error: { code: "LIMIT", message: "quota exceeded" } } });
+
+    try {
+      const response = await runSearch(
+        { ...intent, destinationId: "dest-singapore", destinationDisplay: "Singapore" },
+        { locale: "en", supply: "live" },
+      );
+
+      expect(response.totalCount).toBe(0);
+      // Asked two, lost one: the page is short, not broken.
+      expect(response.completeness).toBe("partial");
+      expect(response.sourcesUnavailable).toBeGreaterThan(0);
+      // It must not promise arrivals, and must not blame the search.
+      expect(response.completenessMessage).toMatch(/did not answer/i);
+      expect(response.completenessMessage).not.toMatch(/still loading|more may appear/i);
+      expect(response.completenessMessage).toMatch(/dates will not help/i);
+    } finally {
+      delete process.env.TOURMIND_USERNAME;
+      delete process.env.TOURMIND_PASSWORD;
+      delete process.env.TOURMIND_AGENT_CODE;
+    }
+  });
+
+  it("still reports a genuinely exhausted key as unavailable", async () => {
+    handler = () => ({ body: uncachedAvailability(1) });
+
+    // Spend the whole allowance on availability, which is allowed to.
+    for (let i = 0; i < QUOTA; i += 1) {
+      await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+    }
+
+    const result = await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+    expect(result.status).toBe("unavailable");
+    expect(result.reason).toBe("daily request budget reached");
   });
 });
 

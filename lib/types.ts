@@ -367,6 +367,19 @@ export interface SearchResponse {
   completeness: "complete" | "partial" | "empty" | "unconfigured";
   /** Customer-safe explanation when completeness !== complete. */
   completenessMessage?: string;
+  /**
+   * How many of the sources behind this page could not answer.
+   *
+   * Carried separately from `completeness` because a page can be `partial` and
+   * still have nothing on it, and those two facts together mean something
+   * neither says alone: the search was fine and the supply did not arrive.
+   * Without it, an empty `partial` page was rendered as "no hotels match this
+   * search — try shifting the dates", which is advice for a different problem
+   * and cannot work on this one. No source is named: which of our suppliers was
+   * down is not the agent's business (§9.4), and the number is enough to know
+   * the page is short through no fault of the search.
+   */
+  sourcesUnavailable?: number;
   page: number;
   pageSize: number;
   fetchedAt: string;

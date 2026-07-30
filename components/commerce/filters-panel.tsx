@@ -86,7 +86,13 @@ export function FiltersPanel({
 
   return (
     <div className="space-y-6">
-      {shows("price") && (
+      {/*
+        A range needs two different ends to be a range. With nothing to price,
+        the facet collapses to zero and this rendered "$0 – $0" over a slider
+        that could not move — a control offering to narrow a set that is already
+        empty, on the one screen where the reason matters and is stated above.
+      */}
+      {shows("price") && facets.priceRange.max > facets.priceRange.min && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.price")}</legend>
         <div className="mt-2">

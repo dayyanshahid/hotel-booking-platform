@@ -187,7 +187,9 @@ export function SearchResultsView({
 
       <ActiveFilterChips filters={filters} onChange={applyFilters} />
 
-      {data?.completeness === "partial" && (
+      {/* A qualification on a page, not a substitute for one — the zero-result
+          state carries the same explanation at full length. */}
+      {data?.completeness === "partial" && data.totalCount > 0 && (
         <Alert tone="warning" title={t("results.partial")}>
           {data.completenessMessage}
         </Alert>

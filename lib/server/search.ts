@@ -426,6 +426,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
     totalCount: sorted.length,
     facets,
     completeness,
+    sourcesUnavailable: totalFailed,
     completenessMessage: unconfigured
       ? locale === "ar"
         ? "لا يوجد مورّد متصل بهذه البيئة، لذلك لا توجد أسعار لعرضها. تواصل مع مشغّل المنصة."
@@ -435,9 +436,24 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
           ? "تعذّر الوصول إلى مصادر الفنادق. بحثك محفوظ ويمكنك إعادة المحاولة."
           : "We could not reach our hotel sources. Your search is saved — try again in a moment."
         : totalFailed > 0
-          ? locale === "ar"
-            ? "بعض الخيارات لا تزال قيد التحميل. الأسعار المعروضة حية وقد تُضاف خيارات أخرى."
-            : "Some options are still loading. Prices shown are live and more may appear."
+          ? /*
+             * A finished search, short one source.
+             *
+             * This used to read "some options are still loading… more may
+             * appear", which was a promise nothing in the system was going to
+             * keep: the sources had all returned and nothing further was on its
+             * way. On a page that also had nothing on it, an agent was told to
+             * wait for options that were never coming and then, underneath, to
+             * try different dates. Both were wrong, and the second one had them
+             * re-running a search that could not have worked.
+             */
+            sorted.length === 0
+            ? locale === "ar"
+              ? "بحثك وصلنا، لكن أحد مصادر التوريد لم يستجب، فلا توجد أسعار لعرضها. تغيير التواريخ لن يفيد — أعد المحاولة بعد قليل."
+              : "Your search reached us, but one of our supply sources did not answer, so there is nothing to price. Changing the dates will not help — try again shortly."
+            : locale === "ar"
+              ? "أحد مصادر التوريد لم يستجب، لذلك هذه الصفحة لا تعرض كل الخيارات المتاحة. الأسعار المعروضة حية."
+              : "One of our supply sources did not answer, so this page is missing some of what is available. The prices shown are live."
           : undefined,
     page,
     pageSize,

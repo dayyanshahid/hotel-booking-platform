@@ -56,6 +56,19 @@ interface QuotaState {
   used: number;
 }
 
+/**
+ * What a request is for, as far as the day's allowance is concerned.
+ *
+ * The two are not worth the same. An availability call is the only reason a
+ * property can be sold at all; a content call is its photograph and its
+ * description. They were drawing on one undivided budget, and because content
+ * costs a call per property a single search of a city nobody had synced spent
+ * thirteen of fifty — so four searches ended the day and the trade portal, which
+ * sells live supply only, had nothing left to show for any city. Rooms were
+ * available the whole time. We had spent the allowance on pictures of them.
+ */
+export type RequestPurpose = "availability" | "content";
+
 declare global {
   var __hotelbedsQuota: QuotaState | undefined;
   var __hotelbedsAvailabilityPath: string | undefined;
@@ -82,28 +95,42 @@ function today(): string {
  * when the shared store is unreachable — degrading to a stricter budget rather
  * than to none.
  */
-async function consumeQuota(config: HotelbedsConfig): Promise<void> {
+async function consumeQuota(config: HotelbedsConfig, purpose: RequestPurpose): Promise<void> {
   const state = (globalThis.__hotelbedsQuota ??= { day: today(), used: 0 });
   if (state.day !== today()) {
     state.day = today();
     state.used = 0;
   }
 
+  /**
+   * The ceiling this particular request has to clear.
+   *
+   * Availability may spend the whole allowance. Content may spend only what
+   * sits above the reserve, so that however much photography a day of browsing
+   * wants, there is always a known number of searches left in the key. Content
+   * refused here is not a failure: the property still appears, priced and
+   * bookable, with the name and stars availability itself carries.
+   */
+  const ceiling =
+    purpose === "content" ? Math.max(0, config.dailyQuota - config.availabilityReserve) : config.dailyQuota;
+
   const refuse = (used: number) => {
     throw new HotelbedsError(
       "quotaExceeded",
-      `Daily request budget of ${config.dailyQuota} reached (${used} used); not calling the supplier again today.`,
+      purpose === "content"
+        ? `Content budget of ${ceiling} reached (${used} used); the remaining ${config.availabilityReserve} requests are reserved for availability.`
+        : `Daily request budget of ${config.dailyQuota} reached (${used} used); not calling the supplier again today.`,
       { retryable: false },
     );
   };
 
-  if (state.used >= config.dailyQuota) refuse(state.used);
+  if (state.used >= ceiling) refuse(state.used);
   state.used += 1;
 
   // Two days of life, so a counter written just before midnight is not the one
   // read just after it while the day in the key has already rolled over.
   const shared = await bumpSharedCounter(`hotelbeds:${today()}`, 48 * 60 * 60);
-  if (shared !== null && shared > config.dailyQuota) refuse(shared);
+  if (shared !== null && shared > ceiling) refuse(shared);
 }
 
 /**
@@ -117,11 +144,23 @@ export function resetQuota(): void {
   globalThis.__hotelbedsQuota = { day: today(), used: 0 };
 }
 
-export function quotaStatus(): { used: number; remaining: number; day: string } {
+export function quotaStatus(): {
+  used: number;
+  remaining: number;
+  /** What content may still spend, which is everything above the reserve. */
+  contentRemaining: number;
+  day: string;
+} {
   const config = getHotelbedsConfig();
   const state = globalThis.__hotelbedsQuota ?? { day: today(), used: 0 };
   const used = state.day === today() ? state.used : 0;
-  return { used, remaining: Math.max(0, config.dailyQuota - used), day: today() };
+  const contentCeiling = Math.max(0, config.dailyQuota - config.availabilityReserve);
+  return {
+    used,
+    remaining: Math.max(0, config.dailyQuota - used),
+    contentRemaining: Math.max(0, contentCeiling - used),
+    day: today(),
+  };
 }
 
 /* -------------------------------------------------------------- signature */
@@ -170,8 +209,9 @@ interface RequestOptions {
   /** Booking-path calls get the longer timeout and are never retried. */
   kind?: "search" | "booking";
   query?: Record<string, string | number | boolean | undefined>;
-  /** Skips the quota counter for cached content reads that did not hit the network. */
   retries?: number;
+  /** Which half of the day's allowance this draws on. Defaults to availability. */
+  purpose?: RequestPurpose;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -192,7 +232,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   let lastError: HotelbedsError | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await consumeQuota(config);
+    await consumeQuota(config, options.purpose ?? "availability");
 
     const timestamp = Math.floor(Date.now() / 1000);
     const controller = new AbortController();
@@ -261,7 +301,7 @@ export const hotelbeds = {
   /** Content API call, e.g. content("/hotels", { query: {...} }). */
   content: <T>(path: string, options: RequestOptions = {}) => {
     const { contentApi } = getHotelbedsConfig();
-    return request<T>(`${contentApi}${path}`, options);
+    return request<T>(`${contentApi}${path}`, { purpose: "content", ...options });
   },
 
   /**

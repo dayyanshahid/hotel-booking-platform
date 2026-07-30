@@ -23,6 +23,15 @@ export interface HotelbedsConfig {
   language: string;
   /** Daily request budget. Evaluation keys allow 50 requests/day. */
   dailyQuota: number;
+  /**
+   * Requests inside `dailyQuota` that only availability may spend.
+   *
+   * Content is a call per property and availability returns up to fifty of
+   * them, so without a floor one search of an unsynced city can leave the key
+   * with nothing to search on. Whatever else happens in a day, this many
+   * searches remain possible.
+   */
+  availabilityReserve: number;
   /** Percentage added to the supplier's net rate to form the customer price. */
   markupPercent: number;
   /** Price tolerance sent with a booking, per the API's tolerance field. */
@@ -38,7 +47,21 @@ function num(value: string | undefined, fallback: number): number {
 }
 
 export function getHotelbedsConfig(): HotelbedsConfig {
+  const dailyQuota = num(process.env.HOTELBEDS_DAILY_QUOTA, 50);
+  /*
+   * Three fifths of the allowance, which on an evaluation key is thirty
+   * searches — enough that a day of demonstrating the portal cannot be ended
+   * by a day of browsing photographs. Clamped so a hand-set reserve can never
+   * exceed the quota it is carved out of and stop availability entirely.
+   */
+  const availabilityReserve = Math.min(
+    dailyQuota,
+    Math.max(0, num(process.env.HOTELBEDS_AVAILABILITY_RESERVE, Math.floor(dailyQuota * 0.6))),
+  );
+
   return {
+    dailyQuota,
+    availabilityReserve,
     apiKey: process.env.HOTELBEDS_API_KEY ?? "",
     secret: process.env.HOTELBEDS_SECRET ?? "",
     baseUrl: (process.env.HOTELBEDS_BASE_URL ?? "https://api.test.hotelbeds.com").replace(/\/$/, ""),
@@ -46,7 +69,6 @@ export function getHotelbedsConfig(): HotelbedsConfig {
     contentApi: process.env.HOTELBEDS_CONTENT_API ?? "/hotel-content-api/1.0",
     availabilityPath: process.env.HOTELBEDS_AVAILABILITY_PATH ?? "/hotels",
     language: process.env.HOTELBEDS_LANGUAGE ?? "ENG",
-    dailyQuota: num(process.env.HOTELBEDS_DAILY_QUOTA, 50),
     markupPercent: num(process.env.PLATFORM_MARKUP_PERCENT, 12),
     tolerancePercent: num(process.env.HOTELBEDS_TOLERANCE_PERCENT, 2),
     clientReference: process.env.HOTELBEDS_CLIENT_REFERENCE ?? "NAZIL",

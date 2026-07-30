@@ -355,7 +355,12 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         </>
       )}
 
-      {data?.completeness === "partial" && (
+      {/*
+        Only worth saying when there is a page to qualify. With nothing on the
+        screen the empty state below says the same thing at full length, and two
+        notices carrying one fact reads as two faults.
+      */}
+      {data?.completeness === "partial" && data.totalCount > 0 && (
         <Alert tone="warning" title={t("results.partial")}>
           {data.completenessMessage}
         </Alert>
@@ -585,33 +590,47 @@ function TradeZeroResults({
   const recovery = data.recovery;
 
   /*
-   * An empty page has two very different causes and the advice for them is
+   * An empty page has three very different causes and the advice for them is
    * opposite. Usually there is genuinely nothing for these dates, and the way
-   * out is to relax the search. But when no supplier is connected, relaxing
-   * anything is wasted effort — the agent could widen the occupancy and shift
-   * the dates all afternoon and still see this screen. So that case says what
-   * is actually wrong, and offers none of the suggestions that cannot help.
+   * out is to relax the search. When no supplier is connected, relaxing anything
+   * is wasted effort — the agent could widen the occupancy and shift the dates
+   * all afternoon and still see this screen. And when a source was asked but
+   * could not answer, the search itself was fine and the only useful thing to do
+   * is run it again; every date suggestion below would have been priced off
+   * supply that never arrived.
+   *
+   * So only the first case gets the suggestions, because it is the only one they
+   * can help. Telling an agent with a customer on the phone to try different
+   * dates, when the dates were never the problem, costs them the call.
    */
   const unconfigured = data.completeness === "unconfigured";
+  const sourcesDown = !unconfigured && (data.sourcesUnavailable ?? 0) > 0;
+  const searchable = !unconfigured && !sourcesDown;
 
   return (
     <div className="space-y-4">
       <EmptyState
         art={<NoResultsArt />}
-        title={unconfigured ? t("results.noSupplier") : t("results.empty")}
+        title={
+          unconfigured
+            ? t("results.noSupplier")
+            : sourcesDown
+              ? t("results.sourcesDown")
+              : t("results.empty")
+        }
         body={
           unconfigured
             ? (data.completenessMessage ?? t("results.noSupplierBody"))
-            : t("agency.noResultsBody")
+            : sourcesDown
+              ? (data.completenessMessage ?? t("results.sourcesDownBody"))
+              : t("agency.noResultsBody")
         }
         actions={
-          unconfigured ? undefined : (
-            <Button onClick={onClearFilters}>{t("results.relaxFilters")}</Button>
-          )
+          searchable ? <Button onClick={onClearFilters}>{t("results.relaxFilters")}</Button> : undefined
         }
       />
 
-      {!unconfigured && recovery && recovery.nearbyDates.length > 0 && (
+      {searchable && recovery && recovery.nearbyDates.length > 0 && (
         <section>
           <SectionHeading title={t("results.nearbyDates")} />
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -634,7 +653,7 @@ function TradeZeroResults({
         </section>
       )}
 
-      {!unconfigured && recovery && recovery.nearbyDestinations.length > 0 && (
+      {searchable && recovery && recovery.nearbyDestinations.length > 0 && (
         <section>
           <SectionHeading title={t("results.nearbyAreas")} />
           <ul className="grid gap-3 sm:grid-cols-3">

@@ -1,6 +1,7 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, readFileSync } from "node:fs";
 import path from "node:path";
-import { dataDir } from "../runtime";
+import { gunzipSync } from "node:zlib";
+import { dataDir, seedDir } from "../runtime";
 import { hotelbeds } from "./client";
 import { getHotelbedsConfig, isHotelbedsEnabled } from "./config";
 import {
@@ -68,6 +69,59 @@ async function readJson<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
+/* ------------------------------------------------------------- shipped seed */
+
+/**
+ * The content that ships with the build.
+ *
+ * `dataDir` is `/tmp` on a serverless platform and a cold instance starts with
+ * nothing in it. Content is the one thing this app cannot cheaply fetch again:
+ * it is a call per property against an allowance of fifty a day, so an empty
+ * cache turned every search of every city into thirteen requests and the key
+ * was spent by the fourth. Four searches, and then a trade portal that sells
+ * live supply only had nothing to sell — in any city, for the rest of the day.
+ *
+ * So a trimmed, gzipped copy of the synced cache is committed and read whenever
+ * the writable cache does not hold a property. It carries only the fields the
+ * adapter reads, which is what makes sixty-seven megabytes of supplier detail
+ * into something small enough to belong in a repository.
+ *
+ * It is a seed and not a cache: anything a sync has written to `dataDir` is the
+ * fresher of the two and wins. `npm run hotelbeds:seed` rebuilds it.
+ */
+interface ContentSeed {
+  hotels: Record<string, HbContentHotel>;
+  index?: ContentIndex;
+  types?: TypeDictionaries;
+  destinations?: HbDestination[];
+}
+
+const SEED_FILE = path.join(seedDir(), "hotelbeds", "content.json.gz");
+
+declare global {
+  var __hbContentSeed: ContentSeed | null | undefined;
+}
+
+/**
+ * Read once per process, synchronously, and held.
+ *
+ * One decompression of a few megabytes on the first search of an instance,
+ * against a network call per property on every search forever. A missing or
+ * corrupt seed is not an error — it is a deployment that has not built one, and
+ * the live fetch path still works.
+ */
+function contentSeed(): ContentSeed | null {
+  if (globalThis.__hbContentSeed !== undefined) return globalThis.__hbContentSeed;
+  try {
+    const packed = readFileSync(SEED_FILE);
+    const parsed = JSON.parse(gunzipSync(packed).toString("utf8")) as ContentSeed;
+    globalThis.__hbContentSeed = parsed?.hotels ? parsed : null;
+  } catch {
+    globalThis.__hbContentSeed = null;
+  }
+  return globalThis.__hbContentSeed;
+}
+
 async function writeJson(file: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, JSON.stringify(value, null, 2), "utf8");
@@ -87,17 +141,20 @@ export function slugify(name: string, code: number): string {
 /* ------------------------------------------------------------- cache reads */
 
 export async function getIndex(): Promise<ContentIndex> {
-  memory.index ??= await readJson<ContentIndex>(INDEX_FILE, EMPTY_INDEX);
+  memory.index ??= await readJson<ContentIndex>(INDEX_FILE, contentSeed()?.index ?? EMPTY_INDEX);
   return memory.index;
 }
 
 export async function getTypes(): Promise<TypeDictionaries> {
-  memory.types ??= await readJson<TypeDictionaries>(TYPES_FILE, EMPTY_TYPES);
+  memory.types ??= await readJson<TypeDictionaries>(TYPES_FILE, contentSeed()?.types ?? EMPTY_TYPES);
   return memory.types;
 }
 
 export async function getCachedDestinations(): Promise<HbDestination[]> {
-  memory.destinations ??= await readJson<HbDestination[]>(DESTINATIONS_FILE, []);
+  memory.destinations ??= await readJson<HbDestination[]>(
+    DESTINATIONS_FILE,
+    contentSeed()?.destinations ?? [],
+  );
   return memory.destinations;
 }
 
@@ -126,6 +183,14 @@ async function cachedContent(code: number): Promise<HbContentHotel | null> {
   if (isContentShaped(fromDisk)) {
     memory.hotels.set(code, fromDisk);
     return fromDisk;
+  }
+
+  // Nothing synced on this instance. The copy that shipped with the build is
+  // the difference between a named property and a call we cannot afford.
+  const fromSeed = contentSeed()?.hotels[String(code)];
+  if (isContentShaped(fromSeed)) {
+    memory.hotels.set(code, fromSeed);
+    return fromSeed;
   }
   return null;
 }
@@ -200,6 +265,17 @@ const CONTENT_FETCH_BUDGET = (() => {
 export async function warmContent(codes: number[], limit = CONTENT_FETCH_BUDGET): Promise<number> {
   if (!isHotelbedsEnabled() || limit <= 0) return 0;
 
+  /*
+   * Never ask for more content than content is allowed to buy today.
+   *
+   * The budget below is per search; this is the day's. Asking for twelve when
+   * two remain does not get ten of them — it gets ten refusals from the guard,
+   * each of which still bumps the shared counter, which is how a search for
+   * photography came to cost the search allowance it was not spending.
+   */
+  const affordable = Math.min(limit, hotelbeds.quotaStatus().contentRemaining);
+  if (affordable <= 0) return 0;
+
   const seen = new Set<number>();
   const missing: number[] = [];
   for (const code of codes) {
@@ -207,7 +283,7 @@ export async function warmContent(codes: number[], limit = CONTENT_FETCH_BUDGET)
     seen.add(code);
     if (await cachedContent(code)) continue;
     missing.push(code);
-    if (missing.length >= limit) break;
+    if (missing.length >= affordable) break;
   }
 
   await Promise.all(missing.map((code) => getHotelContent(code).catch(() => null)));
