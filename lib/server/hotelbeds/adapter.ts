@@ -14,7 +14,7 @@ import type {
 } from "@/lib/types";
 import { addDays, convertCurrency, isSupportedCurrency, nightsBetween } from "@/lib/format";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
+import { BOARD_CATALOG, canonicalBoard, localized, titleCaseBoard } from "@/lib/data/catalog";
 import { applyMarkup } from "../markup";
 import { timezoneForCountry } from "../timezones";
 import { getHotelContent, getTypes, slugify, type TypeDictionaries } from "./content";
@@ -517,11 +517,15 @@ export async function adaptAvailability(
   hbHotel: HbHotel,
   intent: SearchIntent,
   locale: Locale,
+  options: { allowLiveContent?: boolean } = {},
 ): Promise<AdaptedHotel | null> {
   const code = hbHotel.code;
   if (!code) return null;
 
-  const [content, types] = await Promise.all([getHotelContent(code), getTypes()]);
+  const [content, types] = await Promise.all([
+    getHotelContent(code, { allowFetch: options.allowLiveContent }),
+    getTypes(),
+  ]);
   const canonical = content
     ? buildCanonicalHotelFromContent(content, types, locale)
     : minimalCanonicalHotel(hbHotel, locale);
@@ -547,7 +551,12 @@ export async function adaptAvailability(
       });
 
       const offerId = `of_hb_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
-      const boardCode = rate.boardCode ?? "RO";
+      /*
+       * Canonicalised here, at the edge, so nothing downstream ever sees a
+       * supplier code. Their GB and CB are both breakfast; leaving them
+       * distinct split the breakfast filter three ways across two suppliers.
+       */
+      const boardCode = canonicalBoard(rate.boardCode);
       const allotment = rate.allotment ?? 0;
 
       const offer: Offer = {
@@ -567,10 +576,12 @@ export async function adaptAvailability(
           code: boardCode,
           label:
             localized(BOARD_CATALOG[boardCode]?.label, locale) ||
-            types.boards[boardCode] ||
-            rate.boardName ||
-            boardCode,
-          detail: localized(BOARD_CATALOG[boardCode]?.detail, locale) || rate.boardName || "",
+            // Quietened, because a supplier's own name arrives in block
+            // capitals and would otherwise shout from the filter list.
+            titleCaseBoard(types.boards[boardCode] || rate.boardName || boardCode),
+          detail:
+            localized(BOARD_CATALOG[boardCode]?.detail, locale) ||
+            (rate.boardName ? titleCaseBoard(rate.boardName) : ""),
         },
         paymentTiming: rate.paymentType === "AT_WEB" ? "payNow" : "payLater",
         cancellation,

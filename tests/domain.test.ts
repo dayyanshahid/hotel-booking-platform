@@ -9,6 +9,7 @@ import { destinationFromPrice, hotelFromPrice } from "@/lib/server/from-price";
 import { formatMoney, nightsBetween } from "@/lib/format";
 import { intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import type { SearchIntent } from "@/lib/types";
+import { BOARD_CATALOG, canonicalBoard, localized, titleCaseBoard } from "@/lib/data/catalog";
 
 const intent: SearchIntent = {
   destinationId: "dest-riyadh",
@@ -350,5 +351,54 @@ describe("filters describe the property, not its cheapest rate", () => {
     // same board; only the code is stable across suppliers and languages.
     expect(propertyHas.board(offers, "BB")).toBe(true);
     expect(propertyHas.board(offers, "Breakfast included")).toBe(false);
+  });
+});
+
+describe("one board vocabulary, whichever supplier is selling", () => {
+  /*
+   * Found by reading the board facet of three live searches.
+   *
+   * Hotelbeds sends GB for English breakfast and CB for Continental, and both
+   * were arriving as facet values in their own right — so London offered
+   * "Breakfast included", "ENGLISH BREAKFAST" and "CONTINENTAL BREAKFAST" as
+   * three unrelated filters, in the supplier's block capitals, while TourMind's
+   * breakfast rates sat under the first of them. Someone filtering for
+   * breakfast was shown one supplier's breakfast and a third of the other's.
+   */
+  it("folds a supplier's breakfast spellings into one board", () => {
+    expect(canonicalBoard("GB")).toBe("BB");
+    expect(canonicalBoard("CB")).toBe("BB");
+    expect(canonicalBoard("bb")).toBe("BB");
+  });
+
+  it("does not fold boards that are genuinely different meals", () => {
+    /*
+     * The tempting shortcut is to call dinner "half board" and be done. Half
+     * board includes breakfast; a dinner-only rate does not, and the guest
+     * discovers the difference at breakfast. Each keeps its own entry.
+     */
+    expect(canonicalBoard("CE")).toBe("DI");
+    expect(canonicalBoard("CO")).toBe("LU");
+    expect(canonicalBoard("SC")).toBe("SC");
+
+    for (const code of ["DI", "LU", "SC", "RO", "BB", "HB", "FB", "AI"]) {
+      expect(BOARD_CATALOG[code], `${code} needs a name of our own`).toBeDefined();
+      expect(localized(BOARD_CATALOG[code].label, "ar")).toBeTruthy();
+    }
+    expect(canonicalBoard("HB")).not.toBe(canonicalBoard("DI"));
+  });
+
+  it("leaves an unknown board alone rather than misfiling it", () => {
+    // Guessing is worse than not knowing: a board mapped to the wrong meal is
+    // a promise to a guest that the property never made.
+    expect(canonicalBoard("ZZ")).toBe("ZZ");
+    expect(canonicalBoard(undefined)).toBe("RO");
+  });
+
+  it("stops a supplier's label from shouting on our filter list", () => {
+    expect(titleCaseBoard("DINNER INCLUDED")).toBe("Dinner included");
+    expect(titleCaseBoard("SELF CATERING")).toBe("Self catering");
+    // Already-quiet text is left as it is.
+    expect(titleCaseBoard("Room only")).toBe("Room only");
   });
 });

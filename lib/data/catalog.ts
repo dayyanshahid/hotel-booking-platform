@@ -71,7 +71,78 @@ export const BOARD_CATALOG: Record<string, { label: L; detail: L }> = {
       ar: "الوجبات ومشروبات محددة مشمولة حسب وصف العقار.",
     },
   },
+  /*
+   * The three below are real supply, not theory: they came out of live searches
+   * of Barcelona, London and Dubai. Each is given its own entry rather than
+   * being folded into a neighbour, because none of them is one.
+   */
+  SC: {
+    label: { en: "Self catering", ar: "إقامة مع مطبخ" },
+    detail: {
+      en: "No meals, but a kitchen or kitchenette to cook in.",
+      ar: "بدون وجبات، مع مطبخ أو ركن مطبخ للطهي.",
+    },
+  },
+  DI: {
+    // Dinner without breakfast: not half board, which includes breakfast, and
+    // an easy thing to get wrong in a way the guest discovers at breakfast.
+    label: { en: "Dinner included", ar: "العشاء مشمول" },
+    detail: {
+      en: "Dinner daily. Breakfast is not included unless the property says so.",
+      ar: "عشاء يومي. الإفطار غير مشمول ما لم يذكر العقار خلاف ذلك.",
+    },
+  },
+  LU: {
+    label: { en: "Lunch included", ar: "الغداء مشمول" },
+    detail: {
+      en: "Lunch daily. Other meals are not included.",
+      ar: "غداء يومي. الوجبات الأخرى غير مشمولة.",
+    },
+  },
 };
+
+/**
+ * Supplier board codes that mean a board we already have a name for.
+ *
+ * Found by reading the facets of live searches in three cities: Hotelbeds sends
+ * GB and CB for English and Continental breakfast, and both were arriving as
+ * facet values of their own. A guest filtering "Breakfast included" was
+ * therefore shown the properties whose breakfast the supplier had not qualified
+ * and none of the ones where it had — while TourMind, whose meal enum maps
+ * straight onto BB, appeared under the correct filter throughout. The same
+ * board split three ways depending on who was selling it.
+ *
+ * Only aliases where the meaning genuinely coincides. A board that is not the
+ * same thing gets its own entry below instead: telling someone dinner is
+ * breakfast to keep the list short is how a guest arrives to no breakfast.
+ */
+export const BOARD_ALIASES: Record<string, string> = {
+  GB: "BB",
+  CB: "BB",
+  CE: "DI",
+  CO: "LU",
+};
+
+/** The board this rate really is, whichever supplier described it. */
+export function canonicalBoard(code: string | undefined): string {
+  const upper = (code ?? "RO").toUpperCase();
+  return BOARD_ALIASES[upper] ?? upper;
+}
+
+/**
+ * A readable label for a board we have never seen.
+ *
+ * Suppliers send their own names in block capitals. Falling straight back to
+ * them put "DINNER INCLUDED" beside "Room only" in the filter list, shouting at
+ * a customer in a voice that is not ours. This is the safety net for the next
+ * unmapped code rather than a substitute for mapping it — the label is at least
+ * quiet, and the board is at least not misfiled as something it is not.
+ */
+export function titleCaseBoard(label: string): string {
+  return label
+    .toLocaleLowerCase("en")
+    .replace(/^\p{Ll}/u, (first) => first.toLocaleUpperCase("en"));
+}
 
 export const BED_CATALOG: Record<string, L> = {
   king: { en: "King bed", ar: "سرير كينج" },

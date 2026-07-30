@@ -132,6 +132,18 @@ export const TM = {
   cancel: "/v2/CancelOrder",
   retrieve: "/v2/SearchOrder",
   hotels: "/v2/HotelStaticList",
-  regions: "/v2/RegionList",
-  rooms: "/v2/RoomStaticList",
 } as const;
+
+/*
+ * `/v2/RegionList` and `/v2/RoomStaticList` were listed here and never called.
+ *
+ * A map of endpoints reads as a statement of what the integration does, and
+ * two entries nothing reaches say we consume more of their API than we do —
+ * which is the kind of thing that gets believed during an audit. Neither is
+ * needed: destinations resolve from our own geography, and hotel photography
+ * and descriptions already arrive on HotelStaticList.
+ *
+ * They are exercised by scripts/supplier-conformance.ts, which holds their
+ * paths and their request shapes, so switching one on later starts from a
+ * verified call rather than from their documentation.
+ */

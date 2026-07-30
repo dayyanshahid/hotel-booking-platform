@@ -3,7 +3,7 @@ import { hotelbeds, HotelbedsError } from "./client";
 import { isHotelbedsEnabled } from "./config";
 import { fold } from "../../text";
 import { getDestination } from "@/lib/data/destinations";
-import { getCachedDestinations, getHotelBySlug, getIndex, getTypes } from "./content";
+import { getCachedDestinations, getHotelBySlug, getIndex, getTypes, warmContent } from "./content";
 import { adaptAvailability, buildCanonicalHotelFromContent, type AdaptedHotel } from "./adapter";
 import type { HbAvailabilityResponse } from "./types";
 import { rememberOffer } from "../store";
@@ -77,8 +77,20 @@ async function runAvailability(
     const hbHotels = response.hotels?.hotels ?? [];
     const adapted: AdaptedHotel[] = [];
 
+    /*
+     * Warm a bounded number of uncached properties before adapting any of them.
+     *
+     * Adaptation used to fetch content inline, one hotel at a time, which made
+     * a page of fifty into fifty sequential detail calls: half a minute of
+     * waiting and an entire day's request allowance for a single search of a
+     * destination we had not seen before. Hoisting it means the fetches happen
+     * together and there are at most a page of them; the adaptation below then
+     * reads only what is cached and never touches the network.
+     */
+    await warmContent(hbHotels.map((hotel) => hotel.code ?? 0));
+
     for (const hbHotel of hbHotels) {
-      const result = await adaptAvailability(hbHotel, intent, locale);
+      const result = await adaptAvailability(hbHotel, intent, locale, { allowLiveContent: false });
       if (!result) continue;
 
       // Bind each offer to its rateKey, server-side only.

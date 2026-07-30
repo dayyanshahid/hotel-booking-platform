@@ -8,7 +8,7 @@ import type {
   SortKey,
   Suggestion,
 } from "../types";
-import { AMENITY_CATALOG, BOARD_CATALOG, PROPERTY_TYPES, localized } from "../data/catalog";
+import { AMENITY_CATALOG, BOARD_CATALOG, PROPERTY_TYPES, localized, titleCaseBoard } from "../data/catalog";
 import {
   bookableCountryList,
   destinationsInCountry,
@@ -490,7 +490,7 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
     boards: [...boardCount.entries()]
       .map(([code, c]) => ({
         code,
-        label: localized(BOARD_CATALOG[code]?.label, locale) || boardLabel.get(code) || code,
+        label: localized(BOARD_CATALOG[code]?.label, locale) || titleCaseBoard(boardLabel.get(code) || code),
         count: c,
       }))
       .sort((a, b) => b.count - a.count),

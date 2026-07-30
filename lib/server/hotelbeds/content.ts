@@ -117,7 +117,8 @@ function isContentShaped(value: unknown): value is ValidContentHotel {
   return typeof candidate.code === "number" && typeof candidate.name?.content === "string";
 }
 
-export async function getHotelContent(code: number): Promise<HbContentHotel | null> {
+/** Content already on this instance, without touching the network. */
+async function cachedContent(code: number): Promise<HbContentHotel | null> {
   const cached = memory.hotels.get(code);
   if (cached) return cached;
 
@@ -126,9 +127,29 @@ export async function getHotelContent(code: number): Promise<HbContentHotel | nu
     memory.hotels.set(code, fromDisk);
     return fromDisk;
   }
+  return null;
+}
 
-  // Last resort: a single detail call for a hotel that appeared in availability
-  // but is not in the cache yet. It is cached immediately so it costs once.
+/**
+ * Content for one hotel.
+ *
+ * `allowFetch: false` restricts it to what is already cached. A search passes
+ * that for most of its results — see `warmContent` — because the alternative is
+ * a detail call per hotel, and a page of fifty is fifty calls nobody budgeted
+ * for. Single-property paths leave it alone: fetching content for the one hotel
+ * a person is actually looking at is exactly what this is for.
+ */
+export async function getHotelContent(
+  code: number,
+  options: { allowFetch?: boolean } = {},
+): Promise<HbContentHotel | null> {
+  const cached = await cachedContent(code);
+  if (cached) return cached;
+
+  if (options.allowFetch === false) return null;
+
+  // A single detail call for a hotel that appeared in availability but is not
+  // in the cache yet. It is cached immediately so it costs once.
   if (!isHotelbedsEnabled()) return null;
   try {
     const { language } = getHotelbedsConfig();
@@ -142,6 +163,55 @@ export async function getHotelContent(code: number): Promise<HbContentHotel | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * How many uncached properties a single search will fetch content for.
+ *
+ * Availability returns up to fifty hotels and content is a call per hotel, so
+ * an unwarmed destination used to cost fifty-one requests and — because they
+ * ran one after another — half a minute of a person waiting. Measured on the
+ * test key: 32.8 seconds and the whole daily allowance for one search of
+ * Palma, against 0.9 seconds once the same hotels were cached.
+ *
+ * Twelve is a page. The properties beyond it still appear, priced and bookable,
+ * with the name, stars, location and zone that availability itself carries;
+ * they are missing photography and the long description until the cache
+ * catches up, which it does at twelve a search and in bulk from the sync
+ * script. Rates are never affected — those come from availability, not content.
+ */
+const CONTENT_FETCH_BUDGET = (() => {
+  const parsed = Number(process.env.HOTELBEDS_CONTENT_FETCH_BUDGET);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 12;
+})();
+
+/**
+ * Fetch content for the first few uncached hotels of a search, together.
+ *
+ * Order is the supplier's, which is their relevance order, so the budget is
+ * spent on the properties most likely to be looked at. Concurrent because these
+ * are independent reads and serialising them was the whole of the latency:
+ * twelve at once is one round trip, twelve in sequence is eight seconds.
+ *
+ * Failures are ignored on purpose. Content is presentation; a property with no
+ * description is worth showing, and a search that failed because a photograph
+ * could not be loaded is not.
+ */
+export async function warmContent(codes: number[], limit = CONTENT_FETCH_BUDGET): Promise<number> {
+  if (!isHotelbedsEnabled() || limit <= 0) return 0;
+
+  const seen = new Set<number>();
+  const missing: number[] = [];
+  for (const code of codes) {
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    if (await cachedContent(code)) continue;
+    missing.push(code);
+    if (missing.length >= limit) break;
+  }
+
+  await Promise.all(missing.map((code) => getHotelContent(code).catch(() => null)));
+  return missing.length;
 }
 
 export async function getHotelBySlug(slug: string): Promise<HbContentHotel | null> {

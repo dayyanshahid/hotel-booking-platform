@@ -22,6 +22,13 @@ import { getCachedDestinations, getHotelContent, getIndex } from "@/lib/server/h
 import { mapSupplierError } from "@/lib/server/hotelbeds/errors";
 import { getTourmindConfig, isTourmindEnabled } from "@/lib/server/tourmind/config";
 import { TM, tourmindPost } from "@/lib/server/tourmind/client";
+
+/*
+ * Two endpoints their API offers that the app does not use. They are kept
+ * under test so the request shapes stay known — both are surprising, and
+ * rediscovering them from the documentation cost an afternoon once already.
+ */
+const TM_UNUSED = { regions: "/v2/RegionList", rooms: "/v2/RoomStaticList" } as const;
 import {
   tourmindAvailability,
   tourmindBook,
@@ -308,7 +315,7 @@ async function tourmindCases(allowBooking: boolean): Promise<void> {
 
   await check("TourMind", "POST /v2/RegionList (declared, not used by the app)", async () => {
     const body = await tourmindPost<{ Error?: never; RegionListResult?: { Regions?: unknown[] } }>(
-      TM.regions,
+      TM_UNUSED.regions,
       { PageIndex: 1, PageSize: 5 },
       "catalogue",
     );
@@ -326,7 +333,7 @@ async function tourmindCases(allowBooking: boolean): Promise<void> {
     // rejected with "Invalid HotelCode", which is worth writing down because
     // the field is named HotelId everywhere else in their API.
     const body = await tourmindPost<{ Error?: never; RoomTypes?: unknown[] }>(
-      TM.rooms,
+      TM_UNUSED.rooms,
       { HotelCode: Number(hotel.hotelId), PageIndex: 1, PageSize: 20 },
       "catalogue",
     );

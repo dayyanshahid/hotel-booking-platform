@@ -370,3 +370,92 @@ describe("live cancellation quote wiring (§6.6)", () => {
     expect(quote.data.fee).toBe(applyMarkup(100).total);
   });
 });
+
+describe("content fetching is bounded, and never serial", () => {
+  /*
+   * Found by running a real search and watching the clock.
+   *
+   * Availability returns up to fifty hotels, and adaptation used to fetch the
+   * content for each one inline, in a loop. A destination whose properties were
+   * not cached therefore cost fifty-one requests and ran them one after another:
+   * measured against the test key, 32.8 seconds for one search of Palma, and
+   * the whole daily allowance gone. It was invisible in every existing test
+   * because the fixtures had already been through a warm cache.
+   *
+   * What the page needs is availability, which is one call. Content is
+   * photography and prose, and a property is worth showing without it.
+   */
+  const MANY = 40;
+
+  function availabilityWith(count: number) {
+    const template = (availabilityFixture as { hotels: { hotels: unknown[] } }).hotels.hotels[0];
+    return {
+      hotels: {
+        hotels: Array.from({ length: count }, (_, i) => ({
+          ...(template as Record<string, unknown>),
+          // Codes nothing has ever cached, so every one is a potential fetch.
+          code: 900_000 + i,
+          name: `UNCACHED HOTEL ${i}`,
+        })),
+      },
+    };
+  }
+
+  it("fetches content for at most a page of uncached hotels", async () => {
+    handler = (call) =>
+      call.url.includes("/hotel-content-api/")
+        ? { body: { hotel: { code: 900_000, name: { content: "Cached Later" } } } }
+        : { body: availabilityWith(MANY) };
+
+    const result = await searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+    expect(result.status).toBe("ok");
+    // Every hotel still reaches the page — the budget limits photography, not
+    // supply. A search that dropped rooms to save a request would be worse
+    // than the problem it solved.
+    expect(result.hotels).toHaveLength(MANY);
+
+    const contentCalls = calls.filter((call) => call.url.includes("/hotel-content-api/"));
+    expect(contentCalls.length).toBeLessThanOrEqual(12);
+    // And it is not zero: the first page of results keeps its pictures.
+    expect(contentCalls.length).toBeGreaterThan(0);
+  });
+
+  it("issues those fetches together rather than one after another", async () => {
+    // The request count alone would still pass if they ran in sequence, and
+    // sequence was half the defect. Each content call parks until released, so
+    // if adaptation awaited them one at a time this cannot reach the budget.
+    let inFlight = 0;
+    let peak = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: URL | string) => {
+        const url = String(input);
+        if (!url.includes("/hotel-content-api/")) {
+          return new Response(JSON.stringify(availabilityWith(MANY)), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await gate;
+        inFlight -= 1;
+        return new Response(JSON.stringify({ hotel: { code: 900_000, name: { content: "X" } } }), {
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const search = searchHotelbedsDestination({ code: "PMI" }, intent, "en");
+    // Let the warm phase get every fetch it intends to start into the air.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+    await search;
+
+    expect(peak).toBeGreaterThan(1);
+  });
+});
