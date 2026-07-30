@@ -329,7 +329,20 @@ export interface HotelResultCard {
 }
 
 export interface SearchFacets {
-  priceRange: { min: number; max: number };
+  /**
+   * Per-room price range, and where a slider should actually stop.
+   *
+   * `max` is the real ceiling, so a filter set to it excludes nothing. But one
+   * penthouse sets it: a Singapore search ran to $107,058 against a median near
+   * $80, which left every usable price inside the first pixel of the track and
+   * made the control decorative.
+   *
+   * `typicalMax` is the 95th percentile — the top of the range worth dragging
+   * through. A slider spans `min` to `typicalMax` and treats its last stop as
+   * "no maximum", which is why both numbers are needed: one bounds the control,
+   * the other keeps the control from hiding results.
+   */
+  priceRange: { min: number; max: number; typicalMax: number };
   categories: { value: number; count: number }[];
   neighborhoods: { value: string; count: number }[];
   amenities: { code: string; label: string; count: number }[];

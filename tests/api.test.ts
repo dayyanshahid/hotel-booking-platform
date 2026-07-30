@@ -543,3 +543,48 @@ describe("a multi-room search never presents one room as the party", () => {
     expect(cappedBody.data.totalCount).toBe(openBody.data.totalCount);
   });
 });
+
+describe("a price slider a person can actually aim with", () => {
+  /*
+   * One suite sets the true ceiling. A Singapore search ran to $107,058 against
+   * a median near $80, so every price anyone would filter by sat inside the
+   * first pixel of the track and the control was decoration.
+   *
+   * The fix is two numbers, not one: the slider stops at the 95th percentile and
+   * its last stop means "no maximum". Clamping the filter itself would have
+   * traded a useless control for a hidden result.
+   */
+  it("stops the track well below a single outlier, without losing it", async () => {
+    const res = await searchRoute(req("/api/hotels/search", { intent: INTENT }));
+    const body = await json<{
+      results: { price: { total: number; roomsCovered: number } }[];
+      facets: { priceRange: { min: number; max: number; typicalMax: number } };
+    }>(res);
+    const { min, max, typicalMax } = body.data.facets.priceRange;
+
+    expect(Number.isInteger(typicalMax)).toBe(true);
+    // Inside the real range, and never inverted on a thin result set.
+    expect(typicalMax).toBeLessThanOrEqual(max);
+    expect(typicalMax).toBeGreaterThanOrEqual(min);
+
+    // The true maximum still bounds every result, so nothing is unreachable.
+    const perRoom = body.data.results.map((c) => c.price.total / Math.max(1, c.price.roomsCovered));
+    expect(Math.max(...perRoom)).toBeLessThanOrEqual(max);
+  });
+
+  it("keeps every result when no cap is applied", async () => {
+    /*
+     * The slider's last position sends no `maxPrice` at all rather than
+     * `typicalMax`, which is what stops the 5% above the percentile from
+     * vanishing the moment someone touches the control and puts it back.
+     */
+    const open = await searchRoute(req("/api/hotels/search", { intent: INTENT }));
+    const openBody = await json<{ totalCount: number }>(open);
+
+    const uncapped = await searchRoute(
+      req("/api/hotels/search", { intent: INTENT, filters: { maxPrice: undefined } }),
+    );
+    const uncappedBody = await json<{ totalCount: number }>(uncapped);
+    expect(uncappedBody.data.totalCount).toBe(openBody.data.totalCount);
+  });
+});

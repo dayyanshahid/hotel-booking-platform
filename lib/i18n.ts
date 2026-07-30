@@ -260,6 +260,7 @@ const en: Dict = {
   // reading "total price for stay" over a per-room range is the mismatch that
   // put a party total outside its own filter's maximum.
   "filters.price": "Price per room, for the stay",
+  "filters.anyPrice": "Any price",
   "filters.stars": "Property class",
   "filters.rating": "Guest rating",
   "filters.neighborhood": "Area",
@@ -1435,6 +1436,7 @@ const ar: Dict = {
   "results.savedHotel": "محفوظ",
 
   "filters.price": "السعر للغرفة الواحدة، لكامل الإقامة",
+  "filters.anyPrice": "أي سعر",
   "filters.stars": "تصنيف العقار",
   "filters.rating": "تقييم النزلاء",
   "filters.neighborhood": "المنطقة",

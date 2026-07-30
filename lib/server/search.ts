@@ -479,6 +479,27 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
  * is the question the filter asks. Price and category still come from the card,
  * because those describe the property or its lead price rather than its rates.
  */
+/**
+ * The price range, and the part of it a slider should cover.
+ *
+ * Rounded outwards so the extremes stay inside their own range — a ceiling
+ * rounded down would exclude the priciest result from a filter set to the
+ * maximum. `typicalMax` is the 95th percentile, because the true maximum is set
+ * by one suite: Singapore ran to $107,058 against a median near $80, so every
+ * price anyone was going to filter by sat inside the first pixel of the track.
+ *
+ * It never drops below `min`, so a result set of one, or of a hundred identical
+ * prices, still describes a range rather than an inversion.
+ */
+function priceRangeOf(prices: number[]): SearchFacets["priceRange"] {
+  if (!prices.length) return { min: 0, max: 0, typicalMax: 0 };
+  const sorted = [...prices].sort((a, b) => a - b);
+  const min = Math.floor(sorted[0]);
+  const max = Math.ceil(sorted[sorted.length - 1]);
+  const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+  return { min, max, typicalMax: Math.min(max, Math.max(min, Math.ceil(p95))) };
+}
+
 function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: NormalizedHotel[]): SearchFacets {
   // Per room, so the range spans one kind of number and the filter that reads
   // it back compares like with like.
@@ -545,10 +566,7 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
      * their own range — a ceiling rounded down would exclude the priciest
      * result from a filter set to the maximum.
      */
-    priceRange: {
-      min: prices.length ? Math.floor(Math.min(...prices)) : 0,
-      max: prices.length ? Math.ceil(Math.max(...prices)) : 0,
-    },
+    priceRange: priceRangeOf(prices),
     // A property whose supplier gave no star rating is not a "0-star hotel";
     // it is a property with no rating, and it must not appear as a filter.
     categories: [...catCount.entries()]

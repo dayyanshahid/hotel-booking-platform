@@ -92,22 +92,34 @@ export function FiltersPanel({
         that could not move — a control offering to narrow a set that is already
         empty, on the one screen where the reason matters and is stated above.
       */}
-      {shows("price") && facets.priceRange.max > facets.priceRange.min && (
+      {shows("price") && facets.priceRange.typicalMax > facets.priceRange.min && (
       <fieldset>
         <legend className="text-sm font-semibold">{t("filters.price")}</legend>
         <div className="mt-2">
           <label htmlFor="max-price" className="text-muted text-xs">
             {formatMoney(facets.priceRange.min, currency, locale)} –{" "}
-            {formatMoney(filters.maxPrice ?? facets.priceRange.max, currency, locale)}
+            {/*
+              The top stop is "no maximum", not the 95th percentile it sits at.
+              The track stops there because one suite at $107,058 otherwise
+              squeezed every price anyone would filter by into the first pixel —
+              but the filter itself must never hide the results above it, so the
+              last position clears the cap rather than applying it.
+            */}
+            {filters.maxPrice == null
+              ? t("filters.anyPrice")
+              : formatMoney(filters.maxPrice, currency, locale)}
           </label>
           <input
             id="max-price"
             type="range"
             min={facets.priceRange.min}
-            max={facets.priceRange.max}
-            step={50}
-            value={filters.maxPrice ?? facets.priceRange.max}
-            onChange={(e) => set({ maxPrice: Number(e.target.value) })}
+            max={facets.priceRange.typicalMax}
+            step={Math.max(1, Math.round((facets.priceRange.typicalMax - facets.priceRange.min) / 40))}
+            value={filters.maxPrice ?? facets.priceRange.typicalMax}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              set({ maxPrice: value >= facets.priceRange.typicalMax ? undefined : value });
+            }}
             className="mt-1 w-full accent-[var(--focus)]"
           />
         </div>
