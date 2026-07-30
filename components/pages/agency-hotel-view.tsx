@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import type { AgencyContext } from "@/components/agency/use-agency";
+import { may, type AgencyContext } from "@/components/agency/use-agency";
 import { TradePrices } from "@/components/agency/ui";
 import { QuoteModal } from "@/components/agency/quote-modal";
 import { SearchBar } from "@/components/search/search-bar";
@@ -235,10 +235,28 @@ function HotelDetail({
         <Link href={searchBack} className="text-muted text-sm underline">
           ← {t("agency.backToResults")}
         </Link>
+        {/*
+          One basket, two outcomes — and this page is where the group case
+          actually happens. Every rate here belongs to this property, so a set
+          picked on this screen is always bookable as one order; the search page
+          has to check, because a basket there can span hotels.
+        */}
         {basket.length > 0 && (
-          <Button size="sm" onClick={() => setQuoteOpen(true)}>
-            {t("agency.newQuote")} ({basket.length})
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setQuoteOpen(true)}>
+              {t("agency.newQuote")} ({basket.length})
+            </Button>
+            {may(context, "issue") && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  router.push(href(locale, `/agency/book/${basket.map(encodeURIComponent).join(",")}`))
+                }
+              >
+                {t("agency.bookRooms", { rooms: basket.length })}
+              </Button>
+            )}
+          </div>
         )}
       </div>
 

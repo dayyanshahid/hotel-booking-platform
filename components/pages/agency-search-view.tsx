@@ -150,12 +150,24 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    */
   const basketCoverage = (() => {
     const byOfferId = new Map((data?.results ?? []).map((card) => [card.offerSummary.offerId, card]));
+    /*
+     * Which properties the basket spans.
+     *
+     * A quote happily lists three hotels — that is what a quote is for. A booking
+     * cannot: one order is one property, and the checkout refuses a mixed set.
+     * Offering "Book 3 rooms" over rates at three hotels sent the agent to a page
+     * that could only turn them away, so the button knows before they click it.
+     */
+    const hotels = new Set(
+      basket.map((offerId) => byOfferId.get(offerId)?.slug).filter(Boolean) as string[],
+    );
     return {
       wanted: Math.max(1, (applied ?? seed).rooms.length),
       covered: basket.reduce(
         (sum, offerId) => sum + Math.max(1, byOfferId.get(offerId)?.price.roomsCovered ?? 1),
         0,
       ),
+      oneProperty: hotels.size <= 1,
     };
   })();
 
@@ -420,13 +432,35 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                   basketCoverage.covered < basketCoverage.wanted ? "text-caution-700" : "text-muted",
                 )}
               >
-                {t("agency.basketCovers", basketCoverage)}
+                {t("agency.basketCovers", { covered: basketCoverage.covered, wanted: basketCoverage.wanted })}
               </span>
             </p>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => setQuoteOpen(true)}>
+            {/*
+              One basket, two outcomes.
+              An agent builds the group once and then chooses: price it and send
+              it, or put it on the account. Making these two separate flows is
+              what had them rebuild the same selection twice — and is why the
+              basket only ever produced a quote before.
+            */}
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setQuoteOpen(true)}>
                 {t("agency.newQuote")}
               </Button>
+              {canIssue &&
+                (basketCoverage.oneProperty ? (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      router.push(href(locale, `/agency/book/${basket.map(encodeURIComponent).join(",")}`))
+                    }
+                  >
+                    {t("agency.bookRooms", { rooms: basketCoverage.covered })}
+                  </Button>
+                ) : (
+                  <span className="text-muted self-center text-xs">
+                    {t("agency.basketManyHotels")}
+                  </span>
+                ))}
               <Button size="sm" variant="ghost" onClick={() => setBasket([])}>
                 {t("common.clear")}
               </Button>

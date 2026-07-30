@@ -454,12 +454,23 @@ export interface RequirementField {
 export interface SessionLine {
   lineId: string;
   offerId: string;
-  /** Which entry of the session's allocation this line houses. */
-  roomIndex: number;
+  /**
+   * Which entries of the session's allocation this line houses.
+   *
+   * Usually one. Not always: Hotelbeds prices a rate per room, so a line is a
+   * room — but TourMind prices the whole party, so a single TourMind line covers
+   * every room at once. A line that assumed one room would send a three-room
+   * TourMind order with one room's guests named and the other two empty, which
+   * their create call refuses, or a Hotelbeds order for a third of the party,
+   * which it accepts.
+   *
+   * The rate says how many it covers; this is which ones they are.
+   */
+  roomIndexes: number[];
   roomName: string;
   boardLabel: string;
-  /** The occupancy this line sleeps — not the party. */
-  occupancy: RoomAllocation;
+  /** The rooms this line sleeps. One entry per room it covers. */
+  occupancies: RoomAllocation[];
   price: PriceStack;
   cancellation: CancellationPolicy;
   paymentTiming: Offer["paymentTiming"];
@@ -581,6 +592,34 @@ export interface RefundState {
   reference?: string;
 }
 
+/**
+ * One room of a booking, as it was sold.
+ *
+ * A booking held one `roomName`, one `boardLabel` and one `price`, so both
+ * vouchers printed "{rooms.length} × {roomName}" — "3 × Deluxe twin" over the
+ * cost of one, the same sentence the quote printed and the booking screen
+ * printed. A guest arrived with a voucher for three rooms and a reservation for
+ * one.
+ *
+ * There is no per-line status or supplier reference, and that is not an omission.
+ * A booking is one property and one stay, one property is served by one source,
+ * and both of our suppliers take every room of an order in a single call — so
+ * the order confirms or fails as a whole and its reference belongs to the whole.
+ * Per-line outcomes only start to mean something for a basket spanning hotels,
+ * which is a second order and a second voucher.
+ */
+export interface BookingLine {
+  lineId: string;
+  roomName: string;
+  boardLabel: string;
+  /** The rooms this line sleeps — one entry per room the rate covered. */
+  occupancies: RoomAllocation[];
+  price: PriceStack;
+  cancellation: CancellationPolicy;
+  /** The people in this room, lead included where they are in it. */
+  guests: BookingGuest[];
+}
+
 export interface Booking {
   /** Stable platform reference — the customer's primary identifier. §8.5 */
   reference: string;
@@ -593,8 +632,8 @@ export interface Booking {
   hotelCoordinates: { lat: number; lng: number };
   checkIn: string;
   checkOut: string;
-  roomName: string;
-  boardLabel: string;
+  /** Every room booked. Authoritative; never empty. */
+  lines: BookingLine[];
   rooms: RoomAllocation[];
   guests: BookingGuest[];
   contact: { email: string; phone: string; language: Locale };

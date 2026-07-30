@@ -101,6 +101,33 @@ export async function POST(req: Request) {
     }
   }
 
+  /*
+   * Never more rooms than the search asked for.
+   *
+   * Found by a test that expected two lines to cover two rooms and got four. A
+   * rate covers one room or the whole party depending on the supplier, so two
+   * party-priced offers in one basket buy the party twice — the same trap as
+   * assuming one rate covers everything, pointing the other way, and just as
+   * silent. The customer is charged double and half the rooms go unused.
+   *
+   * Booking a fourth room against a three-room search is refused too, even
+   * though the agent may well want four: the occupancies, the guest form and the
+   * requirement schema all come from the allocation, so a room the search never
+   * described has nobody to put in it. Changing the search is the fix, and it is
+   * one click.
+   */
+  const requestedRooms = offer.intent.rooms.length;
+  const coveredRooms = offers.reduce(
+    (sum, candidate) => sum + Math.max(1, candidate.price.roomsCovered),
+    0,
+  );
+  if (coveredRooms > requestedRooms) {
+    return fail("validation", "checkout.moreRoomsThanSearched", locale, {
+      status: 422,
+      action: "editInput",
+    });
+  }
+
   const seed = getHotelSeed(offer.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;
 
@@ -135,26 +162,32 @@ export async function POST(req: Request) {
    */
   const countryCode =
     (seed ? dest!.countryCode : liveHotel?.countryCode) || countryForOffer(offer) || "";
-  /*
-   * One line per room, in the order the rooms were allocated.
-   *
-   * `roomIndex` walks the search's own allocation so a line knows which room of
-   * the party it houses — which is what the guest form fills in per room, and
-   * what a voucher lists. A basket with more lines than the search asked for
-   * still works: the extra lines carry the last allocation entry, because an
-   * agent adding a fourth room to a three-room search means to add a room, not
-   * to make a mistake.
-   */
   const allocation = offer.intent.rooms;
+  /*
+   * Walked, not indexed.
+   *
+   * A line covers as many rooms as its rate covers — one for Hotelbeds, the whole
+   * party for TourMind — so the allocation is consumed as the lines are built
+   * rather than read off by position. Indexing by position gave a single TourMind
+   * line the first room only, and named one room's guests on a three-room order.
+   *
+   * Coverage is capped at the allocation above, so the cursor cannot run past it.
+   */
+  let cursor = 0;
   const lines: SessionLine[] = offers.map((lineOffer, index) => {
     const template = ROOM_TEMPLATES[lineOffer.roomKey];
+    const covers = Math.max(1, lineOffer.price.roomsCovered);
+    const roomIndexes = Array.from({ length: covers }, (_, step) =>
+      Math.min(cursor + step, allocation.length - 1),
+    );
+    cursor += covers;
     return {
       lineId: `cl_${index}_${lineOffer.offerId.slice(-6)}`,
       offerId: lineOffer.offerId,
-      roomIndex: Math.min(index, allocation.length - 1),
+      roomIndexes,
       roomName: lineOffer.roomLabel ?? localized(template?.name, locale),
       boardLabel: lineOffer.boardLabel ?? localized(BOARD_CATALOG[lineOffer.board]?.label, locale),
-      occupancy: allocation[Math.min(index, allocation.length - 1)],
+      occupancies: roomIndexes.map((roomIndex) => allocation[roomIndex]),
       price: lineOffer.price,
       cancellation: lineOffer.cancellation,
       paymentTiming: lineOffer.rateClass === "nrf" ? "payNow" : "payLater",
@@ -191,7 +224,7 @@ export async function POST(req: Request) {
       countryCode,
       // The rooms actually being bought, so a three-line checkout asks for three
       // rooms' worth of guests rather than the one the first rate covered.
-      rooms: lines.map((line) => line.occupancy),
+      rooms: lines.flatMap((line) => line.occupancies),
       paymentTiming: rolled.paymentTiming,
       nationalityRequired: countryCode === "SA" && !live && (seed?.category ?? 0) >= 5,
     }),

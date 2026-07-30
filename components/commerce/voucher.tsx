@@ -76,13 +76,20 @@ export function BookingVoucher({
           </div>
           <div>
             <dt className="text-muted text-xs">{t("hotel.rooms")}</dt>
+            {/*
+              A row per room actually reserved.
+              This read `{booking.rooms.length} × {booking.roomName}` from a
+              single room's rate — "3 × Deluxe twin" over the cost of one, on the
+              document a guest hands to the front desk. They arrived with a
+              voucher for three rooms and a reservation for one.
+            */}
             <dd className="font-medium wrap-anywhere">
-              {booking.rooms.length} × {booking.roomName}
+              {booking.lines.map((line) => (
+                <span key={line.lineId} className="block">
+                  {line.occupancies.length} × {line.roomName} · {line.boardLabel}
+                </span>
+              ))}
             </dd>
-          </div>
-          <div>
-            <dt className="text-muted text-xs">{t("rate.board")}</dt>
-            <dd className="font-medium">{booking.boardLabel}</dd>
           </div>
           <div>
             <dt className="text-muted text-xs">{t("common.guests")}</dt>

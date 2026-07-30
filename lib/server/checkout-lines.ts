@@ -63,7 +63,12 @@ export function sumPrices(lines: SessionLine[]): PriceStack {
     includedCharges: mergeCharges((price) => price.includedCharges),
     payAtProperty: mergeCharges((price) => price.payAtProperty),
     guests: lines.reduce(
-      (sum, line) => sum + line.occupancy.adults + line.occupancy.childrenAges.length,
+      (sum, line) =>
+        sum +
+        line.occupancies.reduce(
+          (heads, room) => heads + room.adults + room.childrenAges.length,
+          0,
+        ),
       0,
     ),
     /*

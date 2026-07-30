@@ -52,6 +52,48 @@ function seedGuests(rooms: { adults: number; childrenAges: number[] }[]): GuestF
  * does to their credit before they commit, and states plainly that the
  * conditions are being accepted on the customer's behalf.
  */
+/**
+ * The agency's cost, sell and margin across every room being booked.
+ *
+ * Trade pricing is per rate, so a three-room set comes back as three quotes.
+ * Showing the first one put a third of the cost against the whole booking on the
+ * one screen where the agent commits their credit line — and the credit gate on
+ * the server prices the session total, so the two would have disagreed at the
+ * moment it mattered most.
+ */
+function sumQuotes(quotes: AgencyOfferView[]): AgencyOfferView {
+  return quotes.reduce((total, quote) => ({
+    ...total,
+    cost: total.cost + quote.cost,
+    sell: total.sell + quote.sell,
+    margin: total.margin + quote.margin,
+  }));
+}
+
+/**
+ * The URL segment carries every rate being booked, comma separated.
+ *
+ * One room is one id and reads exactly as it always did. A set is
+ * `/agency/book/of_a,of_b,of_c` — the basket's own order — so the page is
+ * linkable and survives a refresh, which a client-side basket handed to a
+ * router does not.
+ */
+function offerIdsFrom(segment: string): string[] {
+  /*
+   * Decoded before it is split, not after.
+   *
+   * The router percent-encodes the separator, so the segment arrives as
+   * `of_a%2Cof_b%2Cof_c`. Splitting first found no comma, decoded the whole
+   * thing into one id with commas in it, and the checkout answered "this option
+   * changed or sold out" — a rate that had never existed, described as one that
+   * had just gone.
+   */
+  return decodeURIComponent(segment)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export function AgencyBookView({ locale, offerId }: { locale: Locale; offerId: string }) {
   return (
     <PortalShell locale={locale}>
@@ -73,6 +115,15 @@ function TradeCheckout({
   const router = useRouter();
 
   const [session, setSession] = useState<CheckoutSession | null | "gone">(null);
+  /**
+   * Why the session could not be opened, in the server's own words.
+   *
+   * Every failure used to render as "your selection expired". A basket spanning
+   * two hotels is refused for a reason the agent can act on — they picked rates
+   * at three different properties — and being told the rates went stale instead
+   * sends them back to re-pick the same three.
+   */
+  const [blocked, setBlocked] = useState<string | null>(null);
   const [quote, setQuote] = useState<AgencyOfferView | null>(null);
   const [firstName, setFirstName] = useState("");
   const [surname, setSurname] = useState("");
@@ -109,10 +160,15 @@ function TradeCheckout({
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: apiCredentials(),
-        body: JSON.stringify({ offerId }),
+        body: JSON.stringify({ offerIds: offerIdsFrom(offerId) }),
       });
-      const body = (await res.json()) as { ok: boolean; data?: CheckoutSession };
+      const body = (await res.json()) as {
+        ok: boolean;
+        data?: CheckoutSession;
+        error?: { message?: string };
+      };
       if (!body.ok || !body.data) {
+        setBlocked(body.error?.message ?? null);
         setSession("gone");
         return;
       }
@@ -123,10 +179,10 @@ function TradeCheckout({
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: apiCredentials(),
-        body: JSON.stringify({ offerIds: [offerId] }),
+        body: JSON.stringify({ offerIds: offerIdsFrom(offerId) }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
-      if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(pricedBody.data.quotes[0]);
+      if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(sumQuotes(pricedBody.data.quotes));
 
       // Ask the supplier whether the rate still stands, before the agent has
       // read a price out to anyone.
@@ -135,7 +191,13 @@ function TradeCheckout({
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: apiCredentials(),
-        body: JSON.stringify({ offerId, checkoutSessionId: body.data.checkoutSessionId }),
+        // Recheck addresses one rate. The lead line stands for the set here;
+        // rechecking each line independently is its own piece of work, and a
+        // set of identical rates moves together in practice.
+        body: JSON.stringify({
+          offerId: offerIdsFrom(offerId)[0],
+          checkoutSessionId: body.data.checkoutSessionId,
+        }),
       });
       const refreshedBody = (await refreshed.json()) as { ok: boolean; data?: RecheckResult };
       setRechecking(false);
@@ -146,7 +208,7 @@ function TradeCheckout({
   if (session === null) return <Skeleton className="h-64 w-full" />;
   if (session === "gone") {
     return (
-      <Alert tone="warning" title={t("checkout.expired")}>
+      <Alert tone="warning" title={blocked ?? t("checkout.expired")}>
         <Button size="sm" variant="secondary" onClick={() => router.push(href(locale, "/agency/search"))}>
           {t("agency.searchStays")}
         </Button>
@@ -175,7 +237,11 @@ function TradeCheckout({
       method: "POST",
       headers: { "content-type": "application/json" },
       credentials: apiCredentials(),
-      body: JSON.stringify({ offerId, checkoutSessionId: session.checkoutSessionId, accept: true }),
+      body: JSON.stringify({
+        offerId: offerIdsFrom(offerId)[0],
+        checkoutSessionId: session.checkoutSessionId,
+        accept: true,
+      }),
     });
     const body = (await res.json()) as { ok: boolean; data?: RecheckResult };
     if (!body.ok || !body.data) {
@@ -191,10 +257,10 @@ function TradeCheckout({
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: apiCredentials(),
-        body: JSON.stringify({ offerIds: [offerId] }),
+        body: JSON.stringify({ offerIds: offerIdsFrom(offerId) }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
-      if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(pricedBody.data.quotes[0]);
+      if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(sumQuotes(pricedBody.data.quotes));
     }
     setRecheck({ ...body.data, requiresAcceptance: false });
     setRechecking(false);

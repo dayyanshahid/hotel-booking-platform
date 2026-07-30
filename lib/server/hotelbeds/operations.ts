@@ -145,7 +145,20 @@ export async function checkRate(
 /* ----------------------------------------------------------------- booking */
 
 export interface ConfirmBookingInput {
-  binding: HotelbedsOfferBinding;
+  /**
+   * One binding per room, in room order.
+   *
+   * Their `/bookings` takes a `rooms` array and always did; we sent one entry.
+   * A party of three therefore had one room booked and two silently dropped —
+   * the customer's card charged for the total, the supplier holding a third of
+   * it. Each entry carries its own rateKey, and the paxes are split across them
+   * by `roomId`, which is how the supplier knows who sleeps where.
+   *
+   * Sending them as one call is also what makes all-or-nothing free: the order
+   * is accepted whole or refused whole, so there is no half-booked state to
+   * unwind and no second reference to reconcile.
+   */
+  bindings: HotelbedsOfferBinding[];
   holder: { name: string; surname: string };
   rooms: RoomAllocation[];
   guests: BookingGuest[];
@@ -179,20 +192,43 @@ export interface ConfirmBookingResult {
 export async function confirmBooking(input: ConfirmBookingInput): Promise<ConfirmBookingResult> {
   const config = getHotelbedsConfig();
 
-  const paxes = input.guests.map((guest) => ({
-    roomId: guest.roomIndex + 1,
+  const pax = (guest: BookingGuest, roomId: number) => ({
+    roomId,
     type: guest.type === "child" ? "CH" : "AD",
     ...(guest.type === "child" && guest.age != null ? { age: guest.age } : {}),
     name: guest.firstName,
     surname: guest.surname,
-  }));
+  });
+
+  /*
+   * A room per binding, carrying only the guests assigned to it.
+   *
+   * `roomId` is the supplier's own index into this array, so it is derived from
+   * the position here rather than copied from `roomIndex`. Sending every guest
+   * against every room — which is what one flat pax list did — over-occupies
+   * each room, and an over-occupied room is either refused or accepted and
+   * discovered by the guest at the desk.
+   *
+   * A room with nobody named to it still needs an occupant, because the supplier
+   * will not take it otherwise. The holder stands in, which is also who the
+   * hotel would ask for at check-in.
+   */
+  const rooms = input.bindings.map((binding, index) => {
+    const roomId = index + 1;
+    const inRoom = input.guests.filter((guest) => guest.roomIndex === index);
+    const occupants = inRoom.length ? inRoom : input.guests.slice(0, 1);
+    return {
+      rateKey: binding.rateKey,
+      paxes: occupants.map((guest) => pax(guest, roomId)),
+    };
+  });
 
   const response = await hotelbeds.booking<HbBookingResponse>("/bookings", {
     method: "POST",
     kind: "booking",
     body: {
       holder: { name: input.holder.name, surname: input.holder.surname },
-      rooms: [{ rateKey: input.binding.rateKey, paxes }],
+      rooms,
       clientReference: `${config.clientReference}-${input.clientReference}`.slice(0, 40),
       remark: input.remark?.slice(0, 250),
       tolerance: config.tolerancePercent,

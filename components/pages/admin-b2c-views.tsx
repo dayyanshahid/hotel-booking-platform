@@ -336,8 +336,10 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
           <p className="text-muted wrap-anywhere">{booking.contact.email}</p>
           <p className="text-muted">{booking.contact.phone}</p>
           <p className="hairline border-t pt-2">
-            {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)} · {booking.rooms.length} ×{" "}
-            {booking.roomName}
+            {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)} ·{" "}
+            {booking.lines
+              .map((line) => `${line.occupancies.length} × ${line.roomName}`)
+              .join(", ")}
           </p>
           <p className="font-semibold">{formatMoney(booking.price.total, currency, locale)}</p>
         </Card>

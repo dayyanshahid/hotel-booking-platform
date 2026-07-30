@@ -260,7 +260,7 @@ async function hotelbedsCases(allowBooking: boolean): Promise<void> {
         };
 
         const confirmed = await confirmBooking({
-          binding,
+          bindings: [binding],
           holder: { name: "Test", surname: "Conformance" },
           rooms: intent.rooms,
           guests: [

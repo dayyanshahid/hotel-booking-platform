@@ -250,11 +250,14 @@ export function BookingOutcomeView({
             <p className="text-muted mt-2 text-sm">
               {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)}
             </p>
+            {/* A row per room, so the confirmation and the voucher agree. */}
+            {booking.lines.map((line) => (
+              <p key={line.lineId} className="text-muted text-sm">
+                {line.occupancies.length} × {line.roomName} · {line.boardLabel}
+              </p>
+            ))}
             <p className="text-muted text-sm">
-              {booking.roomName} · {booking.boardLabel}
-            </p>
-            <p className="text-muted text-sm">
-              {booking.rooms.length} × {t("common.room")} · {guestCount(booking.rooms)} {t("common.guests")}
+              {guestCount(booking.rooms)} {t("common.guests")}
             </p>
 
             <div className="mt-4 border-t pt-3">

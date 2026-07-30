@@ -178,23 +178,28 @@ export async function POST(req: Request) {
   }
 
   /*
-   * One line per booking, for now, and said out loud rather than assumed.
+   * Every room of the checkout, and the offer behind each.
    *
-   * The session can hold a room per line; `Booking` still carries one room name,
-   * one price and one supplier reference, so a three-line session committed here
-   * would book the first room and drop two — which is precisely the failure this
-   * work exists to remove, moved one screen later. Refusing is the only safe
-   * reading until a booking carries lines of its own.
+   * A session is one property and one stay, one property is served by one source,
+   * and both suppliers take every room of an order in a single call — so these
+   * all belong to the same supplier and go out together. That is what makes
+   * all-or-nothing free rather than a rollback: the order is accepted whole or
+   * refused whole, and there is no half-booked state to unwind.
    *
-   * Nothing reaches this that a client can trigger by accident: the basket does
-   * not offer to book a multi-room set yet, and a single-room checkout is
-   * unaffected.
+   * A line whose offer has fallen out of the store is refused before anything is
+   * charged. Booking the rooms that survived would leave a party split across a
+   * reservation and a gap, which is the outcome E-17 exists to prevent.
    */
-  if (session.lines.length !== 1) {
-    return fail("validation", "checkout.oneRoomPerBooking", locale, { status: 422 });
+  const lineOffers = session.lines.map((line) => ({ line, offer: getOffer(line.offerId) }));
+  const lostLine = lineOffers.find((entry) => !entry.offer);
+  if (lostLine) {
+    return fail("availabilityChanged", "error.availabilityChanged", locale, {
+      status: 409,
+      action: "selectAlternative",
+    });
   }
   const line = session.lines[0];
-  const offer = getOffer(line.offerId);
+  const offer = lineOffers[0].offer;
   const seed = getHotelSeed(session.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;
   const hotel = seed ? buildHotel(seed, locale) : null;
@@ -292,9 +297,18 @@ export async function POST(req: Request) {
     const guests = guestList(session.rooms, body);
     try {
       const confirmation = await confirmBooking({
-        binding: offer.hotelbeds,
+        /*
+         * A binding per room, in room order — the supplier's own `rooms` array.
+         *
+         * Repeated per room the line covers, because Hotelbeds prices per room
+         * and a rateKey buys one of them. A line covering more than one is a
+         * TourMind line, which never reaches this branch.
+         */
+        bindings: lineOffers.flatMap((entry) =>
+          entry.line.occupancies.map(() => entry.offer!.hotelbeds!),
+        ),
         holder: { name: guests[0].firstName, surname: guests[0].surname },
-        rooms: session.rooms,
+        rooms: session.lines.flatMap((sessionLine) => sessionLine.occupancies),
         guests,
         clientReference: ref,
         remark: requests.join(" | "),
@@ -398,6 +412,7 @@ export async function POST(req: Request) {
     }
   }
 
+  const bookingGuests = guestList(session.rooms, body);
   const payNow = session.paymentTiming === "payNow";
   const dueAtProperty = session.price.payAtProperty.reduce((s, c) => s + c.amount, 0);
 
@@ -422,10 +437,29 @@ export async function POST(req: Request) {
     hotelCoordinates,
     checkIn: session.checkIn,
     checkOut: session.checkOut,
-    roomName: line.roomName,
-    boardLabel: line.boardLabel,
+    /*
+     * Every room, as it was sold.
+     *
+     * Both vouchers printed "{rooms.length} x {roomName}" from a single room's
+     * rate — "3 x Deluxe twin" over the cost of one, which is what a guest
+     * arrived at the desk holding. Guests are attached per room so a voucher can
+     * say who is in which, and a room with nobody named to it falls back to the
+     * lead, who is who the hotel asks for anyway.
+     */
+    lines: session.lines.map((sessionLine) => {
+      const named = bookingGuests.filter((guest) => sessionLine.roomIndexes.includes(guest.roomIndex));
+      return {
+        lineId: sessionLine.lineId,
+        roomName: sessionLine.roomName,
+        boardLabel: sessionLine.boardLabel,
+        occupancies: sessionLine.occupancies,
+        price: sessionLine.price,
+        cancellation: sessionLine.cancellation,
+        guests: named.length ? named : bookingGuests.slice(0, 1),
+      };
+    }),
     rooms: session.rooms,
-    guests: guestList(session.rooms, body),
+    guests: bookingGuests,
     contact: {
       email: sanitize(body.contact.email, 120).toLowerCase(),
       phone: sanitize(body.contact.phone, 30),

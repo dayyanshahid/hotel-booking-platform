@@ -21,10 +21,10 @@ function line(over: Partial<SessionLine> = {}): SessionLine {
   return {
     lineId: `cl_${Math.round(Math.random() * 1e6)}`,
     offerId: "of_1",
-    roomIndex: 0,
+    roomIndexes: [0],
     roomName: "Deluxe twin",
     boardLabel: "Breakfast",
-    occupancy: { adults: 2, childrenAges: [] },
+    occupancies: [{ adults: 2, childrenAges: [] }],
     price: {
       currency: "USD",
       total: 300,

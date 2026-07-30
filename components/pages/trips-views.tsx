@@ -422,7 +422,8 @@ export function BookingDetailView({
               {formatDate(booking.checkIn, locale)} → {formatDate(booking.checkOut, locale)}
             </p>
             <p className="text-muted text-sm">
-              {booking.roomName} · {booking.boardLabel} · {guestCount(booking.rooms)} {t("common.guests")}
+              {booking.lines.map((line) => `${line.occupancies.length} × ${line.roomName}`).join(", ")} ·{" "}
+              {guestCount(booking.rooms)} {t("common.guests")}
             </p>
             <div className="mt-3 border-t pt-3">
               <PriceBlock price={booking.price} align="start" />

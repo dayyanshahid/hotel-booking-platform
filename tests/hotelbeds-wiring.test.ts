@@ -650,3 +650,90 @@ describe("content can never spend the searching allowance", () => {
   });
 });
 
+
+describe("every room of a set reaches the supplier", () => {
+  /*
+   * Their `/bookings` takes a `rooms` array and always did; we sent one entry. A
+   * party of three therefore had one room booked and two silently dropped — the
+   * customer's card charged for the total, the supplier holding a third of it,
+   * and a voucher printed for "3 x Deluxe twin".
+   *
+   * Sending them together is also what makes all-or-nothing free: the order is
+   * accepted whole or refused whole, so there is no half-booked state to unwind
+   * and no second reference to reconcile.
+   */
+  const party: SearchIntent = {
+    ...intent,
+    rooms: [
+      { adults: 2, childrenAges: [] },
+      { adults: 2, childrenAges: [] },
+      { adults: 1, childrenAges: [9] },
+    ],
+  };
+
+  async function threeLineSession(): Promise<CheckoutSession> {
+    const result = await searchHotelbedsDestination({ code: "PMI" }, party, "en");
+    // Hotelbeds prices per room, so one offer is one room and three rooms need
+    // three lines — which is the whole reason the session carries lines.
+    const offerId = result.hotels[0].offers[0].offerId;
+    const response = await sessionRoute(
+      req("/api/checkout/sessions", { offerIds: [offerId, offerId, offerId] }),
+    );
+    const body = (await response.json()) as { ok: boolean; data: CheckoutSession };
+    expect(body.ok).toBe(true);
+    return body.data;
+  }
+
+  it("builds a line per room and prices the party, not one room of it", async () => {
+    const session = await threeLineSession();
+    expect(session.lines).toHaveLength(3);
+    expect(session.lines.map((line) => line.roomIndexes)).toEqual([[0], [1], [2]]);
+    // Six heads across three rooms — two, two, and an adult with a child — and a
+    // total that is three rooms' worth rather than one.
+    expect(session.price.guests).toBe(6);
+    expect(session.price.roomsCovered).toBe(3);
+    expect(session.price.total).toBe(
+      session.lines.reduce((sum, line) => sum + line.price.total, 0),
+    );
+  });
+
+  it("sends one order carrying a room per line, each with its own guests", async () => {
+    const session = await threeLineSession();
+    calls = [];
+    handler = () => ({ body: BOOKING_CONFIRMED });
+    const response = await bookingRoute(
+      req("/api/bookings", {
+        checkoutSessionId: session.checkoutSessionId,
+        idempotencyKey: "idem-three-rooms",
+        contact: { email: "lead@example.com", phone: "+34 600 000 000", language: "en" },
+        lead: { firstName: "Ada", surname: "Traveller" },
+        guests: [
+          { roomIndex: 1, type: "adult", firstName: "Bo", surname: "Traveller" },
+          { roomIndex: 2, type: "adult", firstName: "Cy", surname: "Traveller" },
+        ],
+        requests: {},
+        consents: { terms: true, cancellation: true, localFees: true, mandatory: true, marketing: false },
+        payment: { method: "card", token: "tok_hosted", threeDsStatus: "passed" },
+      }),
+    );
+    const body = (await response.json()) as { ok: boolean; data: { booking: Booking } };
+    expect(body.ok).toBe(true);
+
+    // One call, not three — so the order confirms or fails as a whole.
+    const bookingCalls = calls.filter((call) => call.url.includes("/bookings"));
+    expect(bookingCalls).toHaveLength(1);
+
+    const rooms = (bookingCalls[0].body as { rooms: { rateKey: string; paxes: { roomId: number }[] }[] }).rooms;
+    expect(rooms).toHaveLength(3);
+    // `roomId` is the supplier's index into this array, so it counts from one and
+    // is derived from position rather than copied from our own roomIndex.
+    expect(rooms.map((room) => room.paxes[0].roomId)).toEqual([1, 2, 3]);
+    // Each room carries only its own occupants. One flat pax list against every
+    // room over-occupies all of them, which is refused or discovered at the desk.
+    expect(rooms.every((room) => room.paxes.every((pax) => pax.roomId === room.paxes[0].roomId))).toBe(true);
+
+    // And the booking records all three rooms, so the voucher can list them.
+    expect(body.data.booking.lines).toHaveLength(3);
+    expect(body.data.booking.lines.every((line) => line.guests.length > 0)).toBe(true);
+  });
+});
