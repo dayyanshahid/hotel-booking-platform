@@ -50,8 +50,23 @@ export function DocumentBrand({
         style={{ backgroundColor: branding.color, ...KEEP_IN_PRINT }}
       />
 
-      <div className="hairline mt-4 flex flex-wrap items-start justify-between gap-4 border-b pb-4">
-        <div className="min-w-0 space-y-1">
+      {/*
+        Stacked on a narrow screen, two columns from `sm` up.
+
+        This was `flex-wrap` with the reference block set to `text-end`, which
+        looked right until an agency filled in its details: a phone number, an
+        email and a website on one line is easily five hundred pixels, so the
+        left column ate the row and the reference wrapped underneath — where
+        `text-end` right-aligned it inside a shrink-to-fit box and left it
+        floating in the middle of the page. It happened at desktop width, on
+        the document a customer is handed.
+
+        An explicit breakpoint instead of wrapping, so there are two layouts and
+        both were chosen. `shrink-0` keeps the reference intact when the
+        letterhead is long; the left column takes what is left.
+      */}
+      <div className="hairline mt-4 flex flex-col gap-4 border-b pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1">
           {branding.logoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -70,7 +85,8 @@ export function DocumentBrand({
           {branding.taxNumber && <p className="text-muted text-xs">{branding.taxNumber}</p>}
         </div>
 
-        <div className="text-end">
+        {/* Right-aligned only once it is actually a right-hand column. */}
+        <div className="shrink-0 text-start sm:text-end">
           <p
             className="text-sm font-semibold uppercase tracking-wide"
             style={{ color: branding.ink, ...KEEP_IN_PRINT }}
