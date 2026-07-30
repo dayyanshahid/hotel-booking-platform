@@ -1,3 +1,4 @@
+import { apiUrl } from "../api-origin";
 import type { Agency, AgencyProfile } from "./types";
 
 /**
@@ -147,13 +148,37 @@ export function onPaper(hex: string): string {
   return DARK_INK;
 }
 
+/**
+ * Where the mark is actually fetched from.
+ *
+ * An uploaded logo is served by the API, so the URL has to be absolute against
+ * the API's origin — the agent portal is a different host, and a relative path
+ * there resolves to a front end with no routes on it. That is the same mistake
+ * that made destination autocomplete return nothing on the separated portal,
+ * and it is worth naming twice: anything the browser fetches goes through
+ * `apiUrl`.
+ *
+ * The upload timestamp rides along so a replaced logo is a different URL, which
+ * is what lets the response be cached for a year.
+ */
+function logoFor(agencyId: string, profile: AgencyProfile): string | undefined {
+  if (profile.logoUploadedAt) {
+    return apiUrl(
+      `/api/agency/logo/${encodeURIComponent(agencyId)}?v=${encodeURIComponent(profile.logoUploadedAt)}`,
+    );
+  }
+  return profile.logoUrl || undefined;
+}
+
 /** Everything a document needs, from the account and its profile. */
-export function brandingOf(agency: { name: string; profile: AgencyProfile } | Agency): Branding {
+export function brandingOf(
+  agency: { id: string; name: string; profile: AgencyProfile } | Agency,
+): Branding {
   const profile = agency.profile;
   const color = normalizeHex(profile.brandColor) ?? DEFAULT_BRAND_COLOR;
   return {
     name: profile.legalName?.trim() || agency.name,
-    logoUrl: profile.logoUrl || undefined,
+    logoUrl: logoFor(agency.id, profile),
     address: profile.address || undefined,
     city: profile.city || undefined,
     email: profile.email || undefined,

@@ -8,6 +8,7 @@ import {
   onPaper,
   readableOn,
 } from "@/lib/agency/branding";
+import { MAX_LOGO_BYTES, sniffImageType } from "@/lib/agency/logo";
 import type { AgencyProfile } from "@/lib/agency/types";
 
 /**
@@ -148,7 +149,7 @@ describe("the brand colour used as text on white paper", () => {
 
 describe("resolving a profile into a letterhead", () => {
   it("falls back to the account name and the neutral accent", () => {
-    const branding = brandingOf({ name: "Skyline Travel", profile: { ...PROFILE, legalName: "" } });
+    const branding = brandingOf({ id: "agc_test", name: "Skyline Travel", profile: { ...PROFILE, legalName: "" } });
     expect(branding.name).toBe("Skyline Travel");
     // Not our own brand colour: an agency that has chosen nothing should get a
     // document that looks unbranded, not one that looks like it came from us.
@@ -156,11 +157,11 @@ describe("resolving a profile into a letterhead", () => {
   });
 
   it("prefers the legal name, because that is what belongs on paperwork", () => {
-    expect(brandingOf({ name: "Skyline Travel", profile: PROFILE }).name).toBe("Skyline Travel LLC");
+    expect(brandingOf({ id: "agc_test", name: "Skyline Travel", profile: PROFILE }).name).toBe("Skyline Travel LLC");
   });
 
   it("normalises whatever was stored, so a document never renders a raw value", () => {
-    const branding = brandingOf({ name: "Skyline", profile: { ...PROFILE, brandColor: "1A4F8A" } });
+    const branding = brandingOf({ id: "agc_test", name: "Skyline", profile: { ...PROFILE, brandColor: "1A4F8A" } });
     expect(branding.color).toBe("#1a4f8a");
     expect(branding.onColor).toBe("#ffffff");
   });
@@ -168,12 +169,13 @@ describe("resolving a profile into a letterhead", () => {
   it("survives a stored colour that is no longer valid", () => {
     // Data outlives validation: a colour written by an older build, or edited
     // by hand, must not put "not-a-colour" into a style attribute.
-    const branding = brandingOf({ name: "Skyline", profile: { ...PROFILE, brandColor: "puce" } });
+    const branding = brandingOf({ id: "agc_test", name: "Skyline", profile: { ...PROFILE, brandColor: "puce" } });
     expect(branding.color).toBe(DEFAULT_BRAND_COLOR);
   });
 
   it("omits empty fields rather than printing blank lines", () => {
     const branding = brandingOf({
+      id: "agc_test",
       name: "Skyline",
       profile: { ...PROFILE, taxNumber: "", logoUrl: "", website: "", documentFooter: "" },
     });
@@ -183,11 +185,55 @@ describe("resolving a profile into a letterhead", () => {
   });
 
   it("joins only the contact details that exist", () => {
-    expect(contactLine(brandingOf({ name: "Skyline", profile: PROFILE }))).toBe(
+    expect(contactLine(brandingOf({ id: "agc_test", name: "Skyline", profile: PROFILE }))).toBe(
       "+971 4 000 0000 · hello@skyline.example",
     );
     expect(
-      contactLine(brandingOf({ name: "Skyline", profile: { ...PROFILE, phone: "", email: "" } })),
+      contactLine(brandingOf({ id: "agc_test", name: "Skyline", profile: { ...PROFILE, phone: "", email: "" } })),
     ).toBe("");
+  });
+});
+
+describe("what may be accepted as a logo", () => {
+  /*
+   * The bytes decide, never the upload.
+   *
+   * This image is stored, then served back from our own origin and printed on a
+   * document a traveller is asked to trust. A `Content-Type` header is whatever
+   * the client claims, and an SVG is a script that happens to draw — one
+   * accepted as `image/png` would sit in the store waiting to run against our
+   * own domain the moment anybody opened it directly. So SVG is refused
+   * outright, a logo having no need of it, and the rest are confirmed by
+   * signature before anything is written.
+   */
+  const bytesOf = (...values: number[]) => Uint8Array.from(values);
+
+  it("recognises the formats a logo actually comes in", () => {
+    expect(sniffImageType(bytesOf(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0))).toBe("image/png");
+    expect(sniffImageType(bytesOf(0xff, 0xd8, 0xff, 0xe0, 0, 0))).toBe("image/jpeg");
+    // RIFF, four size bytes, then WEBP.
+    expect(sniffImageType(bytesOf(0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50))).toBe("image/webp");
+  });
+
+  it("refuses an SVG however it is labelled", () => {
+    const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    expect(sniffImageType(svg)).toBeNull();
+  });
+
+  it("refuses anything else, including a near miss", () => {
+    expect(sniffImageType(new TextEncoder().encode("GIF89a"))).toBeNull();
+    expect(sniffImageType(new TextEncoder().encode("%PDF-1.7"))).toBeNull();
+    // One byte off the PNG signature is not a PNG.
+    expect(sniffImageType(bytesOf(0x89, 0x50, 0x4e, 0x46, 0x0d, 0x0a, 0x1a, 0x0a))).toBeNull();
+    // Truncated to shorter than the signature it is pretending to be.
+    expect(sniffImageType(bytesOf(0x89, 0x50))).toBeNull();
+    expect(sniffImageType(bytesOf())).toBeNull();
+  });
+
+  it("holds a cap small enough for the store it is written to", () => {
+    // Base64 adds a third, and the Redis tiers this runs on cap a value at
+    // about a megabyte. A logo renders in a 220px box; half a meg is generous.
+    expect(MAX_LOGO_BYTES).toBeLessThanOrEqual(512 * 1024);
+    expect(Math.ceil((MAX_LOGO_BYTES * 4) / 3)).toBeLessThan(1024 * 1024);
   });
 });

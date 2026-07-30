@@ -299,6 +299,7 @@ function Detail({
         booking={booking}
         trade={trade}
         profile={context.agency.profile}
+        agencyId={context.agency.id}
         agencyName={context.agency.name}
         locale={locale}
       />

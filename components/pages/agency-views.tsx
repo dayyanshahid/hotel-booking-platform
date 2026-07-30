@@ -941,6 +941,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
       <BrandingCard
         profile={profile}
         setProfile={setProfile}
+        agencyId={context.agency.id}
         agencyName={context.agency.name}
         isAdmin={isAdmin}
       />
@@ -972,11 +973,13 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
 function BrandingCard({
   profile,
   setProfile,
+  agencyId,
   agencyName,
   isAdmin,
 }: {
   profile: AgencyProfile;
   setProfile: (next: AgencyProfile) => void;
+  agencyId: string;
   agencyName: string;
   isAdmin: boolean;
 }) {
@@ -987,7 +990,7 @@ function BrandingCard({
    * resolve it — including the default colour when the field is empty and the
    * readable ink that goes on top of whatever was chosen.
    */
-  const branding = brandingOf({ name: agencyName, profile });
+  const branding = brandingOf({ id: agencyId, name: agencyName, profile });
 
   /*
    * The colour swatch needs a valid hex or it silently shows black, so the
@@ -998,6 +1001,53 @@ function BrandingCard({
   const typed = profile.brandColor ?? "";
   const colorInvalid = typed.trim() !== "" && normalizeHex(typed) === null;
 
+  const [uploading, setUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  /**
+   * The upload is its own request, not part of Save.
+   *
+   * The rest of this card is text that only means something once the agency
+   * presses Save; a file is different — it either arrived or it did not, and
+   * waiting to find out until the whole form is submitted is how someone ends
+   * up with the wrong logo on a voucher and no idea when it went wrong. So it
+   * goes immediately, and the preview above is the receipt.
+   */
+  async function uploadLogo(file: File): Promise<void> {
+    setUploading(true);
+    setLogoError(null);
+    const body = new FormData();
+    body.append("logo", file);
+    const res = await fetch(apiUrl("/api/agency/logo"), {
+      method: "POST",
+      credentials: apiCredentials(),
+      body,
+    });
+    const payload = (await res.json()) as {
+      ok: boolean;
+      data?: { uploadedAt: string };
+      error?: { message: string };
+    };
+    setUploading(false);
+    if (!payload.ok || !payload.data) {
+      setLogoError(payload.error?.message ?? t("error.validation"));
+      return;
+    }
+    // Mirrored into the form so the preview updates now; the server has already
+    // cleared any linked URL, and this keeps the two from disagreeing on screen.
+    setProfile({ ...profile, logoUrl: "", logoUploadedAt: payload.data.uploadedAt });
+    refreshAgency();
+  }
+
+  async function removeLogo(): Promise<void> {
+    setUploading(true);
+    setLogoError(null);
+    await fetch(apiUrl("/api/agency/logo"), { method: "DELETE", credentials: apiCredentials() });
+    setUploading(false);
+    setProfile({ ...profile, logoUploadedAt: undefined });
+    refreshAgency();
+  }
+
   return (
     <Card className="space-y-4 p-5">
       <div>
@@ -1006,14 +1056,62 @@ function BrandingCard({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={t("agency.logoUrl")} htmlFor="pf-logo" hint={t("agency.logoUrlHint")}>
+        {/*
+          Two ways to give us a logo, because agencies arrive with either.
+          Uploading is what most of them need — the file is on somebody's
+          desktop, not a CDN — and pasting a link is better for the ones who
+          host it already. Setting one clears the other on the server, so there
+          is never a pair and a precedence rule to explain.
+        */}
+        <Field
+          label={t("agency.logo")}
+          htmlFor="pf-logo-file"
+          hint={logoError ?? t("agency.logoUploadHint")}
+          className="sm:col-span-2"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            {branding.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={branding.logoUrl}
+                alt={branding.name}
+                className="hairline h-12 w-auto max-w-[160px] rounded-[var(--radius-control)] border object-contain p-1"
+              />
+            )}
+            <input
+              id="pf-logo-file"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={!isAdmin || uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                // Cleared so choosing the same file twice still fires a change,
+                // which is what happens after a failed upload is retried.
+                e.target.value = "";
+                if (file) void uploadLogo(file);
+              }}
+              className="text-muted file:hairline max-w-full text-sm file:me-3 file:rounded-[var(--radius-control)] file:border file:bg-transparent file:px-3 file:py-1.5 file:text-sm"
+            />
+            {profile.logoUploadedAt && isAdmin && (
+              <Button size="sm" variant="ghost" onClick={() => void removeLogo()} loading={uploading}>
+                {t("common.remove")}
+              </Button>
+            )}
+          </div>
+        </Field>
+
+        <Field
+          label={t("agency.logoUrl")}
+          htmlFor="pf-logo"
+          hint={profile.logoUploadedAt ? t("agency.logoUrlReplaced") : t("agency.logoUrlHint")}
+        >
           <Input
             id="pf-logo"
             type="url"
             inputMode="url"
             placeholder="https://"
             value={profile.logoUrl ?? ""}
-            disabled={!isAdmin}
+            disabled={!isAdmin || Boolean(profile.logoUploadedAt)}
             onChange={(e) => setProfile({ ...profile, logoUrl: e.target.value })}
           />
         </Field>

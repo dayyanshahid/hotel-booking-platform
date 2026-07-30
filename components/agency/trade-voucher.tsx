@@ -27,6 +27,7 @@ export function TradeVoucher({
   booking,
   trade,
   profile,
+  agencyId,
   agencyName,
   locale,
   confirmation,
@@ -34,6 +35,7 @@ export function TradeVoucher({
   booking: Booking;
   trade: AgencyBooking;
   profile: AgencyProfile;
+  agencyId: string;
   agencyName: string;
   locale: Locale;
   /**
@@ -48,7 +50,7 @@ export function TradeVoucher({
 }) {
   const { t } = useApp();
   const currency = trade.currency as CurrencyCode;
-  const branding = brandingOf({ name: agencyName, profile });
+  const branding = brandingOf({ id: agencyId, name: agencyName, profile });
 
   return (
     <Card className="p-4">

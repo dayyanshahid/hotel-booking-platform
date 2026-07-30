@@ -154,6 +154,38 @@ const kvDriver: Driver = {
   },
 };
 
+/**
+ * A counter every instance shares, for things that must be counted once.
+ *
+ * A supplier's daily request allowance is the case this exists for. It was
+ * being counted in `globalThis`, which on one machine is exactly right and on a
+ * serverless platform is a budget *per lambda*: ten warm instances meant ten
+ * separate allowances and a guard that could not do the one thing it was for.
+ * The overrun lands on the supplier's side as a rate-limited or suspended
+ * account, which is not a failure mode anyone would connect back to a counter.
+ *
+ * `INCR` is atomic, so two instances asking at the same moment get different
+ * numbers — a read-modify-write over the document store could not promise
+ * that. Returns null when there is no shared store, and the caller falls back
+ * to counting in the process, which is correct for the single machine that
+ * situation implies.
+ *
+ * The key carries the day and the entry expires, so nothing has to sweep it.
+ */
+export async function bumpSharedCounter(
+  name: string,
+  ttlSeconds: number,
+): Promise<number | null> {
+  if (!kvConfig()) return null;
+  const key = `tm:count:${name}`;
+  const next = await kvCommand<number>(["INCR", key]);
+  if (next === null) return null;
+  // Only the first writer needs to set the expiry; re-setting it on every
+  // increment would slide the window forward and the count would never reset.
+  if (next === 1) await kvCommand(["EXPIRE", key, String(ttlSeconds)]);
+  return next;
+}
+
 /** Namespaced so a shared Redis is not a collision waiting to happen. */
 function documentKey(key: string): string {
   return `tm:doc:${key}`;

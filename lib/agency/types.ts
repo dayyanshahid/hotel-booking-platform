@@ -144,12 +144,26 @@ export interface AgencyProfile {
   /**
    * The agency's own mark, printed on anything a customer receives.
    *
-   * A URL rather than an upload: an agency already has its logo hosted
-   * somewhere, and storing image bytes in the same document as a credit line is
-   * a poor trade. Rendered inside a fixed box so a tall or wide file cannot
-   * break the top of a voucher.
+   * A link to a logo the agency already hosts. The other way in is an upload —
+   * see `logoUploadedAt` — which is what most agencies actually need, because
+   * the file is on somebody's desktop rather than a CDN. Whichever is set,
+   * it renders inside a fixed box so a tall or wide file cannot break the top
+   * of a voucher.
    */
   logoUrl?: string;
+  /**
+   * When a logo was last uploaded, if one was.
+   *
+   * The bytes live in the store, not here — a logo inlined into the profile
+   * would ride along on every response that carries it, and the dashboard
+   * polls one every thirty seconds. This is the marker that says there is one,
+   * and it doubles as the cache key: a new upload is a new timestamp, so the
+   * URL changes and a year-long cache header is safe.
+   *
+   * Uploading clears `logoUrl` and vice versa. Two logos and a precedence rule
+   * is a question nobody should have to answer.
+   */
+  logoUploadedAt?: string;
   /**
    * The accent on customer-facing documents, as `#rrggbb`.
    *

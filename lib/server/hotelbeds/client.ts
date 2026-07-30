@@ -3,6 +3,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { bumpSharedCounter } from "../persistence";
 import { getHotelbedsConfig, isHotelbedsEnabled, type HotelbedsConfig } from "./config";
 
 /**
@@ -66,23 +67,43 @@ function today(): string {
 
 /**
  * Evaluation API keys allow only 50 requests per day and answer 403 beyond that.
- * The guard keeps a local count so the app degrades to its own sources before
+ * The guard counts requests so the app degrades to its own sources before
  * burning the allowance, and so a runaway loop cannot exhaust a live quota.
+ *
+ * Counted in the shared store when there is one, because the allowance belongs
+ * to the API key and not to a process. In `globalThis` it was a budget per
+ * lambda: ten warm instances meant ten times the allowance, and the guard could
+ * not do the single thing it exists for. The overrun surfaces at the supplier
+ * as a rate-limited or suspended key, which nobody would trace back to a
+ * counter.
+ *
+ * The process copy is kept either way. It is the correct answer on one machine,
+ * it is what `quotaStatus` reports without a round trip, and it is the fallback
+ * when the shared store is unreachable — degrading to a stricter budget rather
+ * than to none.
  */
-function consumeQuota(config: HotelbedsConfig): void {
+async function consumeQuota(config: HotelbedsConfig): Promise<void> {
   const state = (globalThis.__hotelbedsQuota ??= { day: today(), used: 0 });
   if (state.day !== today()) {
     state.day = today();
     state.used = 0;
   }
-  if (state.used >= config.dailyQuota) {
+
+  const refuse = (used: number) => {
     throw new HotelbedsError(
       "quotaExceeded",
-      `Local daily request budget of ${config.dailyQuota} reached; not calling the supplier again today.`,
+      `Daily request budget of ${config.dailyQuota} reached (${used} used); not calling the supplier again today.`,
       { retryable: false },
     );
-  }
+  };
+
+  if (state.used >= config.dailyQuota) refuse(state.used);
   state.used += 1;
+
+  // Two days of life, so a counter written just before midnight is not the one
+  // read just after it while the day in the key has already rolled over.
+  const shared = await bumpSharedCounter(`hotelbeds:${today()}`, 48 * 60 * 60);
+  if (shared !== null && shared > config.dailyQuota) refuse(shared);
 }
 
 /**
@@ -171,7 +192,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   let lastError: HotelbedsError | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    consumeQuota(config);
+    await consumeQuota(config);
 
     const timestamp = Math.floor(Date.now() / 1000);
     const controller = new AbortController();
