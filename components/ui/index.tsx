@@ -58,10 +58,26 @@ const BUTTON_SIZE: Record<ButtonSize, string> = {
   lg: "min-h-12 px-6 text-base w-full sm:w-auto",
 };
 
+/**
+ * A button does not submit anything unless it says it does.
+ *
+ * HTML defaults a `<button>` inside a form to `type="submit"`, and this
+ * component passed that default straight through. Every button in the occupancy
+ * picker and the date picker therefore submitted the search bar: an agent
+ * clicking "+ Add room" ran a search for a room they had not finished
+ * describing, the panel closed under them, and the results were for the
+ * allocation *before* the edit. "Remove room", "Done" and the date presets did
+ * the same thing.
+ *
+ * `submit` is the rarer intent and the more expensive one to get wrong, so it is
+ * the one that has to be asked for. An explicit `type` still wins — both real
+ * submit buttons in the app pass it, and are unaffected.
+ */
 export function Button({
   variant = "primary",
   size = "md",
   loading = false,
+  type = "button",
   className,
   children,
   ...props
@@ -73,6 +89,7 @@ export function Button({
   return (
     <button
       {...props}
+      type={type}
       disabled={props.disabled || loading}
       className={cx(BUTTON_BASE, BUTTON_VARIANT[variant], BUTTON_SIZE[size], className)}
     >

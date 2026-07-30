@@ -617,7 +617,7 @@ describe("content can never spend the searching allowance", () => {
     try {
       const response = await runSearch(
         { ...intent, destinationId: "dest-singapore", destinationDisplay: "Singapore" },
-        { locale: "en", supply: "live" },
+        { locale: "en", supply: "live", scenario: "normal" },
       );
 
       expect(response.totalCount).toBe(0);
