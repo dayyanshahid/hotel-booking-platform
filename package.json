@@ -12,6 +12,7 @@
     "hotelbeds:sync": "tsx --conditions=react-server scripts/hotelbeds-sync.ts",
     "hotelbeds:smoke": "tsx --conditions=react-server scripts/hotelbeds-smoke.ts",
     "tourmind:sync": "tsx --conditions=react-server scripts/tourmind-sync.ts",
+    "seed:build": "tsx scripts/build-seed.ts",
     "tourmind:smoke": "tsx --conditions=react-server scripts/tourmind-smoke.ts",
     "suppliers:conformance": "tsx --conditions=react-server scripts/supplier-conformance.ts"
   },

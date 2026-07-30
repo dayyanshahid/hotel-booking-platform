@@ -1,7 +1,8 @@
 import "server-only";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dataDir } from "../runtime";
+import { gunzipSync } from "node:zlib";
+import { dataDir, seedDir } from "../runtime";
 import { TM, tourmindPost } from "./client";
 import { CITIES, type City } from "@/lib/data/geo/cities";
 import type { TmError } from "./types";
@@ -175,15 +176,35 @@ export function cityFor(
 
 /* ---------------------------------------------------------------- cache */
 
-async function readCache(): Promise<TourmindHotelRecord[] | null> {
+/**
+ * A synced file if there is one, otherwise the copy that ships with the build.
+ *
+ * The seed is gzipped, because the index and its photography are thirteen
+ * megabytes of JSON and under two compressed — small enough to commit, which is
+ * the whole point: on a serverless deployment `dataDir` is an empty `/tmp` and
+ * a catalogue that is not in the bundle does not exist.
+ *
+ * Order matters. A sync writes to `dataDir`, so that is checked first and wins;
+ * the seed is only what to fall back on before anyone has run one.
+ */
+async function readSeeded(...segments: string[]): Promise<unknown | null> {
   try {
-    const raw = await fs.readFile(path.join(CACHE_DIR, HOTELS_FILE), "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    // A truncated or hand-edited file must not poison every later lookup.
-    return Array.isArray(parsed) ? (parsed as TourmindHotelRecord[]) : null;
+    return JSON.parse(await fs.readFile(path.join(CACHE_DIR, ...segments), "utf8")) as unknown;
+  } catch {
+    // Not synced here. Fall through to the shipped copy.
+  }
+  try {
+    const packed = await fs.readFile(path.join(seedDir(), "tourmind", ...segments) + ".gz");
+    return JSON.parse(gunzipSync(packed).toString("utf8")) as unknown;
   } catch {
     return null;
   }
+}
+
+async function readCache(): Promise<TourmindHotelRecord[] | null> {
+  const parsed = await readSeeded(HOTELS_FILE);
+  // A truncated or hand-edited file must not poison every later lookup.
+  return Array.isArray(parsed) ? (parsed as TourmindHotelRecord[]) : null;
 }
 
 /** The content keys, stripped from the index copy of a record. */
@@ -237,14 +258,10 @@ async function contentForCity(citySlug: string): Promise<Record<string, Tourmind
   const held = contentMemo.get(citySlug);
   if (held) return held;
   let bucket: Record<string, TourmindHotelContent> = {};
-  try {
-    const raw = await fs.readFile(path.join(CACHE_DIR, CONTENT_DIR, `${citySlug}.json`), "utf8");
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object") bucket = parsed as Record<string, TourmindHotelContent>;
-  } catch {
-    // No content synced for this city: the records still work, with a drawing
-    // in place of photography rather than someone else's photograph.
-  }
+  // No content for this city: the records still work, with a drawing in place
+  // of photography rather than someone else's photograph.
+  const parsed = await readSeeded(CONTENT_DIR, `${citySlug}.json`);
+  if (parsed && typeof parsed === "object") bucket = parsed as Record<string, TourmindHotelContent>;
   contentMemo.set(citySlug, bucket);
   return bucket;
 }

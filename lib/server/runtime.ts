@@ -18,6 +18,25 @@ export function dataDir(): string {
 }
 
 /**
+ * Read-only catalogue data that ships with the build.
+ *
+ * `dataDir` is `/tmp` on a serverless platform and a cold instance starts with
+ * nothing in it, which is fine for anything the app can fetch again and fatal
+ * for anything it cannot. TourMind is the second kind: their availability call
+ * takes hotel ids, and the only way to know which of their nine thousand
+ * properties are in a city is the static catalogue. No catalogue meant no
+ * TourMind supply at all on a deployment — searched, ranked and merged
+ * correctly, over an empty list.
+ *
+ * So a compressed copy is committed and read when the writable cache has
+ * nothing. It is a seed, not a cache: whatever a sync writes to `dataDir` wins,
+ * because that is the fresher of the two.
+ */
+export function seedDir(): string {
+  return process.env.NAZIL_SEED_DIR ?? path.join(process.cwd(), "data-seed");
+}
+
+/**
  * Public origin, used for canonical URLs, hreflang and the sitemap (§12.4).
  * Vercel exposes the deployment host at build and run time, so the correct
  * absolute URL needs no manual configuration.

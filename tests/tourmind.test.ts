@@ -515,3 +515,46 @@ describe("a TourMind rate can actually be bought", () => {
     expect(serialised.toLowerCase()).not.toContain("tourmind");
   });
 });
+
+describe("the catalogue that ships with the build", () => {
+  /*
+   * The one piece of supplier data the app cannot re-fetch on demand.
+   *
+   * Their availability call takes hotel ids, so the only way to know which of
+   * nine thousand properties sit in a city is the static list. A deployment's
+   * writable directory is an empty /tmp on every cold start, so without a copy
+   * in the bundle a perfectly healthy TourMind account returns nothing at all —
+   * searched, ranked and merged correctly, over an empty list, with no error
+   * anywhere. That is exactly what the deployed portal was doing.
+   *
+   * Asserted here so the seed cannot quietly go missing or be committed
+   * truncated. It is regenerated with `npm run tourmind:sync && npm run
+   * seed:build`.
+   */
+  it("is present, readable and actually holds properties", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const { gunzipSync } = await import("node:zlib");
+    const { join } = await import("node:path");
+
+    const packed = await readFile(join(process.cwd(), "data-seed/tourmind/hotels.json.gz"));
+    const records = JSON.parse(gunzipSync(packed).toString("utf8")) as unknown;
+
+    expect(Array.isArray(records)).toBe(true);
+    expect((records as unknown[]).length).toBeGreaterThan(1000);
+
+    // A record is only useful if it carries the id the supplier is asked for
+    // and the city slug the search filters on.
+    const first = (records as { hotelId?: unknown; citySlug?: unknown }[]).find((r) => r.citySlug);
+    expect(typeof first?.hotelId).toBe("number");
+    expect(typeof first?.citySlug).toBe("string");
+  });
+
+  it("covers the cities the platform actually sells", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    // Content is sharded per city; an empty directory means every TourMind
+    // property renders without photography or a description.
+    const cities = await readdir(join(process.cwd(), "data-seed/tourmind/content"));
+    expect(cities.filter((f) => f.endsWith(".json.gz")).length).toBeGreaterThan(10);
+  });
+});
