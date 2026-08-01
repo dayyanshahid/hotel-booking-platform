@@ -5,8 +5,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Button, Card, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/format";
-import type { Interpretation } from "@/lib/server/interpret";
-import type { CurrencyCode, SearchFilters, SearchIntent } from "@/lib/types";
+import type { CurrencyCode, Interpretation, SearchFilters, SearchIntent } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**

@@ -3,6 +3,7 @@ import { suggestAll } from "./search";
 import { addDays, nightsBetween, todayIso } from "../format";
 import { isCurrencyCode } from "../currencies";
 import type { CurrencyCode, Locale, SearchFilters, SearchIntent } from "../types";
+import type { Interpretation } from "../types";
 
 /**
  * Turning a sentence into a search.
@@ -24,16 +25,7 @@ import type { CurrencyCode, Locale, SearchFilters, SearchIntent } from "../types
  * rather than presenting an invention as an understanding.
  */
 
-export interface Interpretation {
-  intent: SearchIntent | null;
-  filters: SearchFilters;
-  /** What it read straight out of the sentence. */
-  understood: string[];
-  /** What it had to fill in, stated so the guest can correct it. */
-  assumed: string[];
-  /** What it could not work out at all. */
-  missing: string[];
-}
+export type { Interpretation };
 
 /** Month names it can recognise, in both languages, in the order they occur. */
 const MONTHS: Record<string, number> = {

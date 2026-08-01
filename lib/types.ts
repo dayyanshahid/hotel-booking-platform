@@ -793,3 +793,23 @@ export interface SupplierConfirmation {
   /** True when we could not reach the supplier; the voucher says so. */
   unavailable?: boolean;
 }
+
+/**
+ * What `/api/search/interpret` answers with.
+ *
+ * The interpreter itself is server code — it reads dates and occupancy out of a
+ * sentence — but its *answer* is a wire shape, and the component that renders
+ * it runs in the browser. Declared here so a front end that carries no server
+ * code can still describe what it receives; the module that produces it
+ * re-exports this rather than owning a second copy.
+ */
+export interface Interpretation {
+  intent: SearchIntent | null;
+  filters: SearchFilters;
+  /** What it read straight out of the sentence. */
+  understood: string[];
+  /** What it had to fill in, stated so the guest can correct it. */
+  assumed: string[];
+  /** What it could not work out at all. */
+  missing: string[];
+}

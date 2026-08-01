@@ -5,20 +5,18 @@ import { isCurrencyCode } from "../currencies";
 import { nightsBetween } from "../format";
 import type { HotelSeed } from "../data/hotels";
 import { ROOM_TEMPLATES } from "../data/rooms";
+import { hash01 } from "../hash";
 
 /**
  * Deterministic commercial pricing. Lives on the server only — §9.4 requires the
  * browser to format, never to recompute, commercial totals.
  */
 
-export function hash01(input: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return ((h >>> 0) % 100000) / 100000;
-}
+/*
+ * Re-exported so the many modules that reach for it here keep working. The
+ * function itself moved to `lib/hash`, which a client bundle may import.
+ */
+export { hash01 };
 
 export type RateClass = "flex" | "semi" | "nrf";
 export type BoardCode = "RO" | "BB" | "HB" | "FB" | "AI";

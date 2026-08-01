@@ -1,4 +1,4 @@
-import { hash01 } from "../server/pricing";
+import { hash01 } from "../hash";
 
 /**
  * Deterministic scene illustrator.
