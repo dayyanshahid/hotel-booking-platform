@@ -124,7 +124,7 @@ export function HotelCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="text-brand-500 mt-0.5 text-[18px] font-bold tracking-[-0.015em] wrap-anywhere">
+              <h3 className="text-brand-700 mt-0.5 text-[18px] font-bold tracking-[-0.015em] wrap-anywhere">
                 <Link href={href} className="hover:underline">
                   {card.name}
                 </Link>
@@ -134,7 +134,7 @@ export function HotelCard({
                     district leaves this blank; the comma has to go with it. */}
                 {card.neighborhood && (
                   <>
-                    <span className="text-brand-500 underline">{card.neighborhood}</span>,{" "}
+                    <span className="text-brand-700 underline">{card.neighborhood}</span>,{" "}
                   </>
                 )}
                 {card.locality}

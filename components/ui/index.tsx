@@ -43,12 +43,14 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
    * page, which is the only reason a colour this loud stays useful.
    */
   action: "bg-action-400 text-[var(--color-action-ink)] hover:bg-action-500",
-  secondary: "surface border border-brand-500 text-brand-500 hover:bg-brand-50",
+  // Border stays brand-500: a non-text boundary needs 3:1 and clears it. The
+  // label is normal-size text and needs 4.5:1, which only brand-700 gives.
+  secondary: "surface border border-brand-500 text-brand-700 hover:bg-brand-50",
   /** For controls sitting on the navy chrome band, where blue-on-navy vanishes. */
   chrome: "border border-white/40 text-white hover:bg-white/15",
   ghost: "hover:surface-sunken font-semibold",
   danger: "bg-critical-500 text-white hover:bg-critical-700",
-  quiet: "text-brand-500 hover:underline underline-offset-2 decoration-2 font-semibold",
+  quiet: "text-brand-700 hover:underline underline-offset-2 decoration-2 font-semibold",
 };
 
 // 44×44 minimum touch target on interactive controls (§11.1).
