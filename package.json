@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start --port 4860",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "hotelbeds:sync": "tsx --conditions=react-server scripts/hotelbeds-sync.ts",

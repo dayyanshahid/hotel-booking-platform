@@ -1,0 +1,54 @@
+name: CI
+
+# Every push and every pull request, because the value of these checks is that
+# nobody has to remember to run them. All four ran green on each change that
+# reached production; none of that was enforced by anything until now.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push supersedes the first: a run against a commit nobody is looking
+# at any more is a queue slot and a wait for the run that matters.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `ci`, not `install`: it installs exactly the lockfile and fails if the
+      # two have drifted, which is the difference between testing what will ship
+      # and testing whatever resolved today.
+      - name: Install
+        run: npm ci
+
+      # Cheapest first, so a type error reports in under a minute rather than
+      # after the suite.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # No credentials. Every supplier test stubs the transport, and the config
+      # carries safe defaults so an unconfigured environment runs the simulated
+      # sources rather than failing.
+      - name: Test
+        run: npm test
+
+      # Last because it is the slowest, and it catches a class the others cannot:
+      # `server-only` is a build-time guard, so a client component importing a
+      # credential module typechecks, lints and passes tests, and fails here.
+      - name: Build
+        run: npm run build
