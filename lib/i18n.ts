@@ -3,9 +3,25 @@ import type { Locale } from "./types";
 export const LOCALES: Locale[] = ["en", "ar"];
 export const DEFAULT_LOCALE: Locale = "en";
 
+/**
+ * `intl` is the tag every `Intl` formatter in the product is built from.
+ *
+ * Arabic pins the Latin numbering system. Plain `ar-SA` gives Arabic-Indic
+ * digits, but only through `Intl` — a number interpolated straight into JSX
+ * stays Latin — so one line read "٩ سبتمبر ٢٠٢٦ · 3 ليالٍ · 1 غرفة", two
+ * numbering systems in the same sentence.
+ *
+ * Consistency had to go one way or the other, and Latin is the safer way for
+ * this product: prices, dates and stay lengths are read down a phone to a
+ * customer and typed into supplier systems, and both suppliers speak Latin
+ * digits. Gulf commercial interfaces overwhelmingly use them too.
+ *
+ * It is a presentation choice, not a correctness one — dropping `-u-nu-latn`
+ * turns the whole Arabic side Arabic-Indic, consistently, in one edit.
+ */
 export const LOCALE_META: Record<Locale, { label: string; dir: "ltr" | "rtl"; htmlLang: string; intl: string }> = {
   en: { label: "English", dir: "ltr", htmlLang: "en", intl: "en-GB" },
-  ar: { label: "العربية", dir: "rtl", htmlLang: "ar", intl: "ar-SA" },
+  ar: { label: "العربية", dir: "rtl", htmlLang: "ar", intl: "ar-SA-u-nu-latn" },
 };
 
 type Dict = Record<string, string>;
@@ -48,6 +64,30 @@ const en: Dict = {
   "common.destination": "Destination",
   "common.dates": "Dates",
   "common.guests": "Guests",
+  "common.guest": "Guest",
+  /*
+   * Counted forms, kept apart from the labels above.
+   *
+   * "Rooms & Guests" is a field label and is capitalised; "2 guests" is a
+   * counted noun and is not. Reusing one for the other printed "3 nights · 1
+   * Room · 2 Guests" in English — two of the three capitalised, for no reason a
+   * reader could see.
+   *
+   * In Arabic the difference is grammatical rather than cosmetic. The labels are
+   * definite ("الغرف", "الضيوف") because that is how a heading reads; after a
+   * numeral Arabic takes the indefinite, so the same keys rendered "٢ الضيوف" —
+   * "2 the-guests".
+   */
+  "count.night": "night",
+  "count.nights": "nights",
+  "count.room": "room",
+  "count.rooms": "rooms",
+  "count.guest": "guest",
+  "count.guests": "guests",
+  "count.adult": "adult",
+  "count.adults": "adults",
+  "count.child": "child",
+  "count.children": "children",
   "common.rooms": "Rooms",
   "common.room": "Room",
   "common.adults": "Adults",
@@ -1203,16 +1243,16 @@ const en: Dict = {
 const ar: Dict = {
   "brand.name": "ترافل آند مور",
   "brand.legalName": "ترافل آند مور برايفت ليمتد",
-  "brand.since": "نخدمكم منذ ١٩٨٤",
+  "brand.since": "نخدمكم منذ 1984",
   "brand.parent": "شركة خاصة محدودة",
   "stat.years": "سنة من الخبرة",
   "stat.travellers": "مسافر سعيد",
   "stat.iata": "وكالة معتمدة",
   "stat.support": "دعم العملاء",
-  "stat.yearsValue": "+٤٠",
-  "stat.travellersValue": "+٥٠ ألف",
+  "stat.yearsValue": "+40",
+  "stat.travellersValue": "+50 ألف",
   "stat.iataValue": "IATA",
-  "stat.supportValue": "٢٤/٧",
+  "stat.supportValue": "24/7",
   "home.networkTitle": "واحدة من أكبر شبكات الفنادق في العالم",
   "home.networkBody": "يأتي مخزون الفنادق عبر شراكتنا مع Bedsonline، ولذلك يصل البحث هنا إلى المخزون نفسه الذي تصل إليه كبرى مواقع الحجز — بسعر إجمالي نعرضه كاملاً قبل أن تختار.",
   "brand.tagline": "خدمات سفر متكاملة.",
@@ -1238,6 +1278,17 @@ const ar: Dict = {
   "common.destination": "الوجهة",
   "common.dates": "التواريخ",
   "common.guests": "الضيوف",
+  "common.guest": "ضيف",
+  "count.night": "ليلة",
+  "count.nights": "ليالٍ",
+  "count.room": "غرفة",
+  "count.rooms": "غرف",
+  "count.guest": "ضيف",
+  "count.guests": "ضيوف",
+  "count.adult": "بالغ",
+  "count.adults": "بالغين",
+  "count.child": "طفل",
+  "count.children": "أطفال",
   "common.rooms": "الغرف",
   "common.room": "غرفة",
   "common.adults": "بالغون",
@@ -1287,7 +1338,7 @@ const ar: Dict = {
   "common.and": "و",
 
   "home.heroTitle": "رحلتك، بخبرتنا",
-  "home.heroEyebrow": "موثوق به من الآلاف منذ ١٩٨٤",
+  "home.heroEyebrow": "موثوق به من الآلاف منذ 1984",
   "home.heroSubtitle": "{properties} مكان إقامة في {cities} مدينة، بسعر إجمالي كامل — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
   "home.heroSearchHint": "أدخل مدينة أو معلمًا أو اسم عقار.",
   "home.collections": "تصفَّح حسب أسلوب السفر",
@@ -1359,7 +1410,7 @@ const ar: Dict = {
   "home.browseAll": "تصفّح كل الوجهات",
   "home.destinations": "وجهات مميزة",
   "home.aiPrompt": "صف رحلتك",
-  "home.aiPlaceholder": "عائلة من أربعة أفراد، جدة على الواجهة البحرية، ٣ ليالٍ في أكتوبر، إلغاء مجاني",
+  "home.aiPlaceholder": "عائلة من أربعة أفراد، جدة على الواجهة البحرية، 3 ليالٍ في أكتوبر، إلغاء مجاني",
   "home.aiInterpret": "تفسير",
   "home.aiAssumed": "افتراضات",
   "home.aiSearch": "ابحث عن هذه",
@@ -1384,8 +1435,8 @@ const ar: Dict = {
   "search.flexible": "تواريخ مرنة",
   "search.flexibleExact": "تواريخ محددة",
   "search.flexiblePlus1": "± يوم",
-  "search.flexiblePlus3": "± ٣ أيام",
-  "search.flexiblePlus7": "± ٧ أيام",
+  "search.flexiblePlus3": "± 3 أيام",
+  "search.flexiblePlus7": "± 7 أيام",
   "search.recent": "عمليات البحث الأخيرة",
   "search.suggestions": "اقتراحات",
   "search.noSuggestions": "لا توجد أماكن مطابقة. جرّب اسم مدينة أو حي أو فندق.",
@@ -1402,7 +1453,7 @@ const ar: Dict = {
   "search.accessibleHint": "سنفلتر الغرف المهيأة. تأكد من التفاصيل مع الفندق قبل الوصول.",
   "search.nationality": "الجنسية",
   "search.nationalityWhy": "بعض الأسعار تُحدَّد حسب الجنسية أو الإقامة. نسأل فقط عندما يؤثر ذلك على ما يمكنك حجزه.",
-  "search.tooManyRooms": "يمكنك البحث عن ٨ غرف كحد أقصى. للمجموعات الأكبر تواصل مع الدعم.",
+  "search.tooManyRooms": "يمكنك البحث عن 8 غرف كحد أقصى. للمجموعات الأكبر تواصل مع الدعم.",
   "search.timeout": "البحث يستغرق وقتًا أطول من المعتاد.",
 
   "results.title": "فندق في",
@@ -1440,7 +1491,7 @@ const ar: Dict = {
   "results.merge": "أضف إلى القائمة",
   "results.showPrices": "عرض الأسعار",
   "results.compareAdd": "قارن",
-  "results.compareFull": "يمكنك مقارنة ٤ فنادق كحد أقصى.",
+  "results.compareFull": "يمكنك مقارنة 4 فنادق كحد أقصى.",
   "results.saveHotel": "احفظ الفندق",
   "results.savedHotel": "محفوظ",
 
@@ -1664,7 +1715,7 @@ const ar: Dict = {
   "cancel.quoteExpired": "انتهت صلاحية العرض. طلبنا عرضًا محدثًا.",
   "cancel.irreversible": "الإلغاء نهائي ولا يمكن التراجع عنه.",
   "cancel.otpTitle": "تأكيد الهوية",
-  "cancel.otpBody": "أرسلنا رمزًا من ٦ أرقام إلى {contact}.",
+  "cancel.otpBody": "أرسلنا رمزًا من 6 أرقام إلى {contact}.",
   "cancel.confirmButton": "إلغاء الحجز",
   "cancel.processing": "جارٍ معالجة الإلغاء",
   "cancel.doneTitle": "تم إلغاء الحجز",
@@ -1681,7 +1732,7 @@ const ar: Dict = {
   "account.signInBody": "نستخدم رمزًا لمرة واحدة. بدون كلمة مرور.",
   "account.emailLabel": "البريد الإلكتروني",
   "account.sendCode": "إرسال الرمز",
-  "account.codeLabel": "الرمز المكوّن من ٦ أرقام",
+  "account.codeLabel": "الرمز المكوّن من 6 أرقام",
   "account.codeSent": "أرسلنا رمزًا إلى {email}.",
   "account.codeInvalid": "الرمز غير صحيح أو منتهي الصلاحية.",
   "account.verify": "تحقق وتابع",
@@ -1799,7 +1850,7 @@ const ar: Dict = {
   "footer.terms": "شروط الاستخدام",
   "footer.security": "الدفع الآمن",
   "footer.rights": "جميع الحقوق محفوظة.",
-  "footer.disclaimer": "ترافل آند مور برايفت ليمتد — وكالة سفر موثوقة منذ ١٩٨٤، معتمدة من IATA. منصة الفنادق هذه بيئة عرض توضيحي — المخزون والأسعار والحجوزات محاكاة.",
+  "footer.disclaimer": "ترافل آند مور برايفت ليمتد — وكالة سفر موثوقة منذ 1984، معتمدة من IATA. منصة الفنادق هذه بيئة عرض توضيحي — المخزون والأسعار والحجوزات محاكاة.",
 
   "admin.bookingsBody": "كل الحجوزات، المباشرة وعبر الوكالات. صفِّ ما يحتاج انتباهًا، أو ابحث برقم الحجز أو اسم الضيف أو العقار.",
   "admin.search": "بحث",
@@ -1859,7 +1910,7 @@ const ar: Dict = {
   "admin.reinstated": "الوكالة نشطة مجددًا.",
   "admin.settingsBody": "السياسة التجارية المطبّقة على المنصة كاملة.",
   "admin.markupWarning": "تغيير هذه القيمة يحرّك كل سعر معلن على الموقع فور الحفظ، وتتحرك معه تكاليف الوكالات لأن عمولتها خصم من السعر المعلن.",
-  "admin.markupRange": "أدخل هامشًا بين ٠٪ و٦٠٪.",
+  "admin.markupRange": "أدخل هامشًا بين 0٪ و60٪.",
   "admin.markupSaved": "حُدّث الهامش، ويسري على عمليات البحث الجديدة فورًا.",
   "admin.deployedDefault": "الافتراضي المنشور",
   "admin.overriddenBy": "عُدّل بواسطة {who}",
@@ -2166,10 +2217,10 @@ const ar: Dict = {
   "agency.logoUrl": "رابط الشعار",
   "agency.logoUrlHint": "رابط https لشعارك. يُطبع على كل قسيمة وعرض يستلمه عملاؤك.",
   "agency.logo": "الشعار",
-  "agency.logoUploadHint": "ارفع صورة PNG أو JPEG أو WebP بحجم أقصاه ٥١٢ كيلوبايت. تُطبع على كل عرض وقسيمة يستلمها عملاؤك.",
+  "agency.logoUploadHint": "ارفع صورة PNG أو JPEG أو WebP بحجم أقصاه 512 كيلوبايت. تُطبع على كل عرض وقسيمة يستلمها عملاؤك.",
   "agency.logoUrlReplaced": "يتم استخدام الشعار المرفوع. احذفه لاستخدام رابط بدلًا منه.",
   "agency.logoMissing": "اختر ملف صورة للرفع.",
-  "agency.logoTooLarge": "حجم الصورة يتجاوز ٥١٢ كيلوبايت. احفظها بحجم أصغر ثم حاول مجددًا.",
+  "agency.logoTooLarge": "حجم الصورة يتجاوز 512 كيلوبايت. احفظها بحجم أصغر ثم حاول مجددًا.",
   "agency.logoNotAnImage": "هذا الملف ليس صورة PNG أو JPEG أو WebP.",
   "agency.branding": "الهوية البصرية",
   "agency.brandingBody": "كيف تبدو عروضك وقسائمك للعميل. لا شيء هنا يخصّنا — هذه المستندات تُرسل باسم وكالتك.",
@@ -2235,7 +2286,7 @@ const ar: Dict = {
   "agency.adminOnly": "لا يغيّر هذا إلا مدير الوكالة.",
   "agency.emailTaken": "هذا البريد مسجل لدى وكالة أخرى.",
   "agency.lastAdmin": "لا بد من بقاء مدير نشط واحد على الأقل.",
-  "agency.markupRange": "أدخل هامشًا بين ٠٪ و٦٠٪.",
+  "agency.markupRange": "أدخل هامشًا بين 0٪ و60٪.",
   "agency.creditExceeded": "هذا الحجز يتجاوز الائتمان المتاح لك.",
 
   "agency.dashboard": "نظرة عامة",
@@ -2413,4 +2464,50 @@ export function isLocale(value: string | undefined): value is Locale {
  */
 export function countLabel(t: (key: never) => string, n: number): string {
   return n === 1 ? t("results.countOne" as never) : t("results.count" as never);
+}
+
+/**
+ * The words that go beside a count, in the right number.
+ *
+ * "1 Rooms · 2 Guests" appeared on both results pages and in the search bar,
+ * because every call site pasted `t("common.rooms")` after a number and none of
+ * them owned the plural. It was fixed once in the occupancy picker and stayed
+ * wrong in the other three, which is what happens when the rule lives at the
+ * call site.
+ *
+ * Arabic is not English with different words — it has dual and small-plural
+ * forms — so these route through `Intl.PluralRules` for the locale rather than
+ * an `n === 1` test. Where a locale asks for a category we hold no word for, the
+ * plural is the safe fall-back: it is the form that reads acceptably with any
+ * number, which the singular is not.
+ */
+function plural(
+  t: (key: never) => string,
+  n: number,
+  locale: string,
+  one: string,
+  other: string,
+): string {
+  const category = new Intl.PluralRules(locale).select(n);
+  return t((category === "one" ? one : other) as never);
+}
+
+export function roomLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.room", "count.rooms");
+}
+
+export function guestLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.guest", "count.guests");
+}
+
+export function nightLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.night", "count.nights");
+}
+
+export function adultLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.adult", "count.adults");
+}
+
+export function childLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.child", "count.children");
 }

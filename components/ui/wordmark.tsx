@@ -48,6 +48,7 @@ export function Wordmark({
   showSince = false,
   /** Drops the type and keeps the globe — for tight chrome and print corners. */
   markOnly = false,
+  typeFrom,
 }: {
   className?: string;
   /** "brand" on light ground, "inverse" on the charcoal chrome. */
@@ -55,6 +56,19 @@ export function Wordmark({
   /** Adds the "serving since 1984" line beneath. */
   showSince?: boolean;
   markOnly?: boolean;
+  /**
+   * Show the type only from this breakpoint up; the globe is always there.
+   *
+   * The header used to do this with two `Wordmark`s — `markOnly` tagged
+   * `sm:hidden` and the full lockup tagged `hidden sm:inline-flex` — and both
+   * rendered on a phone, because `cx` joins classes without resolving conflicts
+   * and the component's own `inline-flex` outranked the caller's `hidden`. Two
+   * globes sat side by side and the type wrapped over four lines.
+   *
+   * A component that needs to change shape by width has to own that itself. A
+   * caller cannot reliably switch off a display utility it did not set.
+   */
+  typeFrom?: "sm" | "md" | "lg";
 }) {
   const type = tone === "inverse" ? "text-brand-300" : "text-brand-500";
   const sub = tone === "inverse" ? "text-white/60" : "text-[var(--text-muted)]";
@@ -68,10 +82,21 @@ export function Wordmark({
     );
   }
 
+  // Tailwind needs these spelled out; a template-built class name is not in the
+  // stylesheet at build time.
+  const typeVisibility =
+    typeFrom === "sm"
+      ? "hidden sm:block"
+      : typeFrom === "md"
+        ? "hidden md:block"
+        : typeFrom === "lg"
+          ? "hidden lg:block"
+          : "block";
+
   return (
     <span className={`inline-flex items-center gap-2.5 ${className ?? ""}`}>
       <GlobeMark size={34} className="shrink-0" />
-      <span>
+      <span className={typeVisibility}>
         {/*
           Two lines at different weights, as in the artwork: the trading name
           carries the brand and "PRIVATE LIMITED" is the legal tail. Tight

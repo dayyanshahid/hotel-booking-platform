@@ -10,7 +10,7 @@ import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/comme
 import { Alert, Badge, Button, Card, Drawer, EmptyState, SectionHeading, cx } from "@/components/ui";
 import { NoResultsArt } from "@/components/ui/illustrations";
 import { formatDate, formatMoney, guestCount } from "@/lib/format";
-import { countLabel } from "@/lib/i18n";
+import { countLabel, guestLabel, nightLabel, roomLabel } from "@/lib/i18n";
 import { href, searchHref } from "@/lib/nav";
 import type { ApiError, Locale, SearchFilters, SearchIntent, SearchResponse, SortKey } from "@/lib/types";
 
@@ -134,8 +134,8 @@ export function SearchResultsView({
           </h1>
           <p className="text-muted text-sm">
             {formatDate(intent.checkIn, locale)} → {formatDate(intent.checkOut, locale)} · {nights}{" "}
-            {nights === 1 ? t("common.night") : t("common.nights")} · {intent.rooms.length} {t("common.rooms")} ·{" "}
-            {guestCount(intent.rooms)} {t("common.guests")}
+            {nightLabel(t, nights, locale)} · {intent.rooms.length} {roomLabel(t, intent.rooms.length, locale)} ·{" "}
+            {guestCount(intent.rooms)} {guestLabel(t, guestCount(intent.rooms), locale)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

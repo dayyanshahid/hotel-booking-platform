@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
+import { adultLabel, childLabel, roomLabel } from "@/lib/i18n";
 import { Alert, Button, Checkbox, Select } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { MAX_ADULTS_PER_ROOM, MAX_CHILDREN_PER_ROOM, MAX_CHILD_AGE, MAX_ROOMS } from "@/lib/server/validate";
@@ -24,7 +25,7 @@ export function OccupancyPicker({
   onChange: (next: { rooms: RoomAllocation[]; accessibleRoom: boolean }) => void;
   errors?: Record<string, string>;
 }) {
-  const { t } = useApp();
+  const { t, locale } = useApp();
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -41,10 +42,11 @@ export function OccupancyPicker({
   const children = rooms.reduce((s, r) => s + r.childrenAges.length, 0);
   // "1 Children" and "1 Rooms" is how a search bar tells an agent nobody
   // proof-read it. Arabic has its own count rules, which `countLabel` owns.
+  // Counted nouns throughout, so the line does not read "1 room · 2 Adults".
   const summary = [
-    `${rooms.length} ${rooms.length === 1 ? t("common.room") : t("common.rooms")}`,
-    `${adults} ${adults === 1 ? t("common.adult") : t("common.adults")}`,
-    ...(children ? [`${children} ${children === 1 ? t("common.child") : t("common.children")}`] : []),
+    `${rooms.length} ${roomLabel(t, rooms.length, locale)}`,
+    `${adults} ${adultLabel(t, adults, locale)}`,
+    ...(children ? [`${children} ${childLabel(t, children, locale)}`] : []),
   ].join(" · ");
 
   function update(index: number, patch: Partial<RoomAllocation>) {

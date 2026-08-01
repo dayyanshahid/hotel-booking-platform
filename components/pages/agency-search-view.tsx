@@ -30,7 +30,7 @@ import {
   nightsBetween,
   todayIso,
 } from "@/lib/format";
-import { countLabel } from "@/lib/i18n";
+import { countLabel, guestLabel, roomLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -341,7 +341,8 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 {applied && (
                   <>
                     {formatDate(applied.checkIn, locale)} → {formatDate(applied.checkOut, locale)} ·{" "}
-                    {applied.rooms.length} {t("common.rooms")} · {guestCount(applied.rooms)} {t("common.guests")}
+                    {applied.rooms.length} {roomLabel(t, applied.rooms.length, locale)} ·{" "}
+                    {guestCount(applied.rooms)} {guestLabel(t, guestCount(applied.rooms), locale)}
                   </>
                 )}
               </p>

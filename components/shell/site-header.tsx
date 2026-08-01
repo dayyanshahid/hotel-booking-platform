@@ -57,10 +57,15 @@ export function SiteHeader() {
           horizontal room than a sticky header can spare on a phone. Below `sm`
           the mark stands in for it — it is the part that survives at that size
           anyway — and the accessible name comes with it.
+
+          One `Wordmark`, told when to show its type. This was two of them,
+          tagged `sm:hidden` and `hidden sm:inline-flex`, and on a phone both
+          rendered: `cx` joins classes without resolving conflicts, so the
+          component's own `inline-flex` beat the caller's `hidden`. Two globes
+          side by side, and the type wrapped over four lines of a sticky header.
         */}
         <Link href={href(locale, "/")} className="flex items-center font-bold">
-          <Wordmark tone="inverse" markOnly className="sm:hidden" />
-          <Wordmark tone="inverse" className="hidden sm:inline-flex" />
+          <Wordmark tone="inverse" typeFrom="sm" />
         </Link>
 
         <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">
