@@ -45,6 +45,9 @@ async function main() {
   const summary = await syncTourmindCatalogue(countries, {
     maxPagesPerCountry: maxPages,
     pageSize,
+    // Printed as it goes: a run of eighty-two countries is the better part of
+    // an hour, and silence for that long is indistinguishable from a hang.
+    onProgress: (line) => console.log(line),
   });
 
   console.log(
@@ -52,6 +55,12 @@ async function main() {
       `across ${summary.cities} cities; dropped ${summary.skipped} that fell ` +
       `outside every city we list.`,
   );
+  if (summary.failures.length) {
+    console.log(
+      `\n${summary.failures.length} country/countries the supplier could not answer for. ` +
+        `Everything else is saved; rerun just these:\n  --countries=${summary.failures.join(",")}`,
+    );
+  }
 }
 
 void main().catch((error) => {

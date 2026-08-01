@@ -338,6 +338,8 @@ export interface SyncSummary {
   matched: number;
   cities: number;
   skipped: number;
+  /** Countries the supplier could not answer for, so a rerun can target them. */
+  failures: string[];
 }
 
 /**
@@ -350,8 +352,9 @@ export interface SyncSummary {
  */
 export async function syncTourmindCatalogue(
   countryCodes: string[],
-  options: { maxPagesPerCountry?: number; pageSize?: number } = {},
+  options: { maxPagesPerCountry?: number; pageSize?: number; onProgress?: (line: string) => void } = {},
 ): Promise<SyncSummary> {
+  const onProgress = options.onProgress;
   const maxPages = options.maxPagesPerCountry ?? 20;
   /*
    * A page size, always.
@@ -362,44 +365,77 @@ export async function syncTourmindCatalogue(
    * and still pulls a country of two thousand properties in five calls.
    */
   const pageSize = options.pageSize ?? 500;
-  const matched: TourmindHotelRecord[] = [];
+
+  /*
+   * Start from what is already cached, keyed so a re-run replaces a country
+   * rather than duplicating it.
+   *
+   * A full run is eighty-two countries and the better part of an hour. Building
+   * the whole thing in memory and writing once at the end meant a single
+   * unreachable country threw all of it away — which is exactly what happened:
+   * the run died on one request and left the cache as it was that morning, six
+   * countries out of eighty-two, with nothing to show for the hour.
+   */
+  const byId = new Map<number, TourmindHotelRecord>();
+  for (const record of (await readCache()) ?? []) byId.set(record.hotelId, record);
+
+  const failures: string[] = [];
   let fetched = 0;
 
   for (const countryCode of countryCodes) {
-    for (let page = 1; page <= maxPages; page += 1) {
-      const response = await tourmindPost<TmHotelStaticListResponse>(
-        TM.hotels,
-        {
-          CountryCode: countryCode,
-          Pagination: { PageIndex: page, PageSize: pageSize },
-        },
-        // Static data, fetched deliberately rather than on a request path: it
-        // is allowed to take longer than a guest would ever wait.
-        "catalogue",
-      );
+    try {
+      for (let page = 1; page <= maxPages; page += 1) {
+        const response = await tourmindPost<TmHotelStaticListResponse>(
+          TM.hotels,
+          {
+            CountryCode: countryCode,
+            Pagination: { PageIndex: page, PageSize: pageSize },
+          },
+          // Static data, fetched deliberately rather than on a request path: it
+          // is allowed to take longer than a guest would ever wait.
+          "catalogue",
+        );
 
-      const hotels = response.HotelStaticListResult?.Hotels ?? [];
-      fetched += hotels.length;
-      for (const info of hotels) {
-        const record = toRecord(info);
-        if (!record) continue;
-        const city = cityFor(record);
-        if (!city) continue;
-        matched.push({ ...record, citySlug: city.slug });
+        const hotels = response.HotelStaticListResult?.Hotels ?? [];
+        fetched += hotels.length;
+        for (const info of hotels) {
+          const record = toRecord(info);
+          if (!record) continue;
+          const city = cityFor(record);
+          if (!city) continue;
+          byId.set(record.hotelId, { ...record, citySlug: city.slug });
+        }
+
+        const pageCount = response.HotelStaticListResult?.Pagination?.PageCount ?? 1;
+        if (!hotels.length || page >= pageCount) break;
       }
-
-      const pageCount = response.HotelStaticListResult?.Pagination?.PageCount ?? 1;
-      if (!hotels.length || page >= pageCount) break;
+    } catch (error) {
+      /*
+       * One country failing must not end the run.
+       *
+       * They time out on the larger catalogues often enough that treating it as
+       * fatal means the sync can never complete, and the countries already
+       * pulled are perfectly good. Collected and reported instead, so a rerun
+       * can be aimed at just those.
+       */
+      failures.push(countryCode);
+      onProgress?.(`  ${countryCode}: ${error instanceof Error ? error.message : "failed"}`);
     }
+
+    // Written after every country, so a crash costs one country and not the
+    // hour that came before it.
+    await writeCache([...byId.values()]);
+    onProgress?.(`  ${countryCode}: ${byId.size} properties held`);
   }
 
-  await writeCache(matched);
+  const matched = [...byId.values()];
   memo = matched;
   return {
     fetched,
     matched: matched.length,
     cities: new Set(matched.map((h) => h.citySlug)).size,
-    skipped: fetched - matched.length,
+    skipped: Math.max(0, fetched - matched.length),
+    failures,
   };
 }
 
