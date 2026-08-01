@@ -8,7 +8,7 @@ import { commentsFor } from "@/lib/server/normalize";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
 import { getOffer, getSession, saveSession } from "@/lib/server/store";
 import { countryForOffer } from "@/lib/agency/context";
-import type { CheckoutSession, RateComment, SessionLine } from "@/lib/types";
+import type { CheckoutSession, SessionLine } from "@/lib/types";
 import type { StoredOffer } from "@/lib/server/store";
 import { rollUpLines } from "@/lib/server/checkout-lines";
 

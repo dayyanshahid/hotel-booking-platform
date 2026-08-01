@@ -198,7 +198,6 @@ export async function POST(req: Request) {
       action: "selectAlternative",
     });
   }
-  const line = session.lines[0];
   const offer = lineOffers[0].offer;
   const seed = getHotelSeed(session.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;

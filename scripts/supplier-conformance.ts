@@ -20,8 +20,8 @@ import {
 } from "@/lib/server/hotelbeds/operations";
 import { getCachedDestinations, getHotelContent, getIndex } from "@/lib/server/hotelbeds/content";
 import { mapSupplierError } from "@/lib/server/hotelbeds/errors";
-import { getTourmindConfig, isTourmindEnabled } from "@/lib/server/tourmind/config";
-import { TM, tourmindPost } from "@/lib/server/tourmind/client";
+import { isTourmindEnabled } from "@/lib/server/tourmind/config";
+import { tourmindPost } from "@/lib/server/tourmind/client";
 
 /*
  * Two endpoints their API offers that the app does not use. They are kept
