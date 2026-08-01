@@ -36,7 +36,18 @@ export async function GET(req: Request) {
         configured: isHotelbedsEnabled(),
         environment: hotelbeds.baseUrl,
         production: !hotelbeds.baseUrl.includes("test"),
-        quota: { used: quota.used, remaining: quota.remaining, day: quota.day },
+        /*
+         * `remaining` is null when no local ceiling is set — JSON has no
+         * Infinity, and a screen that prints a bare number would otherwise
+         * show nothing at all with no way to tell why. `limited` is what a
+         * reader should branch on.
+         */
+        quota: {
+          used: quota.used,
+          limited: quota.limited,
+          remaining: quota.limited ? quota.remaining : null,
+          day: quota.day,
+        },
         notes: isHotelbedsEnabled() ? null : "hotelbeds.missingCredentials",
       },
       {

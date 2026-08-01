@@ -102,6 +102,16 @@ async function consumeQuota(config: HotelbedsConfig, purpose: RequestPurpose): P
     state.used = 0;
   }
 
+  /*
+   * No ceiling means no counting, and no round trip to count with. The tally
+   * below is still kept so the console can report what a day has cost, but
+   * nothing is refused and the shared counter is not consulted.
+   */
+  if (!Number.isFinite(config.dailyQuota)) {
+    state.used += 1;
+    return;
+  }
+
   /**
    * The ceiling this particular request has to clear.
    *
@@ -149,16 +159,26 @@ export function quotaStatus(): {
   remaining: number;
   /** What content may still spend, which is everything above the reserve. */
   contentRemaining: number;
+  /**
+   * Whether a local ceiling is being applied at all.
+   *
+   * With the guard off the two `remaining` figures are `Infinity`, which is the
+   * truthful answer and a poor thing to render. A screen should read this and
+   * say "not limited here" rather than print a word at a person.
+   */
+  limited: boolean;
   day: string;
 } {
   const config = getHotelbedsConfig();
   const state = globalThis.__hotelbedsQuota ?? { day: today(), used: 0 };
   const used = state.day === today() ? state.used : 0;
+  const limited = Number.isFinite(config.dailyQuota);
   const contentCeiling = Math.max(0, config.dailyQuota - config.availabilityReserve);
   return {
     used,
-    remaining: Math.max(0, config.dailyQuota - used),
-    contentRemaining: Math.max(0, contentCeiling - used),
+    remaining: limited ? Math.max(0, config.dailyQuota - used) : Number.POSITIVE_INFINITY,
+    contentRemaining: limited ? Math.max(0, contentCeiling - used) : Number.POSITIVE_INFINITY,
+    limited,
     day: today(),
   };
 }

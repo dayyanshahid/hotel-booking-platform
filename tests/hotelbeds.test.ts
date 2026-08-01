@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import availabilityFixture from "./fixtures/hotelbeds-availability.json";
 import { signature, HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { getHotelbedsConfig, isHotelbedsEnabled } from "@/lib/server/hotelbeds/config";
+import { quotaStatus } from "@/lib/server/hotelbeds/client";
 import {
   adaptAvailability,
   buildCancellationFromPolicies,
@@ -370,5 +371,63 @@ describe("the content that ships with the build", () => {
     // label, and a five-star hotel renders with no category at all.
     expect(Object.keys(bundle?.types?.facilities ?? {}).length).toBeGreaterThan(50);
     expect(Object.keys(bundle?.types?.categories ?? {}).length).toBeGreaterThan(5);
+  });
+});
+
+describe("the daily request guard can be switched off", () => {
+  /*
+   * The guard protects an evaluation key from a runaway loop. It is also a
+   * second limit that can only ever be wrong, and here it was: set below the
+   * cost of a single search, it emptied a results page on a perfectly healthy
+   * account — intermittently, because the count is per instance, so one lambda
+   * answered with forty-five properties and the next with none.
+   *
+   * On a key with a real allowance the supplier's own limit is the honest one,
+   * so switching ours off has to be a supported setting rather than a value
+   * someone has to guess at.
+   */
+  const original = process.env.HOTELBEDS_DAILY_QUOTA;
+  afterEach(() => {
+    if (original === undefined) delete process.env.HOTELBEDS_DAILY_QUOTA;
+    else process.env.HOTELBEDS_DAILY_QUOTA = original;
+  });
+
+  it("treats zero as off, not as a ceiling of nothing", () => {
+    /*
+     * The footgun this replaces. Zero used to mean every request was over
+     * budget, so the setting that reads most like "no limit" was the one that
+     * blocked the supplier outright.
+     */
+    process.env.HOTELBEDS_DAILY_QUOTA = "0";
+    expect(Number.isFinite(getHotelbedsConfig().dailyQuota)).toBe(false);
+  });
+
+  it("carves out no reserve when nothing is being counted", () => {
+    // A reserve is a share of a budget. With no budget there is nothing to
+    // hold back, and a non-zero one here would silently cap content instead.
+    process.env.HOTELBEDS_DAILY_QUOTA = "0";
+    expect(getHotelbedsConfig().availabilityReserve).toBe(0);
+  });
+
+  it("reports itself as unlimited rather than printing a number", () => {
+    process.env.HOTELBEDS_DAILY_QUOTA = "0";
+    const status = quotaStatus();
+    expect(status.limited).toBe(false);
+    expect(status.remaining).toBe(Number.POSITIVE_INFINITY);
+    expect(status.contentRemaining).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("still counts a real allowance, and still reserves within it", () => {
+    process.env.HOTELBEDS_DAILY_QUOTA = "50";
+    const config = getHotelbedsConfig();
+    expect(config.dailyQuota).toBe(50);
+    expect(config.availabilityReserve).toBeGreaterThan(0);
+    expect(quotaStatus().limited).toBe(true);
+  });
+
+  it("defaults to a ceiling when nothing is set", () => {
+    // Off is a decision someone makes, never what you get by saying nothing.
+    delete process.env.HOTELBEDS_DAILY_QUOTA;
+    expect(getHotelbedsConfig().dailyQuota).toBe(50);
   });
 });

@@ -46,18 +46,44 @@ function num(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * The day's request ceiling, or no ceiling at all.
+ *
+ * `HOTELBEDS_DAILY_QUOTA=0` turns the local guard off and lets the supplier's
+ * own limit be the only one. That is a deliberate setting, not a mistake to be
+ * defended against: on a key with a generous allowance the guard is a second
+ * limit that can only ever be wrong, and it went wrong here — set below the
+ * cost of a single search, it emptied a results page on a perfectly healthy
+ * account and did it intermittently, because the count is per instance.
+ *
+ * Zero used to mean "refuse everything", which is a poor thing for a number
+ * somebody types to mean. Off is off.
+ *
+ * What this gives up is real and worth stating: nothing local now stops a
+ * runaway loop from spending an evaluation key's allowance, and the supplier
+ * answers 403 when it is gone.
+ */
+function dailyQuotaFrom(raw: string | undefined): number {
+  const parsed = Number(raw);
+  if (raw !== undefined && Number.isFinite(parsed) && parsed <= 0) return Number.POSITIVE_INFINITY;
+  return num(raw, 50);
+}
+
 export function getHotelbedsConfig(): HotelbedsConfig {
-  const dailyQuota = num(process.env.HOTELBEDS_DAILY_QUOTA, 50);
+  const dailyQuota = dailyQuotaFrom(process.env.HOTELBEDS_DAILY_QUOTA);
   /*
    * Three fifths of the allowance, which on an evaluation key is thirty
    * searches — enough that a day of demonstrating the portal cannot be ended
    * by a day of browsing photographs. Clamped so a hand-set reserve can never
    * exceed the quota it is carved out of and stop availability entirely.
    */
-  const availabilityReserve = Math.min(
-    dailyQuota,
-    Math.max(0, num(process.env.HOTELBEDS_AVAILABILITY_RESERVE, Math.floor(dailyQuota * 0.6))),
-  );
+  // Nothing to carve out of an allowance that is not being counted.
+  const availabilityReserve = Number.isFinite(dailyQuota)
+    ? Math.min(
+        dailyQuota,
+        Math.max(0, num(process.env.HOTELBEDS_AVAILABILITY_RESERVE, Math.floor(dailyQuota * 0.6))),
+      )
+    : 0;
 
   return {
     dailyQuota,

@@ -97,7 +97,10 @@ export async function GET(req: Request) {
         configured: isHotelbedsEnabled(),
         environment: getHotelbedsConfig().baseUrl,
         quotaUsed: quota.used,
-        quotaRemaining: quota.remaining,
+        // Null rather than an unserialisable Infinity when no local ceiling is
+        // set; `quotaLimited` is the flag to branch on.
+        quotaLimited: quota.limited,
+        quotaRemaining: quota.limited ? quota.remaining : null,
       },
       {
         id: "tourmind",
