@@ -106,6 +106,8 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    */
   const [applied, setApplied] = useState<SearchIntent | null>(null);
   const [quotes, setQuotes] = useState<Record<string, AgencyOfferView>>({});
+  /** Set when a row's cost and sell could not be fetched, so it can be said. */
+  const [pricingFailed, setPricingFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -243,8 +245,26 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     setApplied(intent);
 
     // One quote call for the whole page rather than one per row.
-    const offerIds = body.data.results.map((r) => r.offerSummary.offerId);
-    if (offerIds.length) {
+    await priceRows(body.data.results.map((r) => r.offerSummary.offerId));
+  }
+
+  /**
+   * What the agency pays and charges for each row on the page.
+   *
+   * Kept apart from the search so it can be retried on its own: the rates are
+   * already on screen and correct, and re-running the whole search to recover a
+   * pricing call would throw away good supply and spend a supplier request.
+   *
+   * A failure here used to do nothing whatsoever — no state, no message — and
+   * the price rail, which shows a shimmer until a quote arrives, shimmered for
+   * ever. An agent was left looking at a page of real rooms with no cost, no
+   * sell and nothing to say why, on the one screen whose entire purpose is
+   * those numbers.
+   */
+  async function priceRows(offerIds: string[]): Promise<void> {
+    if (!offerIds.length) return;
+    setPricingFailed(false);
+    try {
       const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -252,12 +272,19 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         body: JSON.stringify({ offerIds }),
       });
       const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
-      if (pricedBody.ok && pricedBody.data) {
-        setQuotes((held) => ({
-          ...held,
-          ...Object.fromEntries(pricedBody.data!.quotes.map((q) => [q.offerId, q])),
-        }));
+      if (!pricedBody.ok || !pricedBody.data) {
+        setPricingFailed(true);
+        return;
       }
+      setQuotes((held) => ({
+        ...held,
+        ...Object.fromEntries(pricedBody.data!.quotes.map((q) => [q.offerId, q])),
+      }));
+      // A partial answer is still a failure for the rows it left out, and those
+      // are the ones that would otherwise shimmer.
+      if (pricedBody.data.quotes.length < offerIds.length) setPricingFailed(true);
+    } catch {
+      setPricingFailed(true);
     }
   }
 
@@ -328,6 +355,27 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       </Card>
 
       {error && <Alert tone="critical">{error}</Alert>}
+
+      {/*
+        The rates are fine; our own pricing call is not. Said once at the top
+        with a way out, rather than only as a dash on every row — an agent
+        needs to know it is worth retrying before they start reading prices
+        that are not there.
+      */}
+      {pricingFailed && cards.length > 0 && (
+        <Alert tone="warning" title={t("agency.priceUnavailable")}>
+          <div className="flex flex-wrap items-center gap-3">
+            <span>{t("agency.pricingFailed")}</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void priceRows(cards.map((c) => c.offerSummary.offerId))}
+            >
+              {t("agency.retryPricing")}
+            </Button>
+          </div>
+        </Alert>
+      )}
 
       {data && (
         <>
@@ -535,6 +583,12 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                               isPerRoomTotal(card.price) ? card.price.roomsRequested : undefined
                             }
                           />
+                        ) : pricingFailed ? (
+                          // Said plainly rather than shimmered at. The rate is
+                          // real and still bookable; it is our own pricing call
+                          // that did not answer, and an agent needs to know
+                          // that rather than watch a placeholder pulse.
+                          <p className="text-muted text-end text-xs">{t("agency.priceUnavailable")}</p>
                         ) : (
                           // Priced a moment behind the card: the rate is real,
                           // the agency's cost is a second call. Showing the
