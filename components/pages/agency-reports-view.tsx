@@ -8,7 +8,6 @@ import { LoadFailed, Money, PageHeader, Section, StatSkeleton, Stat, StatGrid } 
 import { useResource } from "@/components/providers/use-resource";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
 /**
  * Production.

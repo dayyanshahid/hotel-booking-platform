@@ -117,4 +117,34 @@ describe("calling our own API from the browser", () => {
     expect(tryAt, "the fetch in useApi is not inside a try").toBeGreaterThan(-1);
     expect(catchBetween, "the nearest try closes before the fetch, so a rejection escapes").toBe(false);
   });
+
+  it("keeps the number of hand-rolled API calls from growing", () => {
+    /*
+     * `apiFetch` exists because eighty-four call sites wrote the same three
+     * lines and got the third wrong every time: the address, the cookie, and
+     * the failure. Every read is converted — those were the ones that left a
+     * screen on a skeleton for ever. What is left are writes whose shape
+     * resisted a mechanical rewrite, plus the two helpers that are allowed to
+     * hand-roll because they *are* the plumbing. The point of this number is
+     * that it only ever goes down.
+     *
+     * A budget rather than a ban, because a `fetch` that wants the Response
+     * itself — a blob, a status code — is legitimate and should not have to
+     * fight the suite. Lower the number when you convert one; if you find
+     * yourself raising it, you are adding a loader that cannot fail safely.
+     */
+    const BUDGET = 43;
+
+    let found = 0;
+    const offenders: string[] = [];
+    for (const file of clientFiles()) {
+      const source = readFileSync(file, "utf8");
+      const hits = (source.match(/\bfetch\(\s*apiUrl\(/g) ?? []).length;
+      if (hits) {
+        found += hits;
+        offenders.push(`${path.relative(ROOT, file)}:${hits}`);
+      }
+    }
+    expect(found, `hand-rolled API calls — ${offenders.join(", ")}`).toBeLessThanOrEqual(BUDGET);
+  });
 });

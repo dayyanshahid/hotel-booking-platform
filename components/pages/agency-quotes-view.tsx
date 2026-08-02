@@ -16,6 +16,7 @@ import { href } from "@/lib/nav";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /* --------------------------------------------------------------- list */
 
@@ -125,8 +126,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const res = await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: { quote: AgencyQuote } };
+    const body = await apiFetch<{ quote: AgencyQuote }>(`/api/agency/quotes/${encodeURIComponent(id)}`);
     setQuote(body.ok && body.data ? body.data.quote : "missing");
   }
 

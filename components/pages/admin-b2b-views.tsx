@@ -29,6 +29,7 @@ import type {
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /* --------------------------------------------------------------- list */
 
@@ -44,8 +45,7 @@ function AgencyList({ locale }: { locale: Locale }) {
   const [open, setOpen] = useState(false);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/admin/agencies"), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: { agencies: Row[] } };
+    const body = await apiFetch<{ agencies: Row[] }>("/api/admin/agencies");
     setRows(body.ok && body.data ? body.data.agencies : []);
   }
 
@@ -153,13 +153,11 @@ function OnboardModal({
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/admin/agencies"), {
+    const body = await apiFetch<unknown>("/api/admin/agencies", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(form),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));
@@ -289,8 +287,7 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   const [newAgent, setNewAgent] = useState({ name: "", email: "", role: "agent" });
 
   async function load() {
-    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}`), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: DetailPayload };
+    const body = await apiFetch<DetailPayload>(`/api/admin/agencies/${encodeURIComponent(id)}`);
     if (body.ok && body.data) {
       setData(body.data);
       setTerms({

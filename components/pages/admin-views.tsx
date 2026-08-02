@@ -9,6 +9,7 @@ import { formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /* -------------------------------------------------------------- sign-in */
 
@@ -24,13 +25,11 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
   async function send() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/admin/session"), {
+    const body = await apiFetch<{ demoCode?: string }>("/api/admin/session", {
       method: "POST",
-      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email }),
     });
-    const body = (await res.json()) as { ok: boolean; data?: { demoCode?: string }; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));
@@ -43,13 +42,11 @@ export function AdminSignInView({ locale }: { locale: Locale }) {
   async function verify() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/admin/session"), {
+    const body = await apiFetch<unknown>("/api/admin/session", {
       method: "PUT",
-      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("account.codeInvalid"));
@@ -145,8 +142,7 @@ function Overview({ locale }: { locale: Locale }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/overview"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: Overview };
+      const body = await apiFetch<Overview>("/api/admin/overview");
       if (body.ok && body.data) setData(body.data);
     })();
   }, []);

@@ -25,6 +25,7 @@ import type {
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 import { dayLabel } from "@/lib/i18n";
 
 /** One label for a permission, wherever it is shown. */
@@ -93,13 +94,11 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
   async function verify() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/agency/session"), {
+    const body = await apiFetch<unknown>("/api/agency/session", {
       method: "PUT",
-      credentials: apiCredentials(),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, code }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("account.codeInvalid"));
@@ -571,13 +570,11 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   async function invite() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/agency/agents"), {
+    const body = await apiFetch<unknown>("/api/agency/agents", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ name, email, role, permission }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));
@@ -596,25 +593,21 @@ function TeamPanel({ context }: { context: AgencyContext }) {
    * takes effect on their very next request, not when their session expires.
    */
   async function setPermissionFor(agent: Agent, next: AgentPermission) {
-    const res = await fetch(apiUrl("/api/agency/agents"), {
+    const body = await apiFetch<unknown>("/api/agency/agents", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ agentId: agent.id, permission: next }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     if (!body.ok) setError(body.error?.message ?? t("error.validation"));
     await reload();
   }
 
   async function toggle(agent: Agent) {
-    const res = await fetch(apiUrl("/api/agency/agents"), {
+    const body = await apiFetch<unknown>("/api/agency/agents", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ agentId: agent.id, active: !agent.active }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     if (!body.ok) setError(body.error?.message ?? t("error.validation"));
     await reload();
   }
@@ -741,13 +734,11 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
     setBusy(true);
     setError(null);
     setSaved(false);
-    const res = await fetch(apiUrl("/api/agency/settings"), {
+    const body = await apiFetch<unknown>("/api/agency/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ markup, profile }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));

@@ -18,6 +18,7 @@ import type {
   SupplierConfirmation,
 } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 import { dayLabel } from "@/lib/i18n";
 
 /**
@@ -81,10 +82,9 @@ function Detail({
   const [changeDetail, setChangeDetail] = useState("");
 
   async function load() {
-    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}`), {
-      credentials: apiCredentials(),
+    const body = await apiFetch<Payload>(`/api/agency/bookings/${encodeURIComponent(reference)}`, {
+
     });
-    const body = (await res.json()) as { ok: boolean; data?: Payload };
     setData(body.ok && body.data ? body.data : "missing");
     if (body.ok && body.data) {
       const checkIn = new Date(`${body.data.booking.checkIn}T00:00:00Z`).getTime();
@@ -184,11 +184,9 @@ function Detail({
   async function issue() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`), {
+    const body = await apiFetch<unknown>(`/api/agency/bookings/${encodeURIComponent(reference)}/issue`, {
       method: "POST",
-      credentials: apiCredentials(),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.temporaryService"));

@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton } fr
 import { formatDateTime } from "@/lib/format";
 import type { Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /* ------------------------------------------------------------ settings */
 
@@ -40,8 +41,7 @@ function Settings({ locale }: { locale: Locale }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/admin/settings"), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: SettingsPayload };
+    const body = await apiFetch<SettingsPayload>("/api/admin/settings");
     if (body.ok && body.data) {
       setData(body.data);
       setValue(body.data.markupPercent);
@@ -58,13 +58,11 @@ function Settings({ locale }: { locale: Locale }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl("/api/admin/settings"), {
+    const body = await apiFetch<unknown>("/api/admin/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ markupPercent: value }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));
@@ -155,13 +153,11 @@ function FxRates({ rows, onSaved }: { rows: FxRow[]; onSaved: () => void }) {
     setBusy(true);
     setError(null);
     setSaved(false);
-    const res = await fetch(apiUrl("/api/admin/settings"), {
+    const body = await apiFetch<unknown>("/api/admin/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ fxRates: draft }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("admin.fxRange"));
@@ -233,8 +229,7 @@ function Suppliers() {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/suppliers"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { suppliers: Supplier[] } };
+      const body = await apiFetch<{ suppliers: Supplier[] }>("/api/admin/suppliers");
       setSuppliers(body.ok && body.data ? body.data.suppliers : []);
     })();
   }, []);

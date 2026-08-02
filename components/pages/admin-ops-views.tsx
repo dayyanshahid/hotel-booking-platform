@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CurrencyCode, Locale, SupportCase, TravelerProfile } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 import { hourLabel } from "@/lib/i18n";
 
 /* --------------------------------------------------------- operations */
@@ -68,8 +69,7 @@ function Operations({ locale }: { locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/admin/operations"), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: OpsPayload };
+    const body = await apiFetch<OpsPayload>("/api/admin/operations");
     if (body.ok && body.data) setData(body.data);
   }
 
@@ -83,11 +83,9 @@ function Operations({ locale }: { locale: Locale }) {
     setBusy(reference);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/recheck`), {
+    const body = await apiFetch<{ changed: boolean }>(`/api/admin/bookings/${encodeURIComponent(reference)}/recheck`, {
       method: "POST",
-      credentials: apiCredentials(),
     });
-    const body = (await res.json()) as { ok: boolean; data?: { changed: boolean }; error?: { message: string } };
     setBusy(null);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.temporaryService"));
@@ -101,13 +99,11 @@ function Operations({ locale }: { locale: Locale }) {
     setBusy(reference);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/refund`), {
+    const body = await apiFetch<unknown>(`/api/admin/bookings/${encodeURIComponent(reference)}/refund`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({}),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(null);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.temporaryService"));
@@ -258,8 +254,7 @@ function Customers({ locale }: { locale: Locale }) {
   useEffect(() => {
     let alive = true;
     const id = window.setTimeout(async () => {
-      const res = await fetch(apiUrl(`/api/admin/customers?q=${encodeURIComponent(query)}`), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { customers: CustomerRow[] } };
+      const body = await apiFetch<{ customers: CustomerRow[] }>(`/api/admin/customers?q=${encodeURIComponent(query)}`);
       if (alive) setRows(body.ok && body.data ? body.data.customers : []);
     }, 200);
     return () => {
@@ -345,8 +340,7 @@ function CustomerDetail({ locale, email }: { locale: Locale; email: string }) {
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch(apiUrl(`/api/admin/customers/${encodeURIComponent(email)}`), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: CustomerPayload };
+      const body = await apiFetch<CustomerPayload>(`/api/admin/customers/${encodeURIComponent(email)}`);
       setData(body.ok && body.data ? body.data : "missing");
     })();
   }, [email]);

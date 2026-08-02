@@ -21,6 +21,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CancellationQuote, CurrencyCode, Locale, SupportCase } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 import { minuteLabel } from "@/lib/i18n";
 
 /* ------------------------------------------------------------ bookings */
@@ -67,8 +68,7 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
     let alive = true;
     const id = window.setTimeout(async () => {
       const params = new URLSearchParams({ status, channel, q: query, from, to });
-      const res = await fetch(apiUrl(`/api/admin/bookings?${params.toString()}`), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { bookings: Row[]; total: number } };
+      const body = await apiFetch<{ bookings: Row[]; total: number }>(`/api/admin/bookings?${params.toString()}`);
       if (!alive) return;
       setRows(body.ok && body.data ? body.data.bookings : []);
       setTotal(body.ok && body.data ? body.data.total : 0);
@@ -217,8 +217,7 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   const [note, setNote] = useState("");
 
   async function load() {
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}`), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: DetailPayload };
+    const body = await apiFetch<DetailPayload>(`/api/admin/bookings/${encodeURIComponent(reference)}`);
     setData(body.ok && body.data ? body.data : "missing");
   }
 
@@ -237,11 +236,9 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/${path}`), {
-      credentials: apiCredentials(),
+    const body = await apiFetch<unknown>(`/api/admin/bookings/${encodeURIComponent(reference)}/${path}`, {
       ...init,
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.temporaryService"));
@@ -259,13 +256,11 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   async function askQuote() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`), {
+    const body = await apiFetch<{ quote: CancellationQuote }>(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({}),
     });
-    const body = (await res.json()) as { ok: boolean; data?: { quote: CancellationQuote }; error?: { message: string } };
     setBusy(false);
     if (!body.ok || !body.data) {
       setError(body.error?.message ?? t("error.temporaryService"));
@@ -278,13 +273,11 @@ function BookingDetail({ locale, reference }: { locale: Locale; reference: strin
   async function confirm() {
     if (!quote) return;
     setBusy(true);
-    const res = await fetch(apiUrl(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`), {
+    const body = await apiFetch<{ uncertain?: boolean }>(`/api/admin/bookings/${encodeURIComponent(reference)}/cancel`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ quoteId: quote.quoteId, idempotencyKey: `ops-${quote.quoteId}`, reason }),
     });
-    const body = (await res.json()) as { ok: boolean; data?: { uncertain?: boolean }; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.temporaryService"));
@@ -506,10 +499,9 @@ function CaseQueue({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
 
   async function load(nextStatus = status, nextOwner = owner) {
-    const res = await fetch(apiUrl(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`), {
-      credentials: apiCredentials(),
+    const body = await apiFetch<{ cases: QueuedCase[]; you: string }>(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`, {
+
     });
-    const body = (await res.json()) as { ok: boolean; data?: { cases: QueuedCase[]; you: string } };
     setCases(body.ok && body.data ? body.data.cases : []);
     if (body.ok && body.data) setYou(body.data.you);
   }

@@ -12,6 +12,7 @@ import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type { CheckoutSession, CurrencyCode, Locale, RecheckResult } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 interface GuestField {
   roomIndex: number;
@@ -269,17 +270,15 @@ function TradeCheckout({
     if (!session || session === "gone") return;
     setRechecking(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/rates/recheck"), {
+    const body = await apiFetch<RecheckResult>("/api/rates/recheck", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({
         offerId: offerIdsFrom(offerId)[0],
         checkoutSessionId: session.checkoutSessionId,
         accept: true,
       }),
     });
-    const body = (await res.json()) as { ok: boolean; data?: RecheckResult };
     if (!body.ok || !body.data) {
       setRechecking(false);
       setError(t("error.temporaryService"));

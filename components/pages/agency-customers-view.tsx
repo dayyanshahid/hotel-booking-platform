@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format";
 import type { AgencyCustomer } from "@/lib/agency/types";
 import type { Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /**
  * The agency's own client list.
@@ -35,8 +36,7 @@ function Customers({ locale }: { locale: Locale }) {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    const res = await fetch(apiUrl("/api/agency/customers"), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: { customers: AgencyCustomer[] } };
+    const body = await apiFetch<{ customers: AgencyCustomer[] }>("/api/agency/customers");
     setCustomers(body.ok && body.data ? body.data.customers : []);
   }
 
@@ -48,13 +48,11 @@ function Customers({ locale }: { locale: Locale }) {
     if (!editing) return;
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/agency/customers"), {
+    const body = await apiFetch<unknown>("/api/agency/customers", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ ...editing, id: editing.id || undefined }),
     });
-    const body = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!body.ok) {
       setError(body.error?.message ?? t("error.validation"));
