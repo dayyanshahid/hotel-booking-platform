@@ -339,7 +339,20 @@ export function buildCanonicalHotelFromContent(
   const name = content.name?.content ?? `Hotel ${code}`;
   const slug = slugify(name, code);
   const city = content.city?.content ?? content.destinationCode ?? "";
-  const countryCode = content.countryCode ?? "";
+  /*
+   * The country, from whichever shape this content arrived in.
+   *
+   * The live API sends `country: { code, isoCode, description }`; our own
+   * sync flattens it to `countryCode`. Only the flat name was being read, so
+   * anything fetched live had no country at all — and the address is the least
+   * of it, because `timezoneForCountry` is what turns a cancellation deadline
+   * into a time an agent reads aloud. With no country it fell back to UTC, and
+   * a Dubai property whose supplier said "free until 23:59" was displayed as
+   * "19:59 (UTC)". Four hours earlier than the truth, on the one date a
+   * customer is most likely to hold us to.
+   */
+  const countryCode = content.country?.code ?? content.country?.isoCode ?? content.countryCode ?? "";
+  const countryName = content.country?.description?.content ?? countryCode;
   const categoryLabel = types.categories[content.categoryCode ?? ""] ?? content.categoryCode ?? "";
   const stars = Number.parseInt(String(content.categoryCode ?? "").replace(/\D/g, ""), 10);
 
@@ -407,13 +420,34 @@ export function buildCanonicalHotelFromContent(
     distanceKm: Math.round((toNumber(point.distance, 0) / 1000) * 10) / 10,
     type: "landmark",
   }));
+  /*
+   * Terminals are already in kilometres. Interest points, in the same payload,
+   * are in metres — so the divide-by-a-thousand that is right for one is wrong
+   * for the other, and every airport on every property was rendering as
+   * "0 km from DXB".
+   */
   for (const terminal of (content.terminals ?? []).slice(0, 2)) {
     landmarks.push({
-      label: terminal.terminalCode ?? "",
-      distanceKm: Math.round((toNumber(terminal.distance, 0) / 1000) * 10) / 10,
+      label: terminal.name?.content ?? terminal.terminalCode ?? "",
+      distanceKm: Math.round(toNumber(terminal.distance, 0) * 10) / 10,
       type: "airport",
     });
   }
+
+  /*
+   * Their phone list is typed, so the booking line and the switchboard can be
+   * told apart rather than presented as two identical numbers.
+   */
+  const phoneOf = (type: string) =>
+    (content.phones ?? []).find((phone) => phone.phoneType === type)?.phoneNumber?.trim() || undefined;
+  const contact = {
+    bookingPhone: phoneOf("PHONEBOOKING"),
+    hotelPhone: phoneOf("PHONEHOTEL"),
+    fax: phoneOf("FAXNUMBER"),
+    email: content.email?.trim() || undefined,
+    web: content.web?.trim() || undefined,
+  };
+  const hasContact = Object.values(contact).some(Boolean);
 
   const description = content.description?.content ?? "";
 
@@ -428,7 +462,7 @@ export function buildCanonicalHotelFromContent(
     address: {
       line1: content.address?.content ?? [content.address?.street, content.address?.number].filter(Boolean).join(" "),
       city,
-      country: countryCode,
+      country: countryName,
       countryCode,
       postalCode: content.postalCode,
       neighborhood: content.zoneCode ? `Zone ${content.zoneCode}` : city,
@@ -437,6 +471,7 @@ export function buildCanonicalHotelFromContent(
       lat: content.coordinates?.latitude ?? 0,
       lng: content.coordinates?.longitude ?? 0,
     },
+    contact: hasContact ? contact : undefined,
     landmarks: landmarks.filter((landmark) => landmark.label),
     descriptions: {
       overview: description,
@@ -595,7 +630,15 @@ export async function adaptAvailability(
         total: pricing.price.total,
         supplierCurrency: pricing.supplierCurrency,
         displayCurrency: intent.currency,
-        countryCode: content?.countryCode,
+        /*
+         * The same resolution the canonical hotel uses, and the reason any of
+         * this matters: this is the country that picks the timezone the
+         * cancellation deadline is rendered in. Reading only the flat name
+         * left it undefined, so `timezoneForCountry` fell back to UTC and a
+         * Dubai deadline of 23:59 was shown to agents as 19:59.
+         */
+        countryCode:
+          content?.country?.code ?? content?.country?.isoCode ?? content?.countryCode,
         locale,
       });
 

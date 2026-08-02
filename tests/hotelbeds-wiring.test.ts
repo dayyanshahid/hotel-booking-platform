@@ -613,7 +613,20 @@ describe("content can never spend the searching allowance", () => {
     process.env.TOURMIND_USERNAME = "u";
     process.env.TOURMIND_PASSWORD = "p";
     process.env.TOURMIND_AGENT_CODE = "a";
-    handler = () => ({ status: 403, body: { error: { code: "LIMIT", message: "quota exceeded" } } });
+    /*
+     * One source down, the other up and holding nothing here.
+     *
+     * This used to be arranged by picking a city TourMind had no catalogue
+     * for, which stopped working the moment their coverage reached all 183
+     * destinations — both suppliers then failed, the page was legitimately
+     * "empty" rather than "partial", and the case stopped testing what it was
+     * written for. Routing the stub by supplier says it outright instead of
+     * depending on a gap in somebody's inventory.
+     */
+    handler = (call) =>
+      call.url.includes("hotelbeds")
+        ? { status: 403, body: { error: { code: "LIMIT", message: "quota exceeded" } } }
+        : { status: 200, body: { Hotels: [] } };
 
     try {
       const response = await runSearch(

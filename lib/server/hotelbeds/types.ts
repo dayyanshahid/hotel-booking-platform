@@ -242,7 +242,14 @@ export interface HbContentHotel {
   code?: number;
   name?: HbContentText;
   description?: HbContentText;
+  /**
+   * Flattened by our own sync; the live API sends an object.
+   *
+   * Reading only the flat name meant the country was empty on every property
+   * fetched live, which is not cosmetic — the timezone is derived from it.
+   */
   countryCode?: string;
+  country?: { code?: string; isoCode?: string; description?: { content?: string } };
   stateCode?: string;
   destinationCode?: string;
   zoneCode?: number;
@@ -261,7 +268,12 @@ export interface HbContentHotel {
   phones?: { phoneNumber?: string; phoneType?: string }[];
   rooms?: HbContentRoom[];
   facilities?: HbContentFacility[];
-  terminals?: { terminalCode?: string; distance?: number }[];
+  /** `distance` here is kilometres, unlike `interestPoints`, which is metres. */
+  terminals?: { terminalCode?: string; distance?: number; name?: { content?: string } }[];
+  /**
+   * `distance` is a string of metres here, and a number of kilometres on
+   * `terminals`. Both are as the API sends them; neither is a typo.
+   */
   interestPoints?: { facilityCode?: number; facilityGroupCode?: number; order?: number; poiName?: string; distance?: string }[];
   issues?: { issueCode?: string; issueType?: string; dateFrom?: string; dateTo?: string; order?: number; alternative?: boolean }[];
   images?: HbContentImage[];

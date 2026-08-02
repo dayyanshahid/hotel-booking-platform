@@ -202,6 +202,26 @@ export interface CanonicalHotel {
     neighborhood: string;
   };
   coordinates: { lat: number; lng: number };
+  /**
+   * How to reach the property directly.
+   *
+   * The supplier sends a booking line, a hotel line, a fax, an address and a
+   * website on every property, and none of it was mapped. An agent chasing a
+   * late arrival, an early check-in or a room type the rate does not describe
+   * rings the hotel — it is the most ordinary escalation there is, and the
+   * number was sitting in a payload we were discarding.
+   *
+   * Never shown on the consumer site: a traveller who books through us and
+   * then rings the property directly gets an answer that contradicts the
+   * booking, because the property has no idea who they are until we send it.
+   */
+  contact?: {
+    bookingPhone?: string;
+    hotelPhone?: string;
+    fax?: string;
+    email?: string;
+    web?: string;
+  };
   landmarks: { label: string; distanceKm: number; type: "landmark" | "airport" | "transit" }[];
   descriptions: { overview: string; location: string; family: string; accessibility: string };
   amenities: Amenity[];

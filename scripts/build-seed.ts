@@ -70,6 +70,20 @@ function trimHotel(hotel: Trimmed): Trimmed | null {
     name: { content: name.content },
     ...(hotel.description ? { description: { content: (hotel.description as { content?: string }).content } } : {}),
     countryCode: hotel.countryCode,
+    /*
+     * The country object, the contact details, and the category.
+     *
+     * All three were dropped, and the first was not cosmetic: the country is
+     * what picks the timezone a cancellation deadline is rendered in, so every
+     * seeded property fell back to UTC and displayed a Dubai deadline four
+     * hours early. They cost a few bytes each against a seed measured in
+     * megabytes of photography.
+     */
+    country: hotel.country,
+    category: hotel.category,
+    phones: hotel.phones,
+    email: hotel.email,
+    web: hotel.web,
     destinationCode: hotel.destinationCode,
     zoneCode: hotel.zoneCode,
     coordinates: hotel.coordinates,

@@ -412,6 +412,60 @@ function HotelDetail({
             </a>
           </div>
 
+          {/*
+            How to reach the property, on the trade side only.
+            An agent chasing a late arrival or an early check-in rings the
+            hotel; a traveller who does the same before we have sent the
+            booking gets told they have no reservation.
+          */}
+          {hotel.contact && (
+            <div className="hairline mt-4 space-y-1.5 border-t pt-3 text-xs">
+              <p className="text-[11px] font-semibold uppercase tracking-wider">
+                {t("hotel.contactProperty")}
+              </p>
+              {hotel.contact.bookingPhone && (
+                <a
+                  href={`tel:${hotel.contact.bookingPhone}`}
+                  className="text-brand-700 flex items-center gap-1.5 hover:underline"
+                >
+                  <Icon name="phone" size={13} />
+                  {hotel.contact.bookingPhone}
+                  <span className="text-muted">· {t("hotel.bookingLine")}</span>
+                </a>
+              )}
+              {hotel.contact.hotelPhone && hotel.contact.hotelPhone !== hotel.contact.bookingPhone && (
+                <a
+                  href={`tel:${hotel.contact.hotelPhone}`}
+                  className="text-brand-700 flex items-center gap-1.5 hover:underline"
+                >
+                  <Icon name="phone" size={13} />
+                  {hotel.contact.hotelPhone}
+                  <span className="text-muted">· {t("hotel.reception")}</span>
+                </a>
+              )}
+              {hotel.contact.email && (
+                <a
+                  href={`mailto:${hotel.contact.email}`}
+                  className="text-brand-700 flex items-center gap-1.5 wrap-anywhere hover:underline"
+                >
+                  <Icon name="chat" size={13} />
+                  {hotel.contact.email}
+                </a>
+              )}
+              {hotel.contact.web && (
+                <a
+                  href={hotel.contact.web.startsWith("http") ? hotel.contact.web : `https://${hotel.contact.web}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-brand-700 flex items-center gap-1.5 wrap-anywhere hover:underline"
+                >
+                  <Icon name="globe" size={13} />
+                  {hotel.contact.web}
+                </a>
+              )}
+            </div>
+          )}
+
           <dl className="text-muted mt-4 space-y-1 border-t pt-3 text-xs">
             <div className="flex justify-between gap-2">
               <dt>{t("hotel.checkInOut")}</dt>
