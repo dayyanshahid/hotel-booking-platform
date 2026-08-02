@@ -133,7 +133,7 @@ describe("calling our own API from the browser", () => {
      * fight the suite. Lower the number when you convert one; if you find
      * yourself raising it, you are adding a loader that cannot fail safely.
      */
-    const BUDGET = 35;
+    const BUDGET = 32;
 
     let found = 0;
     const offenders: string[] = [];

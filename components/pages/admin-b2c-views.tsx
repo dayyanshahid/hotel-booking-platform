@@ -497,6 +497,8 @@ function CaseQueue({ locale }: { locale: Locale }) {
   const [active, setActive] = useState<QueuedCase | null>(null);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
+  /** A case update that did not take. The queue will not show it otherwise. */
+  const [patchError, setPatchError] = useState<string | null>(null);
 
   async function load(nextStatus = status, nextOwner = owner) {
     const body = await apiFetch<{ cases: QueuedCase[]; you: string }>(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`, {
@@ -514,13 +516,24 @@ function CaseQueue({ locale }: { locale: Locale }) {
   async function patch(body: Record<string, unknown>, close = true) {
     if (!active) return;
     setBusy(true);
-    await fetch(apiUrl(`/api/admin/cases/${encodeURIComponent(active.caseId)}`), {
+    setPatchError(null);
+    /*
+     * Replying to a customer, assigning an owner, closing a case — the result
+     * was discarded, so a write that failed closed the panel and reloaded a
+     * queue that looked exactly as before. The operator has every reason to
+     * believe the reply went; the customer is still waiting.
+     */
+    const result = await apiFetch<unknown>(`/api/admin/cases/${encodeURIComponent(active.caseId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(body),
     });
     setBusy(false);
+    if (!result.ok) {
+      // The panel stays open on purpose: whatever was typed is still in it.
+      setPatchError(result.error?.message ?? t("error.temporaryService"));
+      return;
+    }
     if (close) {
       setReply("");
       setActive(null);
@@ -605,6 +618,7 @@ function CaseQueue({ locale }: { locale: Locale }) {
       <Modal open={Boolean(active)} onClose={() => setActive(null)} title={active?.category ?? ""} size="md">
         {active && (
           <div className="space-y-3">
+            {patchError && <Alert tone="critical">{patchError}</Alert>}
             <ul className="max-h-64 space-y-2 overflow-y-auto">
               {active.messages.map((message, i) => (
                 <li

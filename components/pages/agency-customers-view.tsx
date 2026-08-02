@@ -64,11 +64,22 @@ function Customers({ locale }: { locale: Locale }) {
 
   async function remove(id: string) {
     setBusy(true);
-    await fetch(apiUrl(`/api/agency/customers?id=${encodeURIComponent(id)}`), {
+    setError(null);
+    /*
+     * The result was thrown away, so a refused or unreachable delete did
+     * nothing at all and said nothing at all — the row stayed, the panel
+     * closed, and the only reading available was that the click had missed.
+     * The screen already has somewhere to put this; the delete just never
+     * used it.
+     */
+    const body = await apiFetch<unknown>(`/api/agency/customers?id=${encodeURIComponent(id)}`, {
       method: "DELETE",
-      credentials: apiCredentials(),
     });
     setBusy(false);
+    if (!body.ok) {
+      setError(body.error?.message ?? t("error.validation"));
+      return;
+    }
     setEditing(null);
     await load();
   }

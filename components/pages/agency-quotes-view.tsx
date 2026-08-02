@@ -124,6 +124,8 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const { t } = useApp();
   const [quote, setQuote] = useState<AgencyQuote | null | "missing">(null);
   const [busy, setBusy] = useState(false);
+  /** A status change that did not take. Shown, because the badge will not say. */
+  const [markError, setMarkError] = useState<string | null>(null);
 
   async function load() {
     const body = await apiFetch<{ quote: AgencyQuote }>(`/api/agency/quotes/${encodeURIComponent(id)}`);
@@ -140,13 +142,25 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
 
   async function mark(status: AgencyQuote["status"]) {
     setBusy(true);
-    await fetch(apiUrl(`/api/agency/quotes/${encodeURIComponent(id)}`), {
+    setMarkError(null);
+    /*
+     * This is the button that records a customer's answer, and its result was
+     * discarded — so a refused or unreachable write left the quote on its old
+     * status while the screen reloaded and showed exactly that, with no
+     * suggestion anything had gone wrong. An agent reads the unchanged badge
+     * as a misclick and presses it again; if the write is failing rather than
+     * flaking, they press it all afternoon.
+     */
+    const body = await apiFetch<unknown>(`/api/agency/quotes/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify({ status }),
     });
     setBusy(false);
+    if (!body.ok) {
+      setMarkError(body.error?.message ?? t("error.temporaryService"));
+      return;
+    }
     await load();
   }
 
@@ -173,6 +187,13 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
 
   return (
     <div className="space-y-4">
+      {/* Never on the customer's printed copy — this is an operational
+          message about our own write, not part of the quotation. */}
+      {markError && (
+        <div className="no-print">
+          <Alert tone="critical">{markError}</Alert>
+        </div>
+      )}
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <Link href={href(locale, "/agency/quotes")} className="text-muted text-sm underline">
           ← {t("agency.quotes")}
