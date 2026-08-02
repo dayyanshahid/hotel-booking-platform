@@ -373,12 +373,29 @@ export function useApp(): AppState {
   return ctx;
 }
 
-/** Fetch helper that always carries locale and the active scenario. */
+/**
+ * Fetch helper that always carries locale and the active scenario.
+ *
+ * And the API's origin, which it did not.
+ *
+ * Every other caller in the app was moved onto `apiUrl` when the portals were
+ * split onto their own deployments; this one was missed, and it is the helper
+ * sixteen screens go through. On the separated portal its relative path
+ * resolved to the portal itself, which serves no API — so the response was a
+ * redirect or an HTML page, `res.json()` threw, and the catch below rendered
+ * "Unexpected response · cid_local" over a screen whose data was fine and
+ * simply never asked for. The property page's rate list was the visible one.
+ *
+ * The credentials go with it. A cross-origin request sends no cookie under the
+ * default, so even once the address was right the call would have arrived
+ * anonymous.
+ */
 export function useApi() {
   const { locale, scenario } = useApp();
   return useCallback(
     async <T,>(input: string, init: RequestInit = {}): Promise<{ ok: true; data: T } | { ok: false; error: import("@/lib/types").ApiError }> => {
-      const res = await fetch(input, {
+      const res = await fetch(apiUrl(input), {
+        credentials: apiCredentials(),
         ...init,
         headers: {
           "content-type": "application/json",
