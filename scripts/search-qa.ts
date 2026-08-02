@@ -151,6 +151,7 @@ interface Suggestion {
 
 interface Card {
   canonicalHotelId: string;
+  heroImage?: string;
   slug: string;
   name: string;
   offerSummary: { offerId: string; total: number; currency: string };
@@ -445,6 +446,35 @@ async function run(): Promise<void> {
     }
     if (missing.length) throw new Error(missing.slice(0, 4).join("; "));
     return `${firstPage.results.length} cards complete`;
+  });
+
+  await check("every card's photograph is real and fetchable", async () => {
+    if (!firstPage?.results.length) return "SKIP: no cards to inspect";
+    const withPhoto = firstPage.results.filter((c) => c.heroImage);
+    if (!withPhoto.length) throw new Error("not one card carries a photo");
+
+    /*
+     * The addresses, then the bytes.
+     *
+     * These come back backend-relative — correct on the consumer site, and on
+     * the separated portal they point at a front end that serves no API. The
+     * card then falls through its photo, through its illustrated fallback, and
+     * renders an empty grey box. `Photo` re-bases them, and it can only do that
+     * if they keep this shape, so the shape is what is asserted here.
+     */
+    const misshapen = withPhoto.filter((c) => !c.heroImage!.startsWith("/api/"));
+    if (misshapen.length) {
+      throw new Error(`${misshapen.length} photo URL(s) are not backend-relative: ${misshapen[0].heroImage}`);
+    }
+
+    const checked = withPhoto.slice(0, 4);
+    for (const card of checked) {
+      const res = await fetch(`${BASE}${card.heroImage}`);
+      const type = res.headers.get("content-type") ?? "";
+      if (!res.ok) throw new Error(`${card.name}: photo → ${res.status}`);
+      if (!type.startsWith("image/")) throw new Error(`${card.name}: photo served as ${type}`);
+    }
+    return `${withPhoto.length}/${firstPage.results.length} cards have a photo · ${checked.length} fetched, all images`;
   });
 
   await check("prices come back in the currency that was asked for", async () => {

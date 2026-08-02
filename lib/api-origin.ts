@@ -35,6 +35,48 @@ export function apiUrl(path: string): string {
 }
 
 /**
+ * The same rule, for anything the browser fetches by URL rather than by code.
+ *
+ * A photograph is a request to the backend exactly as much as a search is, but
+ * it is made by the browser off an `src` attribute instead of by us off a
+ * `fetch`, so `apiUrl` never got near it. On the separated portal every
+ * property photo therefore pointed at the portal's own origin, which serves no
+ * API, and the card fell through its photo, then its illustrated fallback, to
+ * an empty grey box. The images were fine; the addresses were wrong.
+ *
+ * Only backend paths are rewritten. Anything already absolute, a data URI, or
+ * a static asset the front end ships itself is returned untouched — those are
+ * correct as they stand and rewriting them would break them.
+ */
+export function mediaUrl(src: string | undefined): string | undefined {
+  if (!src || !src.startsWith("/api/")) return src;
+  return apiUrl(src);
+}
+
+/**
+ * The same, for a `srcSet` — a comma-separated list of "url descriptor" pairs.
+ *
+ * Rewriting the whole string with a regular expression would be shorter and
+ * would corrupt any URL containing a comma; splitting on the descriptor keeps
+ * each entry intact.
+ */
+export function mediaSrcSet(srcSet: string | undefined): string | undefined {
+  if (!srcSet || !apiIsRemote()) return srcSet;
+  return srcSet
+    .split(",")
+    .map((entry) => {
+      const trimmed = entry.trim();
+      if (!trimmed) return "";
+      const gap = trimmed.lastIndexOf(" ");
+      const url = gap === -1 ? trimmed : trimmed.slice(0, gap);
+      const descriptor = gap === -1 ? "" : trimmed.slice(gap);
+      return `${mediaUrl(url) ?? url}${descriptor}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
  * Whether the API is somewhere else.
  *
  * Cross-origin calls need credentials sent explicitly and cookies that survive

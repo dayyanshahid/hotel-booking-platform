@@ -12,6 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon, StarRow } from "./icons";
+import { mediaSrcSet, mediaUrl } from "@/lib/api-origin";
 
 /**
  * Design-system primitives (§7.1).
@@ -807,7 +808,16 @@ export function Photo({
 }) {
   // 0 = the photo, 1 = the illustrated fallback, 2 = nothing loadable.
   const [stage, setStage] = useState(0);
-  const chosen = stage === 0 ? src : stage === 1 ? fallbackSrc : undefined;
+  /*
+   * Sent to the API's origin, not to whichever front end is rendering.
+   *
+   * Both of these arrive from the backend as `/api/image/...`, which is correct
+   * on the consumer site and points at nothing on the separated portal. Done
+   * here because this is the one component every photograph goes through: a
+   * card, a gallery, a map bubble and a voucher all reach the browser from it,
+   * and fixing it at each call site is how three of them would stay broken.
+   */
+  const chosen = mediaUrl(stage === 0 ? src : stage === 1 ? fallbackSrc : undefined);
   return (
     <div
       className={cx("surface-sunken relative overflow-hidden", fill && "size-full", className)}
@@ -820,7 +830,7 @@ export function Photo({
         <img
           key={stage}
           src={chosen}
-          srcSet={stage === 0 ? srcSet : undefined}
+          srcSet={stage === 0 ? mediaSrcSet(srcSet) : undefined}
           sizes={stage === 0 ? sizes : undefined}
           alt={alt}
           loading={priority ? "eager" : "lazy"}
