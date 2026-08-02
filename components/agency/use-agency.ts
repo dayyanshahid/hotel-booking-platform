@@ -41,7 +41,19 @@ export function may(context: AgencyContext | null, required: AgentPermission): b
   return canAtLeast(context.session.permission ?? "issue", required);
 }
 
-type Listener = (value: AgencyContext | null) => void;
+/**
+ * Three answers to "is anyone signed in", not two.
+ *
+ * `null` means the server said no. `"unreachable"` means we could not ask —
+ * a dropped connection, an origin refusing the request — and it is a
+ * different fact with a different remedy. Collapsing the second into the
+ * first showed a signed-in agent the sign-in screen the moment their network
+ * blinked, and invited them to re-enter an address and wait for a code they
+ * did not need, quite possibly mid-booking.
+ */
+export type SessionState = AgencyContext | null | "unreachable";
+
+type Listener = (value: SessionState) => void;
 
 /**
  * One fetch per page load, shared.
@@ -50,11 +62,11 @@ type Listener = (value: AgencyContext | null) => void;
  * strip — and each mounting its own request would put four identical calls on
  * every navigation.
  */
-let cached: AgencyContext | null | undefined;
-let inflight: Promise<AgencyContext | null> | null = null;
+let cached: SessionState | undefined;
+let inflight: Promise<SessionState> | null = null;
 const listeners = new Set<Listener>();
 
-async function load(): Promise<AgencyContext | null> {
+async function load(): Promise<SessionState> {
   if (cached !== undefined) return cached;
   if (!inflight) {
     inflight = fetch(apiUrl("/api/agency/me"), { credentials: apiCredentials() })
@@ -63,7 +75,9 @@ async function load(): Promise<AgencyContext | null> {
         const body = (await res.json()) as { ok: boolean; data?: AgencyContext };
         return body.ok && body.data ? body.data : null;
       })
-      .catch(() => null)
+      // Not `null`: a request that never completed is not a refusal, and the
+      // shell reads the difference.
+      .catch((): SessionState => "unreachable")
       .then((value) => {
         cached = value;
         inflight = null;
@@ -80,19 +94,19 @@ export function refreshAgency(): void {
   void load();
 }
 
-export function useAgency(): { context: AgencyContext | null; loading: boolean } {
-  const [context, setContext] = useState<AgencyContext | null>(cached ?? null);
+export function useAgency(): { context: AgencyContext | null; loading: boolean; unreachable: boolean } {
+  const [state, setState] = useState<SessionState>(cached ?? null);
   const [loading, setLoading] = useState(cached === undefined);
 
   useEffect(() => {
     let alive = true;
     const listener: Listener = (value) => {
-      if (alive) setContext(value);
+      if (alive) setState(value);
     };
     listeners.add(listener);
     void load().then((value) => {
       if (!alive) return;
-      setContext(value);
+      setState(value);
       setLoading(false);
     });
     return () => {
@@ -101,7 +115,13 @@ export function useAgency(): { context: AgencyContext | null; loading: boolean }
     };
   }, []);
 
-  return { context, loading };
+  /*
+   * Callers that only want "is there a session" keep the shape they had —
+   * `context` is null while we cannot tell, which is the safe reading for
+   * anything deciding whether to show commercial figures. Only the shell
+   * needs to know the difference, and it asks for it.
+   */
+  return { context: state === "unreachable" ? null : state, loading, unreachable: state === "unreachable" };
 }
 
 /**

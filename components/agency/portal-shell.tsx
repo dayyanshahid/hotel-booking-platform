@@ -44,7 +44,7 @@ export function PortalShell({
   requireAdmin?: boolean;
 }) {
   const { t } = useApp();
-  const { context, loading } = useAgency();
+  const { context, loading, unreachable } = useAgency();
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -95,6 +95,16 @@ export function PortalShell({
     );
   }
 
+  /*
+   * "We could not check" is not "you are not signed in".
+   *
+   * The session load used to map a dropped request onto the same `null` a 401
+   * produces, so a blink of network put the sign-in screen in front of an
+   * agent who was already signed in — and asked them for an address and a
+   * code they did not need, possibly with a customer on the phone. Reloading
+   * is the fix for one and does nothing for the other.
+   */
+  if (unreachable) return <SessionUnavailable />;
   if (!context) return <SignInPrompt locale={locale} />;
 
   const groups: { label: string; items: NavItem[] }[] = [
@@ -362,6 +372,19 @@ function CreditRail({ locale, context }: { locale: Locale; context: AgencyContex
       <p className="text-muted mt-1.5 text-xs">{t("agency.ofLimit", { limit })}</p>
       {ratio < 0.15 && <p className="text-critical-700 mt-1.5 text-xs font-medium">{t("agency.creditLow")}</p>}
     </Link>
+  );
+}
+
+/** The session could not be checked — which is a network problem, not a sign-out. */
+function SessionUnavailable() {
+  const { t } = useApp();
+  return (
+    <div className="mx-auto max-w-md space-y-4 py-16 text-center">
+      <Wordmark className="justify-center" />
+      <h1 className="text-xl font-bold">{t("agency.sessionUnverified")}</h1>
+      <p className="text-muted text-sm">{t("agency.sessionUnverifiedBody")}</p>
+      <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
+    </div>
   );
 }
 
