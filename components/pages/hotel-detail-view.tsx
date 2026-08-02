@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
 import { RoomBlock } from "@/components/commerce/rate-card";
+import { StaticMap } from "@/components/commerce/static-map";
 import { PerRoomNote, PriceBlock } from "@/components/commerce/price";
 import {
   Accordion,
@@ -607,23 +608,3 @@ export function HotelDetailView({
 }
 
 /** Coordinate-projected static map with a textual alternative (§5.6). */
-function StaticMap({ lat, lng, label }: { lat: number; lng: number; label: string }) {
-  return (
-    <div className="surface-sunken hairline relative overflow-hidden rounded-[var(--radius-card)] border" style={{ aspectRatio: "4/3" }}>
-      <svg viewBox="0 0 400 300" className="size-full" role="img" aria-label={label}>
-        <defs>
-          <pattern id="minimap" width="30" height="30" patternUnits="userSpaceOnUse">
-            <path d="M 30 0 L 0 0 0 30" fill="none" stroke="var(--border)" strokeWidth="1" />
-          </pattern>
-        </defs>
-        <rect width="400" height="300" fill="var(--surface)" />
-        <rect width="400" height="300" fill="url(#minimap)" />
-        <circle cx="200" cy="150" r="12" fill="var(--color-brand-600, #14676d)" opacity="0.25" />
-        <circle cx="200" cy="150" r="6" fill="var(--color-brand-600, #14676d)" />
-        <text x="200" y="180" textAnchor="middle" fontSize="11" fill="var(--text-muted)">
-          {lat.toFixed(4)}, {lng.toFixed(4)}
-        </text>
-      </svg>
-    </div>
-  );
-}
