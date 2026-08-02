@@ -103,10 +103,10 @@ export function Wordmark({
           tracking and a short line-height keep the block reading as one lockup
           rather than two stacked labels.
         */}
-        <span className={`block text-[17px] font-extrabold leading-[1.05] tracking-[-0.01em] ${type}`}>
+        <span className={`block whitespace-nowrap text-[17px] font-extrabold leading-[1.05] tracking-[-0.01em] ${type}`}>
           TRAVEL &amp; MORE
         </span>
-        <span className={`block text-[11.5px] font-bold leading-[1.15] tracking-[0.06em] ${type}`}>
+        <span className={`block whitespace-nowrap text-[11.5px] font-bold leading-[1.15] tracking-[0.06em] ${type}`}>
           PRIVATE LIMITED
         </span>
         {showSince && (

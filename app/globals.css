@@ -75,35 +75,45 @@
   --color-ink-950: #0b0f16;
 
   /*
-   * Lagoon — the brand, and the only colour an action is ever painted in.
+   * Travel & More's orange. The client's colour, and the wordmark's own.
    *
-   * Teal rather than another OTA blue: it sits beside photography without
-   * competing for the same attention a sky does, and it is not the colour of
-   * the four booking sites this platform's customers are compared against.
-   * 600 carries white text at 5.3:1; 700 is the text-on-white step at 7.3:1.
+   * 500 is theirs exactly, untouched — it is what the mark is drawn in and
+   * what the brand is recognised by. The two steps below it are darker than a
+   * pure tint ramp would make them, and that is deliberate rather than a
+   * drift: white text on #f2621b is 3.2:1 and on #d94f0f is 4.1:1, both under
+   * the 4.5:1 that normal text requires, so a button painted in the brand
+   * colour itself is a button a good proportion of people cannot read. 600 is
+   * the deepest orange that still reads as orange and carries white at 5.0:1;
+   * 700 is the text-on-white step at 6.8:1.
+   *
+   * So the brand colour is everywhere it is seen and nowhere it is read
+   * through — which is the usual resolution, and it costs the identity
+   * nothing.
    */
-  --color-brand-50: #ecfaf8;
-  --color-brand-100: #cff3ee;
-  --color-brand-200: #a0e6de;
-  --color-brand-300: #63d1c7;
-  --color-brand-400: #2eb5ab;
-  --color-brand-500: #109289;
-  --color-brand-600: #0b7970;
-  --color-brand-700: #096158;
-  --color-brand-800: #084c45;
-  --color-brand-900: #073c37;
+  --color-brand-50: #fff3ec;
+  --color-brand-100: #ffe2d1;
+  --color-brand-200: #ffc3a3;
+  --color-brand-300: #ff9a68;
+  --color-brand-400: #fb7a3c;
+  --color-brand-500: #f2621b;
+  --color-brand-600: #c2470c;
+  --color-brand-700: #a03a09;
+  --color-brand-800: #7f2e07;
+  --color-brand-900: #5f2205;
 
   /*
-   * Ember. A saving, and nothing else.
+   * Gold. Stars, and a saving.
    *
-   * The old amber was the primary action colour, which meant the loudest thing
-   * on a results page was a button rather than a price. Demoted to what it is
-   * actually good at: marking that a number is lower than it was.
+   * It was a second orange while the brand was teal, which was fine. With the
+   * brand orange again it would be the old problem back — two warm families,
+   * neither able to mean anything, and star ratings that dissolve into the
+   * brand colour beside them. Gold is what a star has always been, and it is
+   * far enough from #f2621b to be a different signal rather than a shade.
    */
-  --color-ember-50: #fff4ec;
-  --color-ember-100: #ffe3ce;
-  --color-ember-500: #e8620e;
-  --color-ember-700: #a8430a;
+  --color-ember-50: #fff8e8;
+  --color-ember-100: #ffeec2;
+  --color-ember-500: #d4930a;
+  --color-ember-700: #8a5d00;
 
   --color-positive-50: #e8f7ef;
   --color-positive-100: #c6ebd7;
@@ -166,8 +176,8 @@
   --border-strong: #cbd3e1;
   --text: #171d28;
   --text-muted: #515c72;
-  --focus: #0b7970;
-  --ring: rgb(11 121 112 / 0.22);
+  --focus: #c2470c;
+  --ring: rgb(194 71 12 / 0.22);
   --scrim: rgb(11 15 22 / 0.55);
   /*
    * The chrome band is no longer a band.
@@ -197,8 +207,8 @@ html[data-theme="dark"] {
   --border-strong: #3f4a60;
   --text: #eef1f7;
   --text-muted: #97a2b6;
-  --focus: #63d1c7;
-  --ring: rgb(99 209 199 / 0.28);
+  --focus: #ff9a68;
+  --ring: rgb(255 154 104 / 0.3);
   --scrim: rgb(0 0 0 / 0.7);
   --chrome: #171d28;
   --chrome-ink: #eef1f7;

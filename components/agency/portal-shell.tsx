@@ -48,6 +48,39 @@ export function PortalShell({
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  /**
+   * Whether the rail is down to icons.
+   *
+   * Two hundred and forty pixels of permanent navigation is a quarter of a
+   * laptop's width spent on a list an agent reads once a session and then
+   * knows by heart — and it is taken from the results, which is the part of
+   * the screen the job actually happens in.
+   *
+   * Remembered per browser rather than per account: it is a preference about
+   * this screen on this machine, and an agent who collapses it on a small
+   * laptop does not want it collapsed on the desk they sit at tomorrow.
+   */
+  const [railClosed, setRailClosed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setRailClosed(localStorage.getItem("nz_agency_rail") === "closed");
+    } catch {
+      /* private mode — the rail simply starts open */
+    }
+  }, []);
+
+  function toggleRail() {
+    setRailClosed((closed) => {
+      const next = !closed;
+      try {
+        localStorage.setItem("nz_agency_rail", next ? "closed" : "open");
+      } catch {
+        /* not remembering it is survivable; not toggling it is not */
+      }
+      return next;
+    });
+  }
 
   // A route change should not leave the drawer sitting open over the new page.
   useEffect(() => {
@@ -97,49 +130,117 @@ export function PortalShell({
     router.push(href(locale, "/agency/signin"));
   }
 
-  const nav = (
-    <nav aria-label={t("agency.portal")} className="space-y-5">
-      {groups.map((group) => (
-        <div key={group.label} className="space-y-1">
-          <p className="text-muted px-3 text-[11px] font-semibold uppercase tracking-wider">{group.label}</p>
-          <ul className="space-y-0.5">
-            {group.items.map((item) => {
-              const target = href(locale, item.path);
-              const active = item.path === "/agency" ? pathname === target : pathname.startsWith(target);
-              return (
-                <li key={item.path}>
-                  <Link
-                    href={target}
-                    aria-current={active ? "page" : undefined}
-                    className={cx(
-                      "flex items-center gap-2.5 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium transition-colors",
-                      active ? "bg-brand-50 text-brand-700" : "text-muted hover:bg-ink-50 hover:text-ink-900",
-                    )}
-                  >
-                    <Icon name={item.icon} size={16} />
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  );
+  /**
+   * The same navigation at two widths.
+   *
+   * Collapsed, the label leaves the flow but not the accessibility tree: the
+   * link keeps its accessible name and gains a native tooltip, so an icon rail
+   * is still navigable by screen reader and still identifiable by anyone who
+   * has not memorised nine glyphs.
+   */
+  function navList(compact: boolean) {
+    return (
+      <nav aria-label={t("agency.portal")} className={compact ? "space-y-2" : "space-y-5"}>
+        {groups.map((group) => (
+          <div key={group.label} className="space-y-1">
+            {compact ? (
+              // A heading with no room for its words becomes a rule instead —
+              // the grouping is still legible, the label is not pretending.
+              <div className="hairline mx-2 border-t pt-2" aria-hidden />
+            ) : (
+              <p className="text-muted px-3 text-[11px] font-semibold uppercase tracking-wider">
+                {group.label}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const target = href(locale, item.path);
+                const active = item.path === "/agency" ? pathname === target : pathname.startsWith(target);
+                return (
+                  <li key={item.path}>
+                    <Link
+                      href={target}
+                      aria-current={active ? "page" : undefined}
+                      title={compact ? item.label : undefined}
+                      className={cx(
+                        "flex items-center rounded-[var(--radius-control)] text-sm font-medium transition-colors",
+                        compact ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2",
+                        active ? "bg-brand-50 text-brand-700" : "text-muted hover:bg-ink-50 hover:text-ink-900",
+                      )}
+                    >
+                      <Icon name={item.icon} size={compact ? 18 : 16} />
+                      {compact ? <span className="sr-only">{item.label}</span> : item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    );
+  }
+
+  const nav = navList(false);
 
   return (
     <CartProvider>
       <div className="lg:flex lg:gap-6">
-      {/* Desktop rail. Sticky, so navigation never scrolls away mid-task. */}
-      <aside className="hairline no-print hidden w-60 shrink-0 border-e pe-4 lg:block">
+      {/*
+        Desktop rail. Sticky, so navigation never scrolls away mid-task, and
+        collapsible, because the results are what the agent is here for and the
+        rail was taking a quarter of the width to say things they know.
+      */}
+      <aside
+        className={cx(
+          "hairline no-print hidden shrink-0 border-e transition-[width] duration-200 ease-[var(--ease-out)] lg:block",
+          railClosed ? "w-16 pe-2" : "w-60 pe-4",
+        )}
+      >
         <div className="sticky top-4 space-y-4 py-1">
-          <Link href={href(locale, "/agency")} className="block">
-            <Wordmark />
-          </Link>
-          <Badge tone="brand">{t("agency.portal")}</Badge>
-          <CreditRail locale={locale} context={context} />
-          {nav}
+          <div className={cx("flex items-center", railClosed ? "justify-center" : "justify-between gap-2")}>
+            <Link href={href(locale, "/agency")} className="block min-w-0 overflow-hidden">
+              <Wordmark markOnly={railClosed} />
+            </Link>
+            {!railClosed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={toggleRail}
+                aria-label={t("agency.collapseNav")}
+                title={t("agency.collapseNav")}
+                aria-expanded
+              >
+                <Icon name="chevronRight" size={16} className="rotate-180 rtl:rotate-0" />
+              </Button>
+            )}
+          </div>
+
+          {railClosed ? (
+            /*
+              Collapsed, the one thing that still has to be visible is the
+              money — a credit line an agent cannot see is a credit line they
+              overspend. It becomes the bar alone, which is readable at any
+              width, with the figure in its tooltip.
+            */
+            <button
+              type="button"
+              onClick={toggleRail}
+              aria-label={t("agency.expandNav")}
+              title={t("agency.expandNav")}
+              className="hover:bg-ink-50 flex w-full flex-col items-center gap-2 rounded-[var(--radius-control)] py-2"
+            >
+              <Icon name="chevronRight" size={16} className="rtl:rotate-180" />
+            </button>
+          ) : (
+            <>
+              <Badge tone="brand">{t("agency.portal")}</Badge>
+              <CreditRail locale={locale} context={context} />
+            </>
+          )}
+
+          {navList(railClosed)}
         </div>
       </aside>
 
