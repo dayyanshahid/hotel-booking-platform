@@ -1,21 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card, Photo, cx } from "@/components/ui";
 import { PerRoomNote } from "./price";
+import { apiUrl } from "@/lib/api-origin";
 import { comparableTotal, formatMoney, isPerRoomTotal } from "@/lib/format";
 import { hotelHref } from "@/lib/nav";
+import {
+  TILE_SIZE,
+  clusterByDistance,
+  fromScreen,
+  metresPerPixel,
+  toScreen,
+  viewport,
+  viewportTiles,
+  zoomToFit,
+} from "@/lib/geo/tiles";
 import type { HotelResultCard, SearchFilters, SearchIntent } from "@/lib/types";
 
 /**
- * F-032 — list/map with synchronized selection, price markers, clustering and
+ * F-032 — list/map with synchronised selection, price markers, clustering and
  * "search this area".
  *
- * The map is rendered from projected coordinates rather than a third-party tile
- * SDK: it keeps the route bundle small (§12.2) and guarantees the keyboard-
- * accessible list alternative required by §5.4 is always present.
+ * There is now a map under the pins. This drew graph paper, on the reasoning
+ * that a tile SDK is a large dependency and the keyboard list beside it is the
+ * accessible path either way — both true, and neither an argument for a
+ * picture that cannot answer the question the map exists for. Two pins forty
+ * pixels apart told an agent their order and nothing about whether either was
+ * near the customer's meeting.
+ *
+ * It is real tiles and no SDK: the projection is `lib/geo/tiles`, the tiles are
+ * `<img>` elements our own route proxies, and pan and zoom are arithmetic on a
+ * centre and an integer zoom. The pins were laid out by stretching latitude and
+ * longitude linearly across a box, which is not what a map does — they are on
+ * Web Mercator now, the same projection as the ground they sit on, so a pin is
+ * over its building rather than near it.
  */
 export function ResultsMap({
   cards,
@@ -46,23 +67,75 @@ export function ResultsMap({
   priceFor?: (card: HotelResultCard) => ReactNode;
 }) {
   const { t, locale, track } = useApp();
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
 
-  const bounds = useMemo(() => {
-    if (!cards.length) return { north: 1, south: 0, east: 1, west: 0 };
-    const lats = cards.map((c) => c.coordinates.lat);
-    const lngs = cards.map((c) => c.coordinates.lng);
-    const padLat = (Math.max(...lats) - Math.min(...lats)) * 0.15 + 0.01;
-    const padLng = (Math.max(...lngs) - Math.min(...lngs)) * 0.15 + 0.01;
-    return {
-      north: Math.max(...lats) + padLat,
-      south: Math.min(...lats) - padLat,
-      east: Math.max(...lngs) + padLng,
-      west: Math.min(...lngs) - padLng,
+  const frameRef = useRef<HTMLDivElement>(null);
+  /** Measured, because which tiles are needed depends on how big the box is. */
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [centre, setCentre] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
+  const [missing, setMissing] = useState<Set<string>>(new Set());
+  const dragRef = useRef<{ x: number; y: number; lat: number; lng: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const node = frameRef.current;
+    if (!node) return;
+
+    const measure = (width: number, height: number) => {
+      setSize((previous) => {
+        const next = { width: Math.round(width), height: Math.round(height) };
+        // Re-fitting the map is not free, and a sub-pixel reflow is not a resize.
+        return previous.width === next.width && previous.height === next.height
+          ? previous
+          : next;
+      });
     };
-  }, [cards]);
+
+    /*
+     * Measured once here, before the observer.
+     *
+     * A ResizeObserver callback is only delivered during the rendering steps,
+     * so a frame that is laid out but not yet painted — a tab opened in the
+     * background, a pane the compositor has not reached — reports nothing, and
+     * a map that waits for the callback stays empty indefinitely. The box has
+     * a size the moment layout runs, so take it.
+     */
+    const box = node.getBoundingClientRect();
+    measure(box.width, box.height);
+
+    const observer = new ResizeObserver(([entry]) => {
+      const rect = entry.contentRect;
+      measure(rect.width, rect.height);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  /*
+   * Open on the results, and re-fit when a new search replaces them.
+   *
+   * Keyed on the properties rather than on every render: a pan must not be
+   * undone by the next paint, but searching a different city should not leave
+   * the map over the old one.
+   */
+  const fitKey = useMemo(() => cards.map((card) => card.slug).join("|"), [cards]);
+  useEffect(() => {
+    if (!size.width || !size.height || !cards.length) return;
+    setCentre(
+      zoomToFit(
+        cards.map((card) => card.coordinates),
+        size.width,
+        size.height,
+      ),
+    );
+    setMissing(new Set());
+  }, [fitKey, size.width, size.height]);
+
+  const view = useMemo(
+    () =>
+      centre && size.width
+        ? viewport(centre.lat, centre.lng, centre.zoom, size.width, size.height)
+        : null,
+    [centre, size.width, size.height],
+  );
 
   /*
    * A map is a comparison, so every pin has to carry the same kind of number.
@@ -77,139 +150,174 @@ export function ResultsMap({
   const pinAmount = (card: HotelResultCard) =>
     perRoomPins ? Math.round(comparableTotal(card.price)) : card.price.total;
 
-  const W = 800;
-  const H = 560;
-
-  function project(lat: number, lng: number) {
-    const x = ((lng - bounds.west) / (bounds.east - bounds.west)) * W;
-    const y = ((bounds.north - lat) / (bounds.north - bounds.south)) * H;
-    return { x, y };
-  }
-
-  // Simple grid clustering so dense areas stay readable at low zoom.
-  const clusters = useMemo(() => {
-    const cell = 70 / zoom;
-    const map = new Map<string, HotelResultCard[]>();
-    for (const card of cards) {
-      const { x, y } = project(card.coordinates.lat, card.coordinates.lng);
-      const key = `${Math.round(x / cell)}:${Math.round(y / cell)}`;
-      const list = map.get(key) ?? [];
-      list.push(card);
-      map.set(key, list);
-    }
-    return [...map.values()];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards, zoom, bounds]);
-
-  const selectedCard = cards.find((c) => c.slug === selected) ?? null;
-
   /**
-   * How far apart the pins actually are.
+   * Clustering in screen pixels, so it thins out as the map zooms in.
    *
-   * The backdrop is a grid, not geography — there is no coastline under these
-   * pins and no street — so two dots forty pixels apart tell an agent their
-   * order and nothing about their distance. On the one screen whose question is
-   * "is this near the customer's meeting?", that is most of the answer missing.
+   * Greedy by distance rather than by grid cell. A grid puts each pin in a
+   * bucket and calls neighbouring buckets separate, but two pins either side
+   * of a cell boundary can be one pixel apart — in central Dubai that drew a
+   * price pill directly over the one behind it, and the covered rate could not
+   * be read or clicked. Claiming a radius around each pin as it is placed is
+   * the only version of this that actually guarantees the labels are legible.
    *
-   * A scale bar is the honest half of it: it cannot say *where* a property is,
-   * but it makes "these two are a ten-minute walk apart, those two are across
-   * the city" readable off the picture. Rounded to a 1/2/5 step so the label is
-   * a number somebody can hold in their head.
+   * Cheapest first, so the pin that survives a crowd is the one an agent is
+   * looking for; the rest fold into its count rather than disappearing.
    */
-  const scale = (() => {
-    // Longitude degrees shrink towards the poles; at city scale the mid-latitude
-    // of the visible span is accurate enough to draw a bar with.
-    const midLat = ((bounds.north + bounds.south) / 2) * (Math.PI / 180);
-    const kmPerDegLng = 111.32 * Math.cos(midLat);
-    const kmAcross = ((bounds.east - bounds.west) / zoom) * kmPerDegLng;
-    if (!Number.isFinite(kmAcross) || kmAcross <= 0) return null;
+  const clusters = useMemo(() => {
+    if (!view) return [];
 
-    // A bar around a fifth of the width, snapped to something round.
-    const target = kmAcross / 5;
+    // Roughly a price pill plus its gap: wide, because the labels are wide and
+    // it is their boxes that collide, not their centres.
+    const separation = 104;
+
+    return clusterByDistance(
+      cards
+        .map((card) => ({ card, ...toScreen(view, card.coordinates.lat, card.coordinates.lng) }))
+        .sort((a, b) => pinAmount(a.card) - pinAmount(b.card)),
+      separation,
+    );
+    // `pinAmount` is derived from `cards` and changes with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards, view]);
+
+  const selectedCard = cards.find((card) => card.slug === selected) ?? null;
+
+  const scale = useMemo(() => {
+    if (!view || !centre) return null;
+    const perPixel = metresPerPixel(centre.lat, centre.zoom);
+    const target = perPixel * 110;
     const magnitude = 10 ** Math.floor(Math.log10(target));
     const step = [1, 2, 5, 10].find((s) => s * magnitude >= target) ?? 10;
-    const km = step * magnitude;
-    const widthPx = (km / kmAcross) * W;
-    if (widthPx < 20 || widthPx > W / 2) return null;
+    const metres = step * magnitude;
     return {
-      widthPx,
-      label: km >= 1 ? `${Number(km.toFixed(km < 10 ? 1 : 0))} km` : `${Math.round(km * 1000)} m`,
+      widthPx: metres / perPixel,
+      label: metres >= 1000 ? `${Math.round(metres / 100) / 10} km` : `${Math.round(metres)} m`,
     };
-  })();
+  }, [view, centre]);
 
-  const visibleBounds = () => {
-    // Convert the current pan/zoom viewport back into geographic bounds.
-    const spanLat = (bounds.north - bounds.south) / zoom;
-    const spanLng = (bounds.east - bounds.west) / zoom;
-    const centreLat = bounds.north - ((H / 2 - pan.y) / H) * (bounds.north - bounds.south);
-    const centreLng = bounds.west + ((W / 2 - pan.x) / W) * (bounds.east - bounds.west);
+  /** The viewport's own corners, read back as somewhere to search. */
+  function visibleBounds() {
+    if (!view) return { north: 1, south: 0, east: 1, west: 0 };
+    const topLeft = fromScreen(view, 0, 0);
+    const bottomRight = fromScreen(view, view.width, view.height);
     return {
-      north: centreLat + spanLat / 2,
-      south: centreLat - spanLat / 2,
-      east: centreLng + spanLng / 2,
-      west: centreLng - spanLng / 2,
+      north: topLeft.lat,
+      south: bottomRight.lat,
+      west: topLeft.lng,
+      east: bottomRight.lng,
     };
-  };
+  }
+
+  function nudgeZoom(by: number) {
+    setCentre((prev) => (prev ? { ...prev, zoom: Math.min(18, Math.max(2, prev.zoom + by)) } : prev));
+    setMissing(new Set());
+  }
+
+  const tiles = view ? viewportTiles(view) : [];
 
   return (
     <div className="relative overflow-hidden rounded-[var(--radius-card)] border">
       <div
-        className="surface-sunken relative"
-        onMouseDown={(e) => (dragRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y })}
-        onMouseMove={(e) => {
-          if (!dragRef.current) return;
-          setPan({ x: e.clientX - dragRef.current.x, y: e.clientY - dragRef.current.y });
+        ref={frameRef}
+        className="surface-sunken relative h-[420px] w-full touch-none select-none overflow-hidden lg:h-[620px]"
+        onPointerDown={(e) => {
+          if (!centre) return;
+          (e.target as Element).setPointerCapture?.(e.pointerId);
+          dragRef.current = { x: e.clientX, y: e.clientY, lat: centre.lat, lng: centre.lng };
         }}
-        onMouseUp={() => (dragRef.current = null)}
-        onMouseLeave={() => (dragRef.current = null)}
+        onPointerMove={(e) => {
+          const drag = dragRef.current;
+          if (!drag || !view) return;
+          /*
+           * Dragging moves the ground, so the centre moves the other way — and
+           * it is converted through the projection rather than by adding
+           * degrees, because a pixel is not a fixed number of degrees at any
+           * latitude but the equator.
+           */
+          const from = viewport(drag.lat, drag.lng, view.zoom, view.width, view.height);
+          const next = fromScreen(
+            from,
+            view.width / 2 - (e.clientX - drag.x),
+            view.height / 2 - (e.clientY - drag.y),
+          );
+          setCentre((prev) => (prev ? { ...prev, lat: next.lat, lng: next.lng } : prev));
+        }}
+        onPointerUp={() => (dragRef.current = null)}
+        onPointerCancel={() => (dragRef.current = null)}
+        role="img"
+        aria-label={t("a11y.mapListAlternative")}
       >
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          className="h-[420px] w-full touch-none lg:h-[620px]"
-          role="img"
-          aria-label={t("a11y.mapListAlternative")}
-        >
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--border)" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`} style={{ transformOrigin: "center" }}>
-            <rect width={W} height={H} fill="var(--surface)" />
-            <rect width={W} height={H} fill="url(#grid)" />
-            {clusters.map((group, i) => {
-              const first = group[0];
-              const { x, y } = project(first.coordinates.lat, first.coordinates.lng);
-              const isCluster = group.length > 1;
-              const active = group.some((c) => c.slug === selected);
-              const cheapest = group.reduce((a, b) => (pinAmount(a) <= pinAmount(b) ? a : b));
-              return (
-                <g key={i} transform={`translate(${x} ${y})`}>
-                  <foreignObject x={-46} y={-18} width={110} height={40} style={{ overflow: "visible" }}>
-                    <button
-                      type="button"
-                      onClick={() => onSelect(isCluster ? cheapest.slug : first.slug)}
-                      className={cx(
-                        "tabular min-h-8 whitespace-nowrap rounded-[var(--radius-pill)] border px-3 text-xs font-semibold",
-                        "shadow-[var(--shadow-card)] transition-[background-color,border-color,color,transform] duration-150 ease-[var(--ease-out)] hover:scale-105",
-                        active ? "bg-brand-600 border-brand-600 text-white" : "surface",
-                      )}
-                    >
-                      {isCluster ? `${group.length} · ` : ""}
-                      {formatMoney(pinAmount(cheapest), cheapest.price.currency, locale)}
-                    </button>
-                  </foreignObject>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
+        {/* The old graph paper, kept as what a tile outage looks like. */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, var(--border) 1px, transparent 1px)," +
+              "linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+            opacity: 0.5,
+          }}
+        />
+
+        {tiles.map((tile) => {
+          const key = `${tile.z}/${tile.x}/${tile.y}`;
+          if (missing.has(key)) return null;
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={key}
+              src={apiUrl(`/api/map/tile/${tile.z}/${tile.x}/${tile.y}`)}
+              alt=""
+              width={TILE_SIZE}
+              height={TILE_SIZE}
+              draggable={false}
+              decoding="async"
+              onError={() => setMissing((prev) => new Set(prev).add(key))}
+              className="pointer-events-none absolute max-w-none"
+              style={{ left: tile.left, top: tile.top }}
+            />
+          );
+        })}
+
+        {clusters.map((group, i) => {
+          const isCluster = group.length > 1;
+          const active = group.some((entry) => entry.card.slug === selected);
+          /*
+           * The anchor, not merely the cheapest.
+           *
+           * Clustering claimed a radius around this exact point, so drawing the
+           * pill anywhere else — a centroid, a re-derived minimum — puts it
+           * back inside a neighbour's clearance and the labels overlap again.
+           * The groups are built cheapest-first, so the anchor is also the
+           * lowest rate, which is the number worth showing.
+           */
+          const cheapest = group[0];
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(cheapest.card.slug)}
+              style={{ left: cheapest.x, top: cheapest.y }}
+              className={cx(
+                "tabular absolute min-h-8 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap",
+                "rounded-[var(--radius-pill)] border px-3 text-xs font-semibold",
+                "shadow-[var(--shadow-card)] transition-[background-color,border-color,color,transform]",
+                "duration-150 ease-[var(--ease-out)] hover:z-10 hover:scale-105",
+                active ? "bg-brand-600 border-brand-600 z-10 text-white" : "surface",
+              )}
+            >
+              {isCluster ? `${group.length} · ` : ""}
+              {formatMoney(pinAmount(cheapest.card), cheapest.card.price.currency, locale)}
+            </button>
+          );
+        })}
 
         <div className="absolute top-3 end-3 flex flex-col gap-1">
-          <Button size="sm" variant="secondary" onClick={() => setZoom((z) => Math.min(4, z + 0.4))} aria-label="Zoom in">
+          <Button size="sm" variant="secondary" onClick={() => nudgeZoom(1)} aria-label={t("common.zoomIn")}>
             +
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setZoom((z) => Math.max(1, z - 0.4))} aria-label="Zoom out">
+          <Button size="sm" variant="secondary" onClick={() => nudgeZoom(-1)} aria-label={t("common.zoomOut")}>
             −
           </Button>
         </div>
@@ -232,22 +340,30 @@ export function ResultsMap({
           )}
         </div>
 
-        {/*
-          Outside the panned group, so it stays put and stays legible while the
-          map moves under it — a scale that scrolls away is not a scale.
-        */}
         {scale && (
           <div className="pointer-events-none absolute bottom-3 end-3 flex flex-col items-end gap-1">
-            <span className="text-muted text-[11px] font-medium">{scale.label}</span>
+            <span className="surface/90 rounded px-1 text-[11px] font-medium backdrop-blur-[2px]">
+              {scale.label}
+            </span>
             <span
-              className="border-[var(--text-muted)] border-b-2 border-s-2 border-e-2"
-              style={{ width: `${(scale.widthPx / W) * 100}%`, minWidth: 40, height: 6 }}
+              className="border-[var(--text)] border-b-2 border-s-2 border-e-2"
+              style={{ width: Math.round(scale.widthPx), height: 6 }}
             />
           </div>
         )}
 
+        {/* Required by the licence, not decoration. */}
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="surface/90 absolute bottom-0 end-0 px-1 text-[10px] leading-4 backdrop-blur-[2px] hover:underline"
+        >
+          {t("hotel.mapCredit")}
+        </a>
+
         {selectedCard && (
-          <div className="absolute inset-x-3 bottom-3 lg:max-w-sm">
+          <div className="absolute inset-x-3 bottom-8 lg:max-w-sm">
             <Card className="flex gap-3 overflow-hidden p-2">
               <Photo
                 src={selectedCard.heroImage}

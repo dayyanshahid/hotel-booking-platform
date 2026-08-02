@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { may, type AgencyContext } from "@/components/agency/use-agency";
@@ -33,6 +33,7 @@ import {
 import { countLabel, guestLabel, roomLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
+import { QUOTE_BATCH } from "@/lib/agency/rates";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import type {
   CurrencyCode,
@@ -148,6 +149,29 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [openShelf, setOpenShelf] = useState<string | null>(null);
 
   /**
+   * The map shows the whole result set, not the page the list happens to be on.
+   *
+   * A list that has loaded twelve of sixty-eight is honest — it says so on the
+   * button. A map is not: it is read as "here is the supply", and pins for a
+   * fifth of it look like a thin city rather than a partly loaded page. Paging
+   * is cumulative server-side, so the rest arrives in one request for the last
+   * page rather than five trips through "show more".
+   *
+   * Guarded by the token so it happens once per result set: `run` replaces the
+   * data this reads, and without that this would ask again on every render.
+   */
+  const expandedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (view !== "map" || busy || !data || !applied) return;
+    if (data.results.length >= data.totalCount) return;
+    if (expandedFor.current === data.searchToken) return;
+    expandedFor.current = data.searchToken;
+    void run({ page: Math.ceil(data.totalCount / 12) });
+    // `run` is redefined every render and is not a dependency worth chasing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, busy, data, applied]);
+
+  /**
    * One entry point for every way the page can change.
    *
    * Filters, sort, paging and a new search all go through here with the state
@@ -238,25 +262,45 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   async function priceRows(offerIds: string[]): Promise<void> {
     if (!offerIds.length) return;
     setPricingFailed(false);
+
+    /*
+     * In batches, because the endpoint prices sixty at a time.
+     *
+     * It takes the first sixty and says nothing about the rest, which was
+     * invisible while the list only ever asked for a page of twelve. Opening
+     * the map now loads the whole result set, and a sixty-eight property city
+     * lost its last eight rates to a silent truncation — rooms on screen with
+     * a shimmer where the cost should be. Batching keeps the server's bound
+     * where it is rather than raising a limit to whatever today's city needs.
+     */
+    const batches: string[][] = [];
+    for (let i = 0; i < offerIds.length; i += QUOTE_BATCH) {
+      batches.push(offerIds.slice(i, i + QUOTE_BATCH));
+    }
+
     try {
-      const priced = await fetch(apiUrl("/api/agency/quote"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: apiCredentials(),
-        body: JSON.stringify({ offerIds }),
-      });
-      const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
-      if (!pricedBody.ok || !pricedBody.data) {
-        setPricingFailed(true);
-        return;
+      const responses = await Promise.all(
+        batches.map(async (batch) => {
+          const priced = await fetch(apiUrl("/api/agency/quote"), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            credentials: apiCredentials(),
+            body: JSON.stringify({ offerIds: batch }),
+          });
+          return (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
+        }),
+      );
+
+      const quoted = responses.flatMap((body) => body.data?.quotes ?? []);
+      if (quoted.length) {
+        setQuotes((held) => ({
+          ...held,
+          ...Object.fromEntries(quoted.map((q) => [q.offerId, q])),
+        }));
       }
-      setQuotes((held) => ({
-        ...held,
-        ...Object.fromEntries(pricedBody.data!.quotes.map((q) => [q.offerId, q])),
-      }));
       // A partial answer is still a failure for the rows it left out, and those
       // are the ones that would otherwise shimmer.
-      if (pricedBody.data.quotes.length < offerIds.length) setPricingFailed(true);
+      if (quoted.length < offerIds.length) setPricingFailed(true);
     } catch {
       setPricingFailed(true);
     }

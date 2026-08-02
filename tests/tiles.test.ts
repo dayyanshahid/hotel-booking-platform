@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { metresPerPixel, project, tileGrid, unproject } from "@/lib/geo/tiles";
+import {
+  TILE_SIZE,
+  clusterByDistance,
+  fromScreen,
+  metresPerPixel,
+  project,
+  tileGrid,
+  toScreen,
+  unproject,
+  viewport,
+  viewportTiles,
+  zoomToFit,
+} from "@/lib/geo/tiles";
 
 /**
  * The projection, against coordinates whose tile numbers are known.
@@ -110,5 +122,148 @@ describe("scale", () => {
     // Sanity: a zoom-15 pixel is a few metres, not a few kilometres.
     expect(equator).toBeGreaterThan(4);
     expect(equator).toBeLessThan(6);
+  });
+});
+
+describe("a viewport that pans", () => {
+  const W = 800;
+  const H = 560;
+
+  it("puts the centre in the centre", () => {
+    const view = viewport(25.2505, 55.2988, 14, W, H);
+    const screen = toScreen(view, 25.2505, 55.2988);
+    expect(screen.x).toBeCloseTo(W / 2, 6);
+    expect(screen.y).toBeCloseTo(H / 2, 6);
+  });
+
+  it("round-trips a screen position back to a place", () => {
+    // This is what "search this area" depends on: the viewport's own corners
+    // read back as the bounds to search.
+    const view = viewport(25.2505, 55.2988, 13, W, H);
+    for (const [x, y] of [[0, 0], [W, H], [W / 3, H / 4]]) {
+      const place = fromScreen(view, x, y);
+      const back = toScreen(view, place.lat, place.lng);
+      expect(back.x).toBeCloseTo(x, 4);
+      expect(back.y).toBeCloseTo(y, 4);
+    }
+  });
+
+  it("covers the whole viewport with tiles", () => {
+    const view = viewport(25.2505, 55.2988, 14, W, H);
+    const tiles = viewportTiles(view, 0);
+    const left = Math.min(...tiles.map((tile) => tile.left));
+    const top = Math.min(...tiles.map((tile) => tile.top));
+    const right = Math.max(...tiles.map((tile) => tile.left + TILE_SIZE));
+    const bottom = Math.max(...tiles.map((tile) => tile.top + TILE_SIZE));
+    expect(left).toBeLessThanOrEqual(0);
+    expect(top).toBeLessThanOrEqual(0);
+    expect(right).toBeGreaterThanOrEqual(W);
+    expect(bottom).toBeGreaterThanOrEqual(H);
+  });
+
+  it("asks for no tile off the edge of the world", () => {
+    const view = viewport(84.5, 179.9, 5, W, H);
+    const max = 2 ** 5;
+    for (const tile of viewportTiles(view)) {
+      expect(tile.x).toBeGreaterThanOrEqual(0);
+      expect(tile.x).toBeLessThan(max);
+      expect(tile.y).toBeGreaterThanOrEqual(0);
+      expect(tile.y).toBeLessThan(max);
+    }
+  });
+});
+
+describe("clustering so the labels can be read", () => {
+  const SEP = 104;
+
+  it("leaves every drawn pin clear of every other", () => {
+    /*
+     * The property this exists for. Grid bucketing satisfies "same cell →
+     * same group" while still drawing two pins a pixel apart, which is what
+     * put a price pill over the one behind it in central Dubai.
+     */
+    const points = [
+      { x: 100, y: 100 }, { x: 104, y: 101 }, { x: 150, y: 130 },
+      { x: 220, y: 118 }, { x: 400, y: 400 }, { x: 402, y: 404 },
+      { x: 500, y: 402 }, { x: 96, y: 96 }, { x: 300, y: 250 },
+    ];
+    const anchors = clusterByDistance(points, SEP).map((group) => group[0]);
+    for (let i = 0; i < anchors.length; i++) {
+      for (let j = i + 1; j < anchors.length; j++) {
+        const gap = Math.hypot(anchors[i].x - anchors[j].x, anchors[i].y - anchors[j].y);
+        expect(gap).toBeGreaterThanOrEqual(SEP);
+      }
+    }
+  });
+
+  it("loses nobody into the gaps between groups", () => {
+    // Every property is either drawn or counted in something that is drawn.
+    const points = Array.from({ length: 68 }, (_, i) => ({ x: (i * 37) % 800, y: (i * 61) % 560 }));
+    const groups = clusterByDistance(points, SEP);
+    expect(groups.flat()).toHaveLength(points.length);
+    expect(new Set(groups.flat())).toHaveProperty("size", points.length);
+  });
+
+  it("keeps the first point as the anchor, so the caller decides who shows", () => {
+    // The map sorts cheapest-first and draws group[0]; a cluster must therefore
+    // surface the lowest rate rather than whichever point happened to be near.
+    const cheapest = { x: 200, y: 200, tag: "cheapest" };
+    const groups = clusterByDistance(
+      [cheapest, { x: 210, y: 205, tag: "dearer" }, { x: 195, y: 215, tag: "dearest" }],
+      SEP,
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0][0]).toBe(cheapest);
+    expect(groups[0]).toHaveLength(3);
+  });
+
+  it("separates points that are exactly the separation apart", () => {
+    // A pin at precisely the clearance does not collide, so it stays its own.
+    expect(clusterByDistance([{ x: 0, y: 0 }, { x: SEP, y: 0 }], SEP)).toHaveLength(2);
+    expect(clusterByDistance([{ x: 0, y: 0 }, { x: SEP - 1, y: 0 }], SEP)).toHaveLength(1);
+  });
+
+  it("has nothing to do with an empty map", () => {
+    expect(clusterByDistance([], SEP)).toEqual([]);
+  });
+});
+
+describe("fitting the results", () => {
+  const W = 800;
+  const H = 560;
+
+  it("shows every property, with room to spare", () => {
+    /*
+     * Opening at a fixed zoom either crops half the city or shows a continent
+     * with the pins in a dot in the middle. Every point has to land inside the
+     * frame, clear of the edge where a price pill would be cut off.
+     */
+    const points = [
+      { lat: 25.2048, lng: 55.2708 },
+      { lat: 25.1972, lng: 55.2744 },
+      { lat: 25.2769, lng: 55.2963 },
+      { lat: 25.1124, lng: 55.1390 },
+    ];
+    const fit = zoomToFit(points, W, H);
+    const view = viewport(fit.lat, fit.lng, fit.zoom, W, H);
+    for (const point of points) {
+      const screen = toScreen(view, point.lat, point.lng);
+      expect(screen.x).toBeGreaterThanOrEqual(0);
+      expect(screen.x).toBeLessThanOrEqual(W);
+      expect(screen.y).toBeGreaterThanOrEqual(0);
+      expect(screen.y).toBeLessThanOrEqual(H);
+    }
+  });
+
+  it("does not zoom to the atom for a single property", () => {
+    // One point fits at any zoom, so "the deepest that fits" would be the
+    // deepest there is — a map of one building's roof.
+    const fit = zoomToFit([{ lat: 25.2505, lng: 55.2988 }], W, H);
+    expect(fit.zoom).toBeLessThanOrEqual(15);
+    expect(fit.zoom).toBeGreaterThanOrEqual(12);
+  });
+
+  it("survives having nothing to fit", () => {
+    expect(() => zoomToFit([], W, H)).not.toThrow();
   });
 });

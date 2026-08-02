@@ -1,7 +1,7 @@
 import { fail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import { getAgency } from "@/lib/agency/store";
-import { viewOffer } from "@/lib/agency/rates";
+import { QUOTE_BATCH, viewOffer } from "@/lib/agency/rates";
 import { getOffer } from "@/lib/server/store";
 import { countryForOffer } from "@/lib/agency/context";
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const agency = await getAgency(session.agencyId);
   if (!agency) return fail("validation", "error.notFound", locale, { status: 404 });
 
-  const quotes = body.offerIds.slice(0, 60).flatMap((offerId) => {
+  const quotes = body.offerIds.slice(0, QUOTE_BATCH).flatMap((offerId) => {
     const offer = getOffer(offerId);
     // A missing offer means the quote expired, not that pricing failed; the
     // caller sees which ids came back and re-searches for the rest.

@@ -93,6 +93,24 @@ export function SearchResultsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent, filters, sort]);
 
+  /**
+   * Opening the map loads the rest of the results.
+   *
+   * A list that has twelve of sixty-eight says so on its button. A map does
+   * not: pins for a fifth of the supply read as a thin city, not as a page
+   * that has not finished loading. Paging is cumulative on the server, so the
+   * remainder is one request for the last page rather than five "show more"s.
+   */
+  const expandedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (view !== "map" || loading || !data) return;
+    if (data.results.length >= data.totalCount) return;
+    if (expandedFor.current === data.searchToken) return;
+    expandedFor.current = data.searchToken;
+    void run(Math.ceil(data.totalCount / 12));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, loading, data]);
+
   useEffect(() => {
     if (firstLoad.current) {
       firstLoad.current = false;

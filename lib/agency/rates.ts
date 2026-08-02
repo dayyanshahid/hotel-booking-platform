@@ -16,6 +16,19 @@ import { agencyOfferView } from "./pricing";
  * leaving the server in any response — B2B or not.
  */
 
+/**
+ * How many offers one quote request prices.
+ *
+ * Shared with the caller on purpose. The route used to take the first sixty
+ * and say nothing about the rest, and the trade search used to ask for a page
+ * of twelve, so the cap was never reached and the silence never noticed. The
+ * moment the map started loading a whole city, the last eight rooms of a
+ * sixty-eight property result came back unpriced. One number, imported by both
+ * sides, so the batch the client sends cannot drift from the batch the server
+ * answers.
+ */
+export const QUOTE_BATCH = 60;
+
 /** The agency's cost for an offer we publish at `publicPrice`. */
 export function agencyCost(publicPrice: number, agency: Agency): number {
   const commission = Math.min(Math.max(agency.commissionPercent, 0), 100);
