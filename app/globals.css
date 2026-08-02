@@ -46,104 +46,105 @@
  */
 @theme {
   /*
-   * An OTA palette: navy chrome, a bright blue for anything clickable, and a
-   * yellow reserved for the single action that moves a booking forward.
+   * One hue, a warm signal, and neutrals with a temperature.
    *
-   * The convention exists because it works — travel shoppers scan a results
-   * page for two things, the score and the button, and giving the button a
-   * colour that appears nowhere else makes it findable without reading. It is a
-   * category convention, not one brand's property; the wordmark, the copy and
-   * the product are Nazil's own.
+   * The palette this replaces had four warm families competing — orange for
+   * the brand, amber for actions, sand for promotions, navy for chrome — so
+   * nothing could be emphatic, because everything already was. It also leaned
+   * on flat greys (#f5f5f5 on #ebebeb behind #e0e0e0 hairlines) that read as
+   * muddy rather than quiet.
+   *
+   * Now: a deep lagoon teal carries the brand and every action, an ember warm
+   * is reserved strictly for a saving, and the neutrals carry a slight cool
+   * cast so white surfaces look deliberate against them rather than unpainted.
+   * Every step below was checked against white and against its own ink.
    */
-  /*
-   * Travel & More's brand is orange on near-black — the wordmark's own two colours.
-   * The chrome is charcoal rather than the orange itself: a full-width band of
-   * a colour this saturated fights every photograph beneath it, and the orange
-   * is worth more as the one accent than as the background.
-   */
-  --color-navy-50: #f4f5f7;
-  --color-navy-100: #e4e6ea;
-  --color-navy-200: #c3c7cf;
-  --color-navy-500: #3a3f4a;
-  --color-navy-700: #23262e;
-  --color-navy-800: #16181d;
-  --color-navy-900: #0e1013;
 
-  /* Links, selected states, and the brand itself. */
-  --color-brand-50: #fff3ec;
-  --color-brand-100: #ffe2d1;
-  --color-brand-200: #ffc3a3;
-  --color-brand-300: #ff9a68;
-  --color-brand-400: #fb7a3c;
-  --color-brand-500: #f2621b;
-  --color-brand-600: #d94f0f;
-  --color-brand-700: #b23f0b;
-  --color-brand-800: #8c3209;
-  --color-brand-900: #6b2607;
+  /* Neutrals. Cool-cast, so a white card reads as raised without a shadow. */
+  --color-ink-25: #fbfcfd;
+  --color-ink-50: #f5f7fa;
+  --color-ink-100: #edf0f5;
+  --color-ink-200: #e1e6ee;
+  --color-ink-300: #cbd3e1;
+  --color-ink-400: #97a2b6;
+  --color-ink-500: #6e7a91;
+  --color-ink-600: #515c72;
+  --color-ink-700: #3b4457;
+  --color-ink-800: #272e3d;
+  --color-ink-900: #171d28;
+  --color-ink-950: #0b0f16;
 
   /*
-   * The action colour stays a warm amber rather than becoming a second orange:
-   * a call to action the same hue as every link is not a call to action.
+   * Lagoon — the brand, and the only colour an action is ever painted in.
+   *
+   * Teal rather than another OTA blue: it sits beside photography without
+   * competing for the same attention a sky does, and it is not the colour of
+   * the four booking sites this platform's customers are compared against.
+   * 600 carries white text at 5.3:1; 700 is the text-on-white step at 7.3:1.
    */
-  --color-action-300: #ffd77a;
-  --color-action-400: #ffc233;
-  --color-action-500: #f0ad12;
-  --color-action-600: #cf920a;
-  --color-action-ink: #1a1a1a;
-
-  --color-ink-50: #f5f5f5;
-  --color-ink-100: #ebebeb;
-  --color-ink-200: #d9d9d9;
-  --color-ink-400: #8c8c8c;
-  --color-ink-600: #595959;
-  --color-ink-700: #404040;
-  --color-ink-800: #262626;
-  --color-ink-900: #1a1a1a;
-  --color-ink-950: #0d0d0d;
-
-  /* Kept for the sand-toned promotional badge; no longer a brand colour. */
-  --color-sand-50: #fdf8f1;
-  --color-sand-100: #f8ecdb;
-  --color-sand-200: #f0d9b7;
-  --color-sand-300: #e4bf87;
-  --color-sand-400: #d69f52;
-  --color-sand-500: #c58530;
-  --color-sand-600: #a76826;
-  --color-sand-700: #874e21;
-
-  --color-positive-50: #e9f8ee;
-  --color-positive-100: #cdeed8;
-  --color-positive-500: #008009;
-  --color-positive-700: #006508;
-
-  --color-caution-50: #fff8ea;
-  --color-caution-100: #ffedc9;
-  --color-caution-500: #b5730a;
-  --color-caution-700: #8a5606;
-
-  --color-critical-50: #fdeceb;
-  --color-critical-100: #fbd5d2;
-  --color-critical-500: #cc0000;
-  --color-critical-700: #a30000;
+  --color-brand-50: #ecfaf8;
+  --color-brand-100: #cff3ee;
+  --color-brand-200: #a0e6de;
+  --color-brand-300: #63d1c7;
+  --color-brand-400: #2eb5ab;
+  --color-brand-500: #109289;
+  --color-brand-600: #0b7970;
+  --color-brand-700: #096158;
+  --color-brand-800: #084c45;
+  --color-brand-900: #073c37;
 
   /*
-   * Tight corners. Soft 18px cards read as a consumer app; a results page is a
-   * dense table of comparable things, and square-ish edges let rows sit closer
-   * together without the eye reading them as one blob.
+   * Ember. A saving, and nothing else.
+   *
+   * The old amber was the primary action colour, which meant the loudest thing
+   * on a results page was a button rather than a price. Demoted to what it is
+   * actually good at: marking that a number is lower than it was.
    */
-  --radius-control: 4px;
-  --radius-card: 8px;
-  --radius-sheet: 12px;
+  --color-ember-50: #fff4ec;
+  --color-ember-100: #ffe3ce;
+  --color-ember-500: #e8620e;
+  --color-ember-700: #a8430a;
+
+  --color-positive-50: #e8f7ef;
+  --color-positive-100: #c6ebd7;
+  --color-positive-500: #0e8a4f;
+  --color-positive-700: #0a6b3d;
+
+  --color-caution-50: #fff6e5;
+  --color-caution-100: #ffe7b8;
+  --color-caution-500: #a66a00;
+  --color-caution-700: #7c4f00;
+
+  --color-critical-50: #feecec;
+  --color-critical-100: #fbd3d3;
+  --color-critical-500: #c8302f;
+  --color-critical-700: #9b2423;
+
+  /*
+   * Softer corners, and a real difference between a control and a surface.
+   *
+   * 4px controls inside 8px cards is the shape of a 2015 admin panel: at that
+   * radius a button and a table cell are the same object. The steps now read
+   * as a hierarchy — a control is rounded, a card is rounder, a sheet is a
+   * different kind of thing altogether.
+   */
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-sheet: 24px;
   --radius-pill: 999px;
 
   /*
-   * Separation comes from hairlines, not from lift. Fifteen floating cards on
-   * one screen is noise; a border is quieter and cheaper, and it keeps the
-   * price column aligned across rows.
+   * Lift, sparingly but actually.
+   *
+   * The old system refused shadow on principle and separated everything with
+   * one grey hairline, which is why the whole app read as flat. A card still
+   * gets almost nothing — two hairline-weight layers — but the things that
+   * genuinely float now look like it, and the tint is the ink colour rather
+   * than pure black so the shadow belongs to the palette.
    */
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.06);
-  --shadow-raised: 0 2px 8px rgb(0 0 0 / 0.12);
-  --shadow-float: 0 4px 16px rgb(0 0 0 / 0.16), 0 12px 40px -12px rgb(0 0 0 / 0.24);
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-raised: 0 4px 8px -2px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.05);
+  --shadow-float: 0 12px 24px -6px rgb(16 24 40 / 0.12), 0 24px 48px -12px rgb(16 24 40 / 0.18);
 
   /* Decelerating, never bouncy — this is a checkout, not a toy. */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -152,39 +153,58 @@
 
 :root {
   --surface: #ffffff;
-  /* Neutral grey rather than a brand tint: the page is a backdrop for a
-     hundred photographs and should not colour-cast any of them. */
-  --surface-muted: #f5f5f5;
-  --surface-sunken: #ebebeb;
-  --border: #e0e0e0;
-  --border-strong: #bdbdbd;
-  --text: #1a1a1a;
-  --text-muted: #595959;
-  --focus: #f2621b;
-  --ring: rgb(242 98 27 / 0.26);
-  --scrim: rgb(0 0 0 / 0.5);
-  /* The chrome band. Named separately so the header and footer stay navy
-     while the page beneath them inverts with the theme. */
-  --chrome: #16181d;
-  --chrome-ink: #ffffff;
+  /*
+   * The page is barely tinted and the card is pure white, which is the whole
+   * trick: a 1% difference is enough to make every card look lifted, and it
+   * casts nothing onto the photographs sitting on top of it. The old pairing
+   * put #f5f5f5 behind #ebebeb behind #e0e0e0 and read as three shades of
+   * dishwater.
+   */
+  --surface-muted: #f7f9fc;
+  --surface-sunken: #eef1f7;
+  --border: #e1e6ee;
+  --border-strong: #cbd3e1;
+  --text: #171d28;
+  --text-muted: #515c72;
+  --focus: #0b7970;
+  --ring: rgb(11 121 112 / 0.22);
+  --scrim: rgb(11 15 22 / 0.55);
+  /*
+   * The chrome band is no longer a band.
+   *
+   * A dark strip across the top of every page is the single most dating thing
+   * in the old design — it belongs to an era when a site had to announce where
+   * its header was. The header is now the page: white, separated by one
+   * hairline, with the wordmark carrying the colour. Kept as a token because
+   * the footer still wants ink behind it, and because dark mode still needs
+   * somewhere to put a surface that is not the page.
+   */
+  --chrome: #ffffff;
+  --chrome-ink: #171d28;
+  --chrome-border: #e1e6ee;
+  --footer: #0b0f16;
+  --footer-ink: #f5f7fa;
   color-scheme: light;
 }
 
 html[data-theme="dark"] {
   /* Raised surfaces get lighter as they come forward — the opposite of light
      mode, because shadows cannot separate anything on a dark page. */
-  --surface: #1f1f1f;
-  --surface-muted: #141414;
-  --surface-sunken: #2b2b2b;
-  --border: #383838;
-  --border-strong: #575757;
-  --text: #f0f0f0;
-  --text-muted: #a6a6a6;
-  --focus: #ff9a68;
-  --ring: rgb(255 154 104 / 0.3);
-  --scrim: rgb(0 0 0 / 0.66);
-  --chrome: #0e1013;
-  --chrome-ink: #ffffff;
+  --surface: #171d28;
+  --surface-muted: #0b0f16;
+  --surface-sunken: #202839;
+  --border: #2c3546;
+  --border-strong: #3f4a60;
+  --text: #eef1f7;
+  --text-muted: #97a2b6;
+  --focus: #63d1c7;
+  --ring: rgb(99 209 199 / 0.28);
+  --scrim: rgb(0 0 0 / 0.7);
+  --chrome: #171d28;
+  --chrome-ink: #eef1f7;
+  --chrome-border: #2c3546;
+  --footer: #06090e;
+  --footer-ink: #eef1f7;
   color-scheme: dark;
 }
 
@@ -466,10 +486,10 @@ html[data-theme="dark"] .bg-critical-50 {
   border-color: color-mix(in srgb, var(--color-critical-500) 42%, transparent);
   color: #f7b7b0;
 }
-html[data-theme="dark"] .bg-sand-50 {
-  background-color: color-mix(in srgb, var(--color-sand-400) 20%, transparent);
-  border-color: color-mix(in srgb, var(--color-sand-400) 40%, transparent);
-  color: var(--color-sand-200);
+html[data-theme="dark"] .bg-ember-50 {
+  background-color: color-mix(in srgb, var(--color-ember-500) 20%, transparent);
+  border-color: color-mix(in srgb, var(--color-ember-500) 40%, transparent);
+  color: var(--color-ember-100);
 }
 
 /* The one overlay scrim, so every dialog dims the page by the same amount. */
@@ -484,10 +504,16 @@ html[data-theme="dark"] .bg-sand-50 {
 
 /* ------------------------------------------------------------ OTA chrome */
 
-/** The navy band behind the header and footer, in both themes. */
+/**
+ * The header, which is now the page rather than a band across it.
+ *
+ * One hairline does the separating. A dark strip used to, and it made every
+ * screen start with a heavy horizontal rule before any content.
+ */
 .chrome {
   background: var(--chrome);
   color: var(--chrome-ink);
+  border-bottom: 1px solid var(--chrome-border);
 }
 .chrome a,
 .chrome button {
@@ -499,7 +525,7 @@ html[data-theme="dark"] .bg-sand-50 {
  * and is that good? — so the badge always ships with a word beside it.
  */
 .score-badge {
-  background: var(--color-navy-800);
+  background: var(--color-brand-700);
   color: #fff;
   font-variant-numeric: tabular-nums;
 }
@@ -556,9 +582,10 @@ html[data-theme="dark"] .bg-sand-50 {
 .band-raised {
   background: var(--surface);
 }
+/* Ink is still right behind a footer, where nothing has to be read at speed. */
 .band-ink {
-  background: var(--chrome);
-  color: var(--chrome-ink);
+  background: var(--footer);
+  color: var(--footer-ink);
 }
 
 /**

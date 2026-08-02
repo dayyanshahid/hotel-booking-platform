@@ -21,7 +21,15 @@ const CX = 100;
 const CY = 100;
 
 /** Deep to pale, so tiles can be tinted by depth rather than at random. */
-const TINTS = ["#d1500a", "#e35c10", "#f26a21", "#f7863f", "#fb9a5c", "#fdb184", "#fec9a8"];
+/*
+ * The globe's seven shades, matched to the lagoon ramp in globals.css.
+ *
+ * The geometry is untouched — same sixty tiles, same jitter, same seed — so
+ * this is the mark it has always been, wearing the palette the rest of the
+ * product now wears. An orange globe above a teal interface was the one thing
+ * on every screen that still belonged to the old design.
+ */
+const TINTS = ["#084c45", "#096158", "#0b7970", "#109289", "#2eb5ab", "#63d1c7", "#a0e6de"];
 
 /** FNV-1a, so the same tile always gets the same tint across regenerations. */
 function hash(value: string): number {

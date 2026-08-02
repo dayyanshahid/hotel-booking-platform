@@ -23,7 +23,7 @@ function Frame({ children, className }: { children: React.ReactNode; className?:
 
 const brand = "var(--color-brand-500, #1c8288)";
 const brandSoft = "var(--color-brand-200, #a8d9da)";
-const sand = "var(--color-sand-400, #d69f52)";
+const sand = "var(--color-ember-100, #ffe3ce)";
 
 /** No results: a map with nothing pinned on it. */
 export function NoResultsArt({ className }: { className?: string }) {

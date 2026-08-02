@@ -176,7 +176,7 @@ export function HomeView({
         which frame loaded, and the drawn skyline behind it means an unreachable
         image host degrades to artwork rather than to a plain colour.
       */}
-      <section className="chrome full-bleed relative -mt-6 overflow-hidden pb-24 pt-12 sm:-mt-8 sm:pb-28 sm:pt-16">
+      <section className="bg-ink-950 full-bleed relative -mt-6 overflow-hidden pb-24 pt-12 text-white sm:-mt-8 sm:pb-28 sm:pt-16">
         <div className="absolute inset-0" aria-hidden>
           <Photo
             src={heroPhoto().src}
@@ -188,7 +188,7 @@ export function HomeView({
             priority
             fallbackLabel=""
           />
-          <div className="from-navy-900/95 via-navy-800/88 to-navy-700/72 absolute inset-0 bg-gradient-to-br" />
+          <div className="from-ink-950/92 via-ink-900/80 to-brand-900/70 absolute inset-0 bg-gradient-to-br" />
         </div>
         <div className="relative mx-auto max-w-7xl px-4">
           <p className="text-brand-300 text-[11px] font-bold uppercase tracking-[0.14em]">
@@ -235,10 +235,12 @@ export function HomeView({
         element on the page in that colour, so the eye finds it before reading.
       */}
       <div className="relative z-10 -mt-16 sm:-mt-20">
-        <div className="rounded-[var(--radius-card)] border-[3px] border-action-400 shadow-[var(--shadow-raised)]">
+        <div className="rounded-[var(--radius-sheet)] shadow-[var(--shadow-float)]">
           <SearchBar variant="hero" />
         </div>
-        <TripPrompt tone="onMedia" onRun={runInterpreted} />
+        {/* Clear of the hero's lower edge: at the old spacing this label
+            landed on the dark band and rendered ink-on-ink. */}
+        <TripPrompt tone="onMedia" className="mt-6 max-w-3xl" onRun={runInterpreted} />
       </div>
 
       {/* --------------------------------------------------- personalised */}

@@ -28,37 +28,61 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 type ButtonVariant = "primary" | "action" | "secondary" | "chrome" | "ghost" | "danger" | "quiet";
 type ButtonSize = "sm" | "md" | "lg";
 
-// The press is a 1% scale rather than a colour flip: it registers on touch,
-// where there is no hover state to fall back on.
+/*
+ * The press is a 1% scale rather than a colour flip: it registers on touch,
+ * where there is no hover state to fall back on. Semibold rather than bold —
+ * at these sizes bold is shouting, and every button was doing it.
+ */
 const BUTTON_BASE =
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-bold " +
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-semibold " +
   "transition-[background-color,border-color,box-shadow,transform,color] duration-150 ease-[var(--ease-out)] " +
-  "active:scale-[0.985] disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100";
+  "active:scale-[0.985] disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100 " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 " +
+  "focus-visible:ring-offset-[var(--surface)]";
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
-  /** The everyday blue: search, submit, confirm. */
-  primary: "bg-brand-500 text-white hover:bg-brand-600",
   /**
-   * Reserved for the one control that moves a booking forward on a given
-   * screen — "Show prices", "Reserve". It appears once per card and once per
-   * page, which is the only reason a colour this loud stays useful.
+   * The one action colour. Search, submit, confirm, book — all of it.
+   *
+   * It used to share the job with a yellow "action" variant, on the theory
+   * that the booking control deserved a colour of its own. What that actually
+   * produced was two loud colours per screen and no hierarchy between them.
    */
-  action: "bg-action-400 text-[var(--color-action-ink)] hover:bg-action-500",
-  // Border stays brand-500: a non-text boundary needs 3:1 and clears it. The
-  // label is normal-size text and needs 4.5:1, which only brand-700 gives.
-  secondary: "surface border border-brand-500 text-brand-700 hover:bg-brand-50",
-  /** For controls sitting on the navy chrome band, where blue-on-navy vanishes. */
-  chrome: "border border-white/40 text-white hover:bg-white/15",
-  ghost: "hover:surface-sunken font-semibold",
+  primary: "bg-brand-600 text-white shadow-[var(--shadow-card)] hover:bg-brand-700",
+  /**
+   * Kept as a name so call sites need not all change at once, but it is the
+   * primary now. The screens that used it — "View rooms", "Show prices" — are
+   * the primary action on their card, which is exactly what it should look like.
+   */
+  action: "bg-brand-600 text-white shadow-[var(--shadow-card)] hover:bg-brand-700",
+  /*
+   * A neutral outline rather than a brand-coloured one.
+   *
+   * Two brand-coloured buttons side by side is the pattern that made every
+   * card look like it was asking twice. The secondary now recedes and lets the
+   * primary be the only coloured thing in the row.
+   */
+  secondary: "surface border text-[var(--text)] hover:bg-[var(--surface-sunken)]",
+  /**
+   * For controls in the header. The header is white now, so this is an
+   * outline like any other — kept as a variant because the footer band and
+   * any future ink surface still need a control that survives on dark.
+   */
+  chrome: "border text-[var(--text)] hover:bg-[var(--surface-sunken)]",
+  ghost: "hover:bg-[var(--surface-sunken)] text-[var(--text)]",
   danger: "bg-critical-500 text-white hover:bg-critical-700",
-  quiet: "text-brand-700 hover:underline underline-offset-2 decoration-2 font-semibold",
+  quiet: "text-brand-700 hover:bg-brand-50 hover:no-underline",
 };
 
-// 44×44 minimum touch target on interactive controls (§11.1).
+/*
+ * Roomier. The old scale topped out at 48px tall and 24px of side padding,
+ * which is a control built for a dense table; this is a product people look at
+ * as well as use.
+ */
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3 text-sm",
-  md: "min-h-10 px-4 text-sm",
-  lg: "min-h-12 px-6 text-base w-full sm:w-auto",
+  sm: "min-h-9 px-3.5 text-[13px]",
+  md: "min-h-11 px-5 text-sm",
+  lg: "min-h-13 px-7 text-base w-full sm:w-auto",
 };
 
 /**
@@ -132,7 +156,10 @@ export function Card({
       // The polymorphic `as` prop makes the element type dynamic; the ref is
       // always attached to the rendered element regardless of which tag it is.
       ref={ref as never}
-      className={cx("surface rounded-[var(--radius-card)] border", className)}
+      className={cx(
+        "surface rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]",
+        className,
+      )}
     >
       {children}
     </As>
@@ -181,12 +208,13 @@ export function SectionHeading({
 type BadgeTone = "neutral" | "brand" | "positive" | "caution" | "critical" | "sand";
 
 const BADGE_TONE: Record<BadgeTone, string> = {
-  neutral: "surface-sunken text-[var(--text-muted)] border-[var(--border)]",
-  brand: "bg-brand-50 text-brand-800 border-brand-200",
-  positive: "bg-positive-50 text-positive-700 border-positive-100",
-  caution: "bg-caution-50 text-caution-700 border-caution-100",
-  critical: "bg-critical-50 text-critical-700 border-critical-100",
-  sand: "bg-sand-50 text-sand-700 border-sand-200",
+  neutral: "surface-sunken text-[var(--text-muted)] border-transparent",
+  brand: "bg-brand-50 text-brand-800 border-transparent",
+  positive: "bg-positive-50 text-positive-700 border-transparent",
+  caution: "bg-caution-50 text-caution-700 border-transparent",
+  critical: "bg-critical-50 text-critical-700 border-transparent",
+  /* Was the sand family; a saving is the only thing warm now marks. */
+  sand: "bg-ember-50 text-ember-700 border-transparent",
 };
 
 /** Badges carry text plus tone — never colour alone (§11.2). */
@@ -344,10 +372,17 @@ export function Field({
   );
 }
 
+/*
+ * A field is a hairline and a ring, not a 2px box.
+ *
+ * The old control drew a two-pixel border in every state, so a form of six
+ * inputs was six heavy rectangles before a single character was typed. The
+ * weight now arrives on focus, which is the only moment it means anything.
+ */
 const CONTROL =
-  "surface min-h-10 w-full rounded-[var(--radius-control)] border-2 px-3 py-2 text-sm outline-none " +
+  "surface min-h-11 w-full rounded-[var(--radius-control)] border px-3.5 py-2 text-sm outline-none " +
   "transition-[border-color,box-shadow] duration-150 ease-[var(--ease-out)] " +
-  "placeholder:text-[var(--text-muted)] focus:border-brand-500 focus:shadow-[0_0_0_4px_var(--ring)]";
+  "placeholder:text-[var(--text-muted)] focus:border-brand-500 focus:shadow-[0_0_0_3px_var(--ring)]";
 
 export function Input({
   error,
@@ -763,7 +798,7 @@ export function Rating({
 
 export function Stars({ count, label }: { count: number; label: string }) {
   return (
-    <span className="text-sand-500 inline-flex items-center" title={label}>
+    <span className="text-ember-500 inline-flex items-center" title={label}>
       <span className="sr-only">{label}</span>
       <StarRow count={count} />
     </span>
