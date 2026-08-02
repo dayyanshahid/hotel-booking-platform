@@ -97,6 +97,8 @@ export interface TourmindOffer {
   supplierCurrency: string;
   cancellation: CancellationPolicy;
   remainingLabel?: string;
+  /** Rooms the rate still holds, 0 when TourMind did not say. */
+  allotment: number;
   refundable: boolean;
 }
 
@@ -256,6 +258,9 @@ function toOffer(
     supplierCurrency: pricing.supplierCurrency,
     refundable: Boolean(rate.Refundable),
     remainingLabel: remainingLabel(rate, ctx.locale),
+    // The same field the scarcity phrase is derived from, kept as a number so
+    // the checkout can refuse to sell more rooms than the rate holds.
+    allotment: Math.max(0, Math.trunc(Number(rate.Allotment)) || 0),
     cancellation: buildCancellation(rate.CancelPolicyInfos, {
       refundable: Boolean(rate.Refundable),
       checkIn: ctx.intent.checkIn,

@@ -111,7 +111,10 @@ async function runAvailability(
           memberRate: false,
           guaranteeEligible: offer.capabilities.guaranteeEligible,
           modifiable: offer.capabilities.modifyAllowed,
-          allotment: 0,
+          // What the supplier said it still holds. Hard-coding zero here made the
+          // checkout's overbooking guard inert: it reads zero as "the source did not
+          // say" and waves the basket through.
+          allotment: offer.allotment,
           intent,
           price: offer.price,
           cancellation: offer.cancellation,

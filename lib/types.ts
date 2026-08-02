@@ -280,6 +280,21 @@ export interface Offer {
   comments: RateComment[];
   badges: { code: string; label: string; kind: "factual" | "promotional" | "recommendation"; reason: string }[];
   remainingLabel?: string;
+  /**
+   * Rooms the supplier still holds at this rate, or 0 when it did not say.
+   *
+   * Both of them report it — Hotelbeds as `allotment`, TourMind as
+   * `Allotment` — and both adapters were reading it only to decide whether to
+   * print "2 left at this price", then discarding the number. The checkout has
+   * a guard that refuses to sell more rooms than a rate holds, and it was being
+   * handed a hard-coded zero, which it correctly reads as "the source did not
+   * say" and waves through. The one limit the supplier actually stated was
+   * therefore enforced nowhere.
+   *
+   * Zero still means unknown. An unknown is not a limit, and inventing one
+   * would refuse bookings that would have succeeded.
+   */
+  allotment: number;
   capabilities: OfferCapabilities;
   expiresAt: string;
   /** Rooms this offer covers — multi-room searches return one offer per allocation set. */

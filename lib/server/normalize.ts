@@ -261,6 +261,9 @@ export function normalizeHotel(
       price: winner.price,
       comments: commentsFor(raw.conditionCodes, locale),
       badges: [],
+      // Generated inventory has no supplier holding rooms for it, and zero
+      // is the honest way to say "nobody told us".
+      allotment: 0,
       remainingLabel:
         raw.allotment <= 3
           ? locale === "ar"

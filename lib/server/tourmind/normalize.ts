@@ -280,6 +280,7 @@ export function normalizeTourmind(
       comments: [],
       badges: [],
       remainingLabel: offer.remainingLabel,
+      allotment: offer.allotment,
       capabilities: {
         // Their prebook call is mandatory before booking, hence always true.
         recheckRequired: true,

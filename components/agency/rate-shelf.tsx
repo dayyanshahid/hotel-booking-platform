@@ -273,6 +273,7 @@ export function RateShelf({
                       currency: (quote?.currency ?? offer.price.currency) as CurrencyCode,
                       nights,
                       roomsCovered: offer.roomsCovered,
+                      allotment: offer.allotment,
                       expiresAt: offer.expiresAt,
                     })
                   }
@@ -456,10 +457,7 @@ function BoardGroups({
                   </div>
 
                   {canIssue && (
-                    <Button size="sm" className="w-full sm:w-auto" onClick={() => onAdd(offer, quote)}>
-                      <Icon name="cart" size={14} />
-                      {t("agency.add")}
-                    </Button>
+                    <AddControl offer={offer} quote={quote} onAdd={onAdd} />
                   )}
                 </li>
               );
@@ -468,5 +466,70 @@ function BoardGroups({
         </section>
       ))}
     </div>
+  );
+}
+
+/**
+ * Add, and then how many.
+ *
+ * A group booking is the same rate taken more than once, so the second press
+ * has to mean "another room at this rate" rather than "undo". What it must not
+ * mean is more rooms than the supplier is holding: the checkout already
+ * refuses that basket, and letting an agent build it only moves the refusal to
+ * after they have quoted the customer.
+ *
+ * When the supplier stated no allotment the control is unbounded, because an
+ * unknown is not a limit and inventing one would refuse bookings that would
+ * have gone through.
+ */
+function AddControl({
+  offer,
+  quote,
+  onAdd,
+}: {
+  offer: Offer;
+  quote?: AgencyOfferView;
+  onAdd: (offer: Offer, quote?: AgencyOfferView) => void;
+}) {
+  const { t } = useApp();
+  const cart = useCart();
+  const held = cart.quantityOf(offer.offerId);
+  const room = cart.canAddMore(offer.offerId, offer.allotment);
+
+  if (held === 0) {
+    return (
+      <Button size="sm" className="w-full sm:w-auto" onClick={() => onAdd(offer, quote)}>
+        <Icon name="cart" size={14} />
+        {t("agency.add")}
+      </Button>
+    );
+  }
+
+  return (
+    <span className="hairline inline-flex items-center gap-1 rounded-[var(--radius-pill)] border p-1">
+      <button
+        type="button"
+        onClick={() => cart.removeOne(offer.offerId)}
+        aria-label={t("agency.removeOneRoom")}
+        className="hover:surface-sunken size-8 rounded-full text-lg leading-none"
+      >
+        −
+      </button>
+      <span aria-live="polite" className="tabular min-w-8 text-center text-sm font-semibold">
+        {held}
+      </span>
+      <button
+        type="button"
+        onClick={() => onAdd(offer, quote)}
+        disabled={!room}
+        aria-label={
+          room ? t("agency.addOneRoom") : t("agency.noneLeftAtRate", { held: offer.allotment })
+        }
+        title={room ? undefined : t("agency.noneLeftAtRate", { held: offer.allotment })}
+        className="hover:surface-sunken size-8 rounded-full text-lg leading-none disabled:opacity-40"
+      >
+        +
+      </button>
+    </span>
   );
 }

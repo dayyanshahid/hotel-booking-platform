@@ -38,6 +38,15 @@ export interface CartLine {
   nights: number;
   /** Rooms this one rate covers — suppliers differ, so it is never assumed. */
   roomsCovered: number;
+  /**
+   * Rooms the supplier still holds at this rate, 0 when it did not say.
+   *
+   * The ceiling on the quantity control, and the reason there is one: the
+   * checkout refuses a basket that asks for more rooms than a rate holds, so
+   * letting an agent build that basket only moves the refusal to the worst
+   * possible moment — after they have quoted the customer.
+   */
+  allotment: number;
   /** When the supplier's price stops being valid. */
   expiresAt?: string;
   addedAt: string;
@@ -48,6 +57,16 @@ interface CartApi {
   /** Same rate twice is two rooms at that rate, not a toggle. */
   add: (line: Omit<CartLine, "addedAt">) => void;
   removeAt: (index: number) => void;
+  /** Drops the last room taken at this rate. */
+  removeOne: (offerId: string) => void;
+  /**
+   * How many of this rate the cart holds, and the most it may.
+   *
+   * Same rate twice is two rooms at that rate, which is the ordinary group
+   * booking — but never past what the supplier said is left.
+   */
+  quantityOf: (offerId: string) => number;
+  canAddMore: (offerId: string, allotment: number) => boolean;
   clear: () => void;
   /** Every line is one property, or the checkout cannot take the order. */
   onePropertyOnly: boolean;
@@ -95,6 +114,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setOpen(true);
   }, []);
 
+  const removeOne = useCallback((offerId: string) => {
+    setLines((prev) => {
+      const last = prev.map((l) => l.offerId).lastIndexOf(offerId);
+      return last < 0 ? prev : prev.filter((_, i) => i !== last);
+    });
+  }, []);
+
   const removeAt = useCallback((index: number) => {
     setLines((prev) => prev.filter((_, i) => i !== index));
   }, []);
@@ -108,7 +134,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       lines,
       add,
       removeAt,
+      removeOne,
       clear,
+      quantityOf: (offerId: string) => lines.filter((l) => l.offerId === offerId).length,
+      /*
+       * Zero means the supplier did not say, and an unknown is not a limit —
+       * inventing one would refuse bookings that would have succeeded.
+       */
+      canAddMore: (offerId: string, allotment: number) =>
+        allotment <= 0 || lines.filter((l) => l.offerId === offerId).length < allotment,
       onePropertyOnly: hotels.size <= 1,
       roomsCovered: lines.reduce((sum, l) => sum + Math.max(1, l.roomsCovered), 0),
       total: lines.reduce((sum, l) => sum + l.sell, 0),
@@ -119,7 +153,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       open,
       setOpen,
     };
-  }, [lines, add, removeAt, clear, open]);
+  }, [lines, add, removeAt, removeOne, clear, open]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

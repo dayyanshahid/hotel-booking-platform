@@ -606,7 +606,10 @@ export async function adaptAvailability(
        * distinct split the breakfast filter three ways across two suppliers.
        */
       const boardCode = canonicalBoard(rate.boardCode);
-      const allotment = rate.allotment ?? 0;
+      // Clamped, as TourMind's is. A negative or fractional count is nonsense
+      // the supplier occasionally sends, and it would arrive at a quantity
+      // control as its maximum.
+      const allotment = Math.max(0, Math.trunc(Number(rate.allotment)) || 0);
 
       const offer: Offer = {
         offerId,
@@ -649,6 +652,7 @@ export async function adaptAvailability(
                 ? "عرض ترويجي مقدَّم من العقار لهذه التواريخ."
                 : "A promotion offered by the property for these dates."),
           })),
+        allotment,
         remainingLabel:
           allotment > 0 && allotment <= 3
             ? locale === "ar"
