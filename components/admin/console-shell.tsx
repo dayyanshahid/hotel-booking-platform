@@ -10,6 +10,7 @@ import { href } from "@/lib/nav";
 import type { AdminSession } from "@/lib/admin/session";
 import type { Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { apiFetch } from "@/lib/api-client";
 
 /**
  * The console frame.
@@ -40,15 +41,29 @@ export function ConsoleShell({
   const router = useRouter();
   const [session, setSession] = useState<AdminSession | null>(cached ?? null);
   const [loading, setLoading] = useState(cached === undefined);
+  /**
+   * The check could not be made — which is neither signed in nor signed out.
+   *
+   * There was no catch here at all, so a request that never completed rejected
+   * inside the effect, `setLoading(false)` never ran, and the whole console
+   * sat on its spinner for ever. And once caught, the obvious `null` would
+   * have been the portal's bug: an operator whose network blinked being told
+   * to sign in again, which is the one remedy that cannot help.
+   */
+  const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const res = await fetch(apiUrl("/api/admin/me"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { session: AdminSession } };
+      const body = await apiFetch<{ session: AdminSession }>("/api/admin/me");
+      if (!alive) return;
+      if (!body.ok && body.error?.correlationId === "cid_offline") {
+        setUnreachable(true);
+        setLoading(false);
+        return;
+      }
       const next = body.ok && body.data ? body.data.session : null;
       cached = next;
-      if (!alive) return;
       setSession(next);
       setLoading(false);
     })();
@@ -61,6 +76,17 @@ export function ConsoleShell({
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <Spinner label={t("common.loading")} />
+      </div>
+    );
+  }
+
+  if (unreachable) {
+    return (
+      <div className="mx-auto max-w-md space-y-4 py-16 text-center">
+        <Wordmark />
+        <h1 className="text-xl font-bold">{t("admin.sessionUnverified")}</h1>
+        <p className="text-muted text-sm">{t("admin.sessionUnverifiedBody")}</p>
+        <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
       </div>
     );
   }
