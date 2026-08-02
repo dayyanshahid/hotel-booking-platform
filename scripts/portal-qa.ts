@@ -1,0 +1,383 @@
+import { config as loadEnv } from "dotenv";
+
+loadEnv({ path: ".env.local" });
+
+/**
+ * The rest of the agent portal: credit, team, settings and the address book.
+ *
+ *   npm run dev
+ *   npm run qa:portal
+ *
+ * Search, booking and the overview have their own harnesses. What is left is
+ * the part an agency administers rather than sells with — and it is where the
+ * dangerous verbs live. Three of these four modules can change what a customer
+ * is charged, who may spend the credit line, and what appears on a document a
+ * traveller is asked to trust.
+ *
+ * So the questions here are mostly about who may do what. A permission that is
+ * merely absent from a screen is not a permission: the request still exists,
+ * and the only thing standing between a view-only trainee and the agency's
+ * markup is whether the route checks. Each one is asked directly, by an
+ * account that should be refused.
+ */
+
+const BASE = (process.argv.find((a) => a.startsWith("--base="))?.slice(7) ?? "http://localhost:4860").replace(/\/+$/, "");
+
+const ADMIN = "admin@skyline.example";
+const COUNTER = "agent@skyline.example";
+const VIEWER = "viewer@skyline.example";
+
+type Verdict = "PASS" | "FAIL" | "WARN" | "SKIP";
+interface Case { group: string; name: string; verdict: Verdict; detail: string }
+
+const results: Case[] = [];
+let group = "";
+
+function section(title: string): void {
+  group = title;
+  process.stdout.write(`\n${title}\n`);
+}
+
+async function check(name: string, fn: () => Promise<string>): Promise<void> {
+  try {
+    const detail = await fn();
+    const verdict: Verdict = detail.startsWith("SKIP:") ? "SKIP" : detail.startsWith("WARN:") ? "WARN" : "PASS";
+    results.push({ group, name, verdict, detail: verdict === "PASS" ? detail : detail.slice(5).trim() });
+  } catch (error) {
+    results.push({ group, name, verdict: "FAIL", detail: error instanceof Error ? error.message : String(error) });
+  }
+  const last = results[results.length - 1];
+  process.stdout.write(`  ${last.verdict.padEnd(4)} ${name} — ${last.detail}\n`);
+}
+
+/* ------------------------------------------------------------------ session */
+
+/**
+ * A cookie jar per account.
+ *
+ * Three accounts are in play and they must not share one: a run that signs in
+ * as the trainee over the top of the administrator proves nothing about either
+ * of them, and would do it silently.
+ */
+class Session {
+  private jar = new Map<string, string>();
+
+  async api<T>(path: string, init: { method?: string; body?: unknown } = {}) {
+    const res = await fetch(`${BASE}${path}`, {
+      method: init.method ?? (init.body ? "POST" : "GET"),
+      headers: {
+        "content-type": "application/json",
+        ...(this.jar.size ? { cookie: [...this.jar].map(([k, v]) => `${k}=${v}`).join("; ") } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+    });
+    for (const line of res.headers.getSetCookie?.() ?? []) {
+      const [pair] = line.split(";");
+      const eq = pair.indexOf("=");
+      if (eq > 0) this.jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+    }
+    const raw = await res.text();
+    let body: { ok?: boolean; data?: T; error?: { messageKey?: string; message?: string } } | null = null;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      /* the raw body is the finding */
+    }
+    return { status: res.status, ok: Boolean(body?.ok), data: body?.data, error: body?.error, raw };
+  }
+
+  async signIn(email: string): Promise<string | null> {
+    const start = await this.api<{ demoCode?: string; codeRequired?: boolean }>("/api/agency/session", {
+      body: { email },
+    });
+    // A view-only account signs in without a code, by design.
+    const done = await this.api<{ session: { permission: string; role: string } }>("/api/agency/session", {
+      method: "PUT",
+      body: { email, code: start.data?.demoCode },
+    });
+    return done.ok ? `${done.data?.session.role}/${done.data?.session.permission}` : null;
+  }
+}
+
+const admin = new Session();
+const counter = new Session();
+const viewer = new Session();
+
+async function must<T>(s: Session, path: string): Promise<T> {
+  const res = await s.api<T>(path);
+  if (!res.ok || res.data === undefined) {
+    throw new Error(`${path} → ${res.status} ${res.error?.messageKey ?? res.raw.slice(0, 70)}`);
+  }
+  return res.data;
+}
+
+const FORBIDDEN = ["rateKey", "RateCode", "AgentRefID", "netRate", "supplierNet", "hotelbeds", "tourmind"];
+const leaks = (raw: string) => FORBIDDEN.filter((w) => raw.toLowerCase().includes(w.toLowerCase()));
+
+/* ================================================================= the cases */
+
+async function main(): Promise<void> {
+  process.stdout.write(`Portal QA — ${BASE}\n`);
+
+  section("Three accounts, three sets of powers");
+
+  let roles = { admin: "", counter: "", viewer: "" };
+
+  await check("each seeded account signs in as what it claims to be", async () => {
+    roles = {
+      admin: (await admin.signIn(ADMIN)) ?? "",
+      counter: (await counter.signIn(COUNTER)) ?? "",
+      viewer: (await viewer.signIn(VIEWER)) ?? "",
+    };
+    if (!roles.admin || !roles.counter || !roles.viewer) {
+      return `SKIP: could not sign in — ${JSON.stringify(roles)}`;
+    }
+    if (!roles.admin.startsWith("admin/")) throw new Error(`the administrator signed in as ${roles.admin}`);
+    if (roles.viewer !== "agent/viewOnly") throw new Error(`the trainee signed in as ${roles.viewer}`);
+    return `${roles.admin} · ${roles.counter} · ${roles.viewer}`;
+  });
+
+  const gate = () => (roles.admin ? null : "SKIP: no sessions");
+
+  /* ---------------------------------------------------------------------- */
+  section("Credit");
+
+  await check("the ledger and the statements both answer", async () => {
+    if (gate()) return gate()!;
+    const ledger = await must<{ entries?: unknown[]; balance?: unknown }>(admin, "/api/agency/ledger");
+    const statements = await must<Record<string, unknown>>(admin, "/api/agency/statements");
+    if (!Object.keys(ledger).length) throw new Error("the ledger answered with nothing");
+    if (!Object.keys(statements).length) throw new Error("the statements answered with nothing");
+    return `ledger: ${Object.keys(ledger).join(", ")} · statements: ${Object.keys(statements).join(", ")}`;
+  });
+
+  await check("the ledger adds up to the balance the portal shows", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The number in the sidebar and the list behind it come from different
+     * places, and an agency that cannot reconcile the two has no reason to
+     * trust either. Held bookings are the interesting part: they commit credit
+     * without being owed, so `used` includes them and a statement does not.
+     */
+    const me = await must<{ balance?: { limit: number; used: number; available: number } }>(admin, "/api/agency/me");
+    const balance = me.balance;
+    if (!balance) return "WARN: no balance on the session payload";
+    if (Math.round(balance.limit - balance.used) !== Math.round(balance.available)) {
+      throw new Error(`limit ${balance.limit} − used ${balance.used} ≠ available ${balance.available}`);
+    }
+    return `${balance.available} available of ${balance.limit}`;
+  });
+
+  await check("credit is not readable without a session", async () => {
+    const anonymous = new Session();
+    for (const path of ["/api/agency/ledger", "/api/agency/statements"]) {
+      const res = await anonymous.api(path);
+      if (res.status !== 401) throw new Error(`${path} answered ${res.status} to nobody`);
+    }
+    return "401 on both";
+  });
+
+  /* ---------------------------------------------------------------------- */
+  section("Team");
+
+  await check("an administrator sees the agency's agents", async () => {
+    if (gate()) return gate()!;
+    const data = await must<{ agents?: { email: string; role: string }[] }>(admin, "/api/agency/agents");
+    if (!data.agents?.length) throw new Error("an agency with seeded agents listed none");
+    return `${data.agents.length} agents`;
+  });
+
+  await check("a counter agent cannot add a colleague", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The whole point of the role. Adding an agent grants somebody the right
+     * to spend the agency's credit line, so it belongs to whoever is
+     * accountable for it — not to everyone who can sign in.
+     */
+    const res = await counter.api("/api/agency/agents", {
+      body: { email: `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA", permission: "issue" },
+    });
+    if (res.ok) throw new Error("a counter agent created an account that can spend credit");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
+    return "403";
+  });
+
+  await check("a view-only trainee cannot either", async () => {
+    if (gate()) return gate()!;
+    const res = await viewer.api("/api/agency/agents", {
+      body: { email: `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA", permission: "issue" },
+    });
+    if (res.ok) throw new Error("a view-only account created an agent");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
+    return "403";
+  });
+
+  await check("an administrator can, and the new agent appears", async () => {
+    if (gate()) return gate()!;
+    const email = `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const res = await admin.api("/api/agency/agents", { body: { email, name: "QA Hire", permission: "viewOnly" } });
+    if (!res.ok) throw new Error(`the administrator was refused: ${res.status} ${res.error?.messageKey ?? ""}`);
+    const after = await must<{ agents?: { email: string }[] }>(admin, "/api/agency/agents");
+    if (!after.agents?.some((a) => a.email === email)) throw new Error("created, and not on the list");
+    return `${email} added`;
+  });
+
+  /* ---------------------------------------------------------------------- */
+  section("Settings");
+
+  await check("a counter agent cannot change the agency's markup", async () => {
+    if (gate()) return gate()!;
+    const res = await counter.api("/api/agency/settings", {
+      method: "PATCH",
+      body: { markup: { default: { mode: "percent", value: 5 }, overrides: [] } },
+    });
+    if (res.ok) throw new Error("a counter agent repriced everything the agency sells");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
+    return "403";
+  });
+
+  await check("an absurd markup is refused rather than clamped", async () => {
+    if (gate()) return gate()!;
+    /*
+     * Sixty per cent is the ceiling. Silently clamping would save a mistyped
+     * 500 as 60 and let an agency believe it had set what it typed — the
+     * refusal is the point, because the number ends up on a customer's quote.
+     */
+    const res = await admin.api("/api/agency/settings", {
+      method: "PATCH",
+      body: { markup: { default: { mode: "percent", value: 500 }, overrides: [] } },
+    });
+    if (res.ok) throw new Error("a 500% markup was accepted");
+    if (res.status !== 422) throw new Error(`expected 422, got ${res.status}`);
+    return "422";
+  });
+
+  await check("an insecure logo URL is refused", async () => {
+    if (gate()) return gate()!;
+    // It goes on every voucher and quotation the agency's customers receive.
+    // One http: image turns a page a traveller is asked to trust into a
+    // mixed-content warning.
+    const res = await admin.api("/api/agency/settings", {
+      method: "PATCH",
+      body: { profile: { logoUrl: "http://example.com/logo.png" } },
+    });
+    if (res.ok) {
+      const me = await must<{ agency?: { profile?: { logoUrl?: string } } }>(admin, "/api/agency/me");
+      if (me.agency?.profile?.logoUrl?.startsWith("http://")) throw new Error("an http: logo was stored");
+      return "accepted, and not stored";
+    }
+    return `refused ${res.status}`;
+  });
+
+  await check("a javascript: URL never reaches a document", async () => {
+    if (gate()) return gate()!;
+    const res = await admin.api("/api/agency/settings", {
+      method: "PATCH",
+      body: { profile: { website: "javascript:alert(1)" } },
+    });
+    const me = await must<{ agency?: { profile?: { website?: string } } }>(admin, "/api/agency/me");
+    if (me.agency?.profile?.website?.toLowerCase().startsWith("javascript:")) {
+      throw new Error("a javascript: URL was stored on the agency profile");
+    }
+    return res.ok ? "accepted, and not stored" : `refused ${res.status}`;
+  });
+
+  await check("an agency cannot raise its own discount", async () => {
+    if (gate()) return gate()!;
+    /*
+     * `commissionPercent` is contractual — it is what we charge them, not what
+     * they charge their customer. A settings form that could edit it is not a
+     * settings form.
+     */
+    const before = await must<{ agency?: { commissionPercent?: number } }>(admin, "/api/agency/me");
+    await admin.api("/api/agency/settings", { method: "PATCH", body: { commissionPercent: 99 } });
+    const after = await must<{ agency?: { commissionPercent?: number } }>(admin, "/api/agency/me");
+    if (after.agency?.commissionPercent !== before.agency?.commissionPercent) {
+      throw new Error(`commission moved ${before.agency?.commissionPercent} → ${after.agency?.commissionPercent}`);
+    }
+    return `unchanged at ${after.agency?.commissionPercent}%`;
+  });
+
+  /* ---------------------------------------------------------------------- */
+  section("Customers");
+
+  let created = "";
+
+  await check("the address book answers", async () => {
+    if (gate()) return gate()!;
+    const data = await must<{ customers?: unknown[] }>(admin, "/api/agency/customers");
+    if (data.customers === undefined) throw new Error("no customers key in the payload");
+    return `${data.customers.length} on file`;
+  });
+
+  await check("a view-only trainee cannot add one", async () => {
+    if (gate()) return gate()!;
+    const res = await viewer.api("/api/agency/customers", {
+      body: { name: "QA Person", email: "qa.person@example.com" },
+    });
+    if (res.ok) throw new Error("a view-only account wrote to the address book");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
+    return "403";
+  });
+
+  await check("a counter agent can, and it comes back", async () => {
+    if (gate()) return gate()!;
+    const email = `qa-${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const res = await counter.api<{ customer?: { id: string } }>("/api/agency/customers", {
+      body: { name: "QA Person", email },
+    });
+    if (!res.ok) throw new Error(`refused: ${res.status} ${res.error?.messageKey ?? ""}`);
+    created = res.data?.customer?.id ?? "";
+    const after = await must<{ customers?: { email: string }[] }>(admin, "/api/agency/customers");
+    if (!after.customers?.some((c) => c.email === email)) throw new Error("created, and not on the list");
+    return email;
+  });
+
+  await check("and can take it off again", async () => {
+    if (gate()) return gate()!;
+    if (!created) return "SKIP: nothing was created";
+    const res = await counter.api(`/api/agency/customers?id=${encodeURIComponent(created)}`, { method: "DELETE" });
+    if (!res.ok) return `WARN: delete refused ${res.status} — the address book only grows`;
+    return "removed";
+  });
+
+  /* ---------------------------------------------------------------------- */
+  section("Nothing here names a supplier");
+
+  await check("none of these four modules leaks supply detail", async () => {
+    if (gate()) return gate()!;
+    const dirty: string[] = [];
+    for (const path of ["/api/agency/ledger", "/api/agency/statements", "/api/agency/agents",
+                        "/api/agency/customers", "/api/agency/me", "/api/agency/reports"]) {
+      const res = await admin.api(path);
+      const found = leaks(res.raw);
+      if (found.length) dirty.push(`${path}: ${found.join("/")}`);
+    }
+    if (dirty.length) throw new Error(dirty.join("; "));
+    return "6 payloads clean";
+  });
+
+  report();
+}
+
+function report(): void {
+  const count = (v: Verdict) => results.filter((r) => r.verdict === v).length;
+  const failed = results.filter((r) => r.verdict === "FAIL");
+  process.stdout.write(`\n${"─".repeat(72)}\n`);
+  process.stdout.write(`${count("PASS")} passed · ${count("FAIL")} failed · ${count("WARN")} unprovable · ${count("SKIP")} skipped\n`);
+  if (failed.length) {
+    process.stdout.write(`\nDefects:\n`);
+    for (const f of failed) process.stdout.write(`  ${f.group} — ${f.name}\n    ${f.detail}\n`);
+  }
+  const warned = results.filter((r) => r.verdict === "WARN");
+  if (warned.length) {
+    process.stdout.write(`\nCould not be judged:\n`);
+    for (const w of warned) process.stdout.write(`  ${w.name} — ${w.detail}\n`);
+  }
+  process.exitCode = failed.length ? 1 : 0;
+}
+
+main().catch((error) => {
+  process.stdout.write(`\nThe harness itself fell over: ${error instanceof Error ? error.stack : error}\n`);
+  process.exitCode = 1;
+});

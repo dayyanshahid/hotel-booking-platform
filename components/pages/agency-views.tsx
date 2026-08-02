@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
+import { useResource } from "@/components/providers/use-resource";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, cx } from "@/components/ui";
-import { DataTable, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { DataTable, LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/branding";
@@ -215,17 +216,15 @@ export function AgencyBookingsView({ locale }: { locale: Locale }) {
 
 function BookingsPanel({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const [bookings, setBookings] = useState<AgencyBooking[] | null>(null);
+  /*
+   * `body.ok ? bookings : []` again, and the fetch was not wrapped at all —
+   * so a refusal showed the agency an empty book, and a request that never
+   * completed left the panel on a skeleton for ever.
+   */
+  const booked = useResource<{ bookings: AgencyBooking[] }>("/api/agency/bookings");
+  const bookings = booked.data?.bookings ?? null;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch(apiUrl("/api/agency/bookings"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { bookings: AgencyBooking[] } };
-      setBookings(body.ok && body.data ? body.data.bookings : []);
-    })();
-  }, []);
 
   const rows = (bookings ?? []).filter((booking) => {
     if (status !== "all" && booking.status !== status) return false;
@@ -382,10 +381,18 @@ function BookingTable({ locale, bookings }: { locale: Locale; bookings: AgencyBo
 /* -------------------------------------------------------------- credit */
 
 export function AgencyCreditView({ locale }: { locale: Locale }) {
+  const { t } = useApp();
   return (
     <PortalShell locale={locale}>
       {(context) => (
         <div className="space-y-4">
+          {/*
+            The only portal page that had no page header, and so the only one
+            whose outline began below the top. Every other screen here titles
+            itself with `PageHeader`; this one went straight into its panels,
+            each of which is a section heading with nothing above it.
+          */}
+          <PageHeader title={t("agency.credit")} description={t("agency.creditBody")} />
           <CreditPanel locale={locale} context={context} />
           <Periods locale={locale} />
           <Statement locale={locale} />
@@ -413,18 +420,22 @@ interface StatementPeriod {
  */
 function Periods({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const [periods, setPeriods] = useState<StatementPeriod[] | null>(null);
+  const statements = useResource<{ periods: StatementPeriod[] }>("/api/agency/statements");
+  const periods = statements.data?.periods ?? null;
 
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch(apiUrl("/api/agency/statements"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { periods: StatementPeriod[] } };
-      setPeriods(body.ok && body.data ? body.data.periods : []);
-    })();
-  }, []);
-
-  if (!periods) return <TableSkeleton rows={3} />;
-  if (!periods.length) return null;
+  if (statements.loading) return <TableSkeleton rows={3} />;
+  /*
+   * A failed read is not "no statements".
+   *
+   * This section hid itself entirely when the list was empty, which is right
+   * for an agency that has not been invoiced yet and wrong for one whose
+   * statements could not be fetched — same blank space, opposite meaning, and
+   * the second is about money they are owed or owe.
+   */
+  if (statements.failed) {
+    return <LoadFailed title={t("agency.statementsUnavailable")} onRetry={statements.reload} />;
+  }
+  if (!periods?.length) return null;
 
   return (
     <section className="space-y-2">
@@ -494,20 +505,14 @@ const LEDGER_LABEL: Record<LedgerEntry["kind"], string> = {
 
 function Statement({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const [entries, setEntries] = useState<LedgerEntry[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch(apiUrl("/api/agency/ledger"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { entries: LedgerEntry[] } };
-      setEntries(body.ok && body.data ? body.data.entries : []);
-    })();
-  }, []);
+  const ledger = useResource<{ entries: LedgerEntry[] }>("/api/agency/ledger");
+  const entries = ledger.data?.entries ?? null;
 
   return (
     <section className="space-y-3">
       <SectionHeading title={t("agency.statement")} description={t("agency.statementBody")} />
-      {!entries && <TableSkeleton rows={4} />}
+      {ledger.loading && <TableSkeleton rows={4} />}
+      {ledger.failed && <LoadFailed title={t("agency.ledgerUnavailable")} onRetry={ledger.reload} />}
       {entries && !entries.length && <p className="text-muted text-sm">{t("agency.noMovements")}</p>}
       {entries && entries.length > 0 && (
         <Card className="divide-ink-100 divide-y">
@@ -546,7 +551,6 @@ export function AgencyTeamView({ locale }: { locale: Locale }) {
 
 function TeamPanel({ context }: { context: AgencyContext }) {
   const { t } = useApp();
-  const [agents, setAgents] = useState<Agent[] | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Agent["role"]>("agent");
@@ -555,15 +559,14 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const [busy, setBusy] = useState(false);
   const isAdmin = context.session.role === "admin";
 
-  async function reload() {
-    const res = await fetch(apiUrl("/api/agency/agents"), { credentials: apiCredentials() });
-    const body = (await res.json()) as { ok: boolean; data?: { agents: Agent[] } };
-    setAgents(body.ok && body.data ? body.data.agents : []);
-  }
-
-  useEffect(() => {
-    void reload();
-  }, []);
+  /*
+   * The list of people who may spend this agency's credit. Showing an empty
+   * one because the read failed invites an administrator to re-invite
+   * colleagues who are already there.
+   */
+  const team = useResource<{ agents: Agent[] }>("/api/agency/agents");
+  const agents = team.data?.agents ?? null;
+  const reload = team.reload;
 
   async function invite() {
     setBusy(true);
@@ -621,7 +624,14 @@ function TeamPanel({ context }: { context: AgencyContext }) {
       <PageHeader title={t("agency.team")} description={t("agency.teamBody")} />
       {error && <Alert tone="critical">{error}</Alert>}
 
-      {!agents && <TableSkeleton rows={3} />}
+      {team.loading && <TableSkeleton rows={3} />}
+      {/*
+        A failed read here shows an empty team, and the reader's obvious next
+        move is to re-invite colleagues who are already on the account — each
+        one an email to somebody who does not need it and, worse, a second
+        record for a person who already has the right to spend the credit.
+      */}
+      {team.failed && <LoadFailed title={t("agency.teamUnavailable")} onRetry={team.reload} />}
       {agents && (
         <Card className="divide-ink-100 divide-y">
           {agents.map((agent) => (
