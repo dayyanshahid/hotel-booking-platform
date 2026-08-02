@@ -18,6 +18,24 @@ import { describe, expect, it } from "vitest";
  * would be slower and no more true.
  */
 
+
+/**
+ * One exported function's source, whole.
+ *
+ * Slicing at the first `\n}` looked right and stopped inside the destructured
+ * props, so every assertion below was reading a fragment — which is harmless
+ * for a `toMatch` that then fails loudly, and quietly useless for a
+ * `not.toMatch`, which passes on any text that got cut before the thing it
+ * was meant to forbid. Cut at the next top-level export instead.
+ */
+function functionBody(source: string, name: string): string {
+  const start = source.indexOf(`export function ${name}`);
+  if (start < 0) throw new Error(`${name} is no longer exported from this file`);
+  const rest = source.slice(start + 1);
+  const next = rest.indexOf("\nexport ");
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
 const shells = [
   { name: "operator console", file: "components/admin/console-shell.tsx" },
   { name: "agency portal", file: "components/agency/ui.tsx" },
@@ -50,9 +68,34 @@ describe("document outlines", () => {
      * page would have five of them and the outline would be worse than the
      * flat one this replaced.
      */
-    const source = readFileSync("components/ui/index.tsx", "utf8");
-    const heading = source.slice(source.indexOf("export function SectionHeading"));
-    const body = heading.slice(0, heading.indexOf("\n}"));
+    const body = functionBody(readFileSync("components/ui/index.tsx", "utf8"), "SectionHeading");
+    // Only the "title" level may reach h1, and it does so through `Heading`.
     expect(body).not.toMatch(/<h1[\s>]/);
+  });
+
+  it("gives a whole-page empty state the page's heading level", () => {
+    /*
+     * `standalone` on EmptyState already meant "this is the page" and was
+     * only being used for layout, so a signed-out account, an empty saved
+     * list and an empty comparison each served a document whose outline
+     * began at level three. Not a missing heading — a heading at the wrong
+     * depth, which reads correctly and navigates wrongly.
+     */
+    const body = functionBody(readFileSync("components/ui/index.tsx", "utf8"), "EmptyState");
+    expect(body).toMatch(/const Heading = standalone \? "h1" : "h3"/);
+    // And the title has to actually use it rather than a literal tag.
+    expect(body).toMatch(/<Heading[\s\S]*?>\{title\}<\/Heading>/);
+  });
+
+  it("keeps a page title distinct from a section heading", () => {
+    /*
+     * Two decisions that were being made by one tag: how big the heading
+     * looks and how deep it sits. A screen with several equal sections wants
+     * them all at "page"; a screen whose whole content is one form has a
+     * single heading and it belongs at the top.
+     */
+    const body = functionBody(readFileSync("components/ui/index.tsx", "utf8"), "SectionHeading");
+    expect(body).toMatch(/level\?: "title" \| "page" \| "card"/);
+    expect(body).toMatch(/const Heading = level === "title" \? "h1" : "h2"/);
   });
 });

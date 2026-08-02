@@ -90,7 +90,7 @@ export function SignInView({ locale }: { locale: Locale }) {
   return (
     <div className="mx-auto max-w-md py-6">
       <Card className="p-5">
-        <SectionHeading title={t("account.signInTitle")} description={t("account.signInBody")} />
+        <SectionHeading level="title" title={t("account.signInTitle")} description={t("account.signInBody")} />
         {stage === "email" ? (
           <div className="space-y-4">
             <Field label={t("account.emailLabel")} htmlFor="signin-email" required error={error}>

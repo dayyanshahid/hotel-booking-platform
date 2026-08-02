@@ -178,16 +178,24 @@ export function SectionHeading({
   action?: ReactNode;
   id?: string;
   /**
-   * "page" heads a whole section of the page; "card" heads a group inside a
-   * card, where the page-level size would out-shout the card's own content.
+   * "title" is the name of the page and there is one per page; "page" heads a
+   * whole section within it; "card" heads a group inside a card, where the
+   * page-level size would out-shout the card's own content.
+   *
+   * "title" exists because size and depth are two decisions that were being
+   * made by one tag. Most screens here have several equal sections and want
+   * "page" for all of them — promoting one would be picking a favourite among
+   * siblings — but a page whose entire content is a single form has exactly
+   * one heading, and it was an h2 with nothing above it.
    */
-  level?: "page" | "card";
+  level?: "title" | "page" | "card";
 }) {
-  const page = level === "page";
+  const page = level !== "card";
+  const Heading = level === "title" ? "h1" : "h2";
   return (
     <div className={cx("flex flex-wrap items-end justify-between gap-3", page ? "mb-5" : "mb-4")}>
       <div>
-        <h2
+        <Heading
           id={id}
           className={cx(
             "font-semibold",
@@ -195,7 +203,7 @@ export function SectionHeading({
           )}
         >
           {title}
-        </h2>
+        </Heading>
         {description && <p className="text-muted mt-1 max-w-2xl text-sm">{description}</p>}
       </div>
       {action}
@@ -314,13 +322,28 @@ export function EmptyState({
    */
   standalone?: boolean;
 }) {
+  /*
+   * When this is the page, its title is the page's heading.
+   *
+   * `standalone` already means exactly that, and it was only being used for
+   * layout — so a signed-out account, an empty saved list, a lookup form and
+   * an empty comparison each served a document whose outline began at level
+   * three with nothing above it. Not a missing heading, which is easy to
+   * spot: a heading at the wrong depth, which reads correctly and navigates
+   * wrongly. Ten pages, all of them a state a reader arrives in rather than
+   * one they cause.
+   */
+  const Heading = standalone ? "h1" : "h3";
+
   // Constrained rather than full-bleed: centred text stranded across a wide
   // card reads as a layout failure, not as a designed empty state.
   const card = (
     <Card className="mx-auto w-full max-w-xl px-6 py-12 text-center">
       {art && <div className="mb-5 flex justify-center">{art}</div>}
       {icon && <div className="mb-4 flex justify-center">{icon}</div>}
-      <h3 className="text-lg font-semibold tracking-[-0.015em]">{title}</h3>
+      {/* The size is the design's; the level is the document's. They are not
+          the same decision and were being made by one tag. */}
+      <Heading className="text-lg font-semibold tracking-[-0.015em]">{title}</Heading>
       {body && <p className="text-muted mx-auto mt-2 max-w-sm text-sm leading-relaxed">{body}</p>}
       {actions && <div className="mt-6 flex flex-wrap justify-center gap-2">{actions}</div>}
     </Card>

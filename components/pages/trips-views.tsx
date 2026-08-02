@@ -162,7 +162,7 @@ export function BookingLookupView({ locale }: { locale: Locale }) {
   return (
     <div className="mx-auto max-w-md py-6">
       <Card className="p-5">
-        <SectionHeading title={t("trips.lookupTitle")} description={t("trips.lookupBody")} />
+        <SectionHeading level="title" title={t("trips.lookupTitle")} description={t("trips.lookupBody")} />
         {stage === "request" && (
           <div className="space-y-4">
             <Field label={t("booking.reference")} htmlFor="lookup-ref" required>
