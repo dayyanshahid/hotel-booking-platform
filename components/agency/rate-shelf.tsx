@@ -259,7 +259,6 @@ export function RateShelf({
                   offers={offers}
                   quotes={quotes}
                   locale={locale}
-                  nights={nights}
                   canIssue={canIssue}
                   onPriceDetails={setPriceFor}
                   onAdd={(offer, quote) =>
@@ -329,7 +328,6 @@ function BoardGroups({
   offers,
   quotes,
   locale,
-  nights,
   canIssue,
   onAdd,
   onPriceDetails,
@@ -337,7 +335,6 @@ function BoardGroups({
   offers: Offer[];
   quotes: Record<string, AgencyOfferView>;
   locale: Locale;
-  nights: number;
   canIssue: boolean;
   onAdd: (offer: Offer, quote?: AgencyOfferView) => void;
   /** Opens the night-by-night breakdown for one rate. */
@@ -356,95 +353,119 @@ function BoardGroups({
     return [...map.entries()].map(([code, entry]) => ({ code, ...entry }));
   }, [offers]);
 
+  /*
+   * A table, not a stack of flex rows.
+   *
+   * Every rate has the same four things to say — what it includes, on what
+   * terms, for how much, and a way to take it — and the old layout let each
+   * one size itself. A row with a cancellation deadline grew taller than the
+   * row beneath it, the price column drifted, and the Add buttons landed at
+   * four different heights down a single board. An agent comparing eight rates
+   * on a call was re-finding the price on every line.
+   *
+   * Fixed columns fix that. The money column is the same width for every rate
+   * in the property, so the eye tracks one vertical line, and the button sits
+   * where it sat on the row above.
+   */
   return (
-    <div className="mt-3 space-y-3">
+    <div className="mt-3 space-y-4">
       {boards.map((board) => (
-        <div key={board.code} className="grid gap-2 sm:grid-cols-[minmax(0,170px)_1fr]">
-          <p className="pt-1 text-sm font-semibold wrap-anywhere">
+        <section key={board.code}>
+          <h4 className="text-sm font-semibold wrap-anywhere">
             {board.label}
             {board.code && <span className="text-muted font-normal"> ({board.code})</span>}
-          </p>
+          </h4>
 
-          <ul className="hairline space-y-0 border-s ps-3">
+          <ul className="mt-1.5 divide-y divide-[var(--border)]">
             {board.offers.map((offer) => {
               const quote = quotes[offer.offerId];
+              const refundable = offer.cancellation.refundable;
               return (
                 <li
                   key={offer.offerId}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2"
+                  className={cx(
+                    "grid items-center gap-x-4 gap-y-2 py-2.5",
+                    // One column on a phone; on a laptop the money and the
+                    // action are fixed so they align down the whole sheet.
+                    "sm:grid-cols-[1fr_minmax(0,150px)_auto]",
+                  )}
                 >
-                  <div className="min-w-0 space-y-1 text-xs">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Badge tone={offer.cancellation.refundable ? "positive" : "neutral"}>
-                        {offer.cancellation.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
+                  {/* What you are agreeing to. */}
+                  <div className="min-w-0 space-y-1">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <Badge tone={refundable ? "positive" : "neutral"}>
+                        {refundable ? t("rate.refundable") : t("rate.nonRefundable")}
                       </Badge>
                       {/* The date it stops being free, not just the word. An
                           agent quoting "free cancellation" without the deadline
                           is quoting half a rate. */}
-                      {offer.cancellation.refundable && offer.cancellation.freeUntil && (
+                      {refundable && offer.cancellation.freeUntil && (
                         <span className="text-positive-700">
                           {t("rate.freeUntil", {
-                            date: formatDeadline(offer.cancellation.freeUntil, offer.cancellation.timezone, locale),
-                            // The property's own clock, named. "Until 22 Aug,
-                            // 19:00" in an unstated zone is a deadline an agent
-                            // can miss by a working day.
+                            date: formatDeadline(
+                              offer.cancellation.freeUntil,
+                              offer.cancellation.timezone,
+                              locale,
+                            ),
                             tz: offer.cancellation.timezone,
                           })}
                         </span>
                       )}
+                    </p>
+                    <p className="text-muted flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                       {offer.remainingLabel && (
                         <span className="text-caution-700 font-medium">{offer.remainingLabel}</span>
                       )}
-                    </p>
-                    {offer.roomsCovered > 1 && (
-                      <p className="text-muted">{t("agency.rateCoversRooms", {
-                          rooms: offer.roomsCovered,
-                          unit: roomLabel(t, offer.roomsCovered, locale),
-                        })}</p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="text-end">
-                      {quote ? (
-                        <>
-                          <p className="text-sm font-bold">{formatMoney(quote.sell, quote.currency as CurrencyCode, locale)}</p>
-                          <p className="text-muted text-[11px]">
-                            {t("agency.costAndMargin", {
-                              cost: formatMoney(quote.cost, quote.currency as CurrencyCode, locale),
-                              margin: formatMoney(quote.margin, quote.currency as CurrencyCode, locale),
-                            })}
-                          </p>
-                        </>
-                      ) : (
-                        // Never the public price dressed as the agency's. If the
-                        // quote did not arrive, the line says so.
-                        <p className="text-muted text-xs">{t("agency.priceUnavailable")}</p>
+                      {offer.roomsCovered > 1 && (
+                        <span>
+                          {t("agency.rateCoversRooms", {
+                            rooms: offer.roomsCovered,
+                            unit: roomLabel(t, offer.roomsCovered, locale),
+                          })}
+                        </span>
                       )}
-                      <p className="text-muted text-[11px]">
-                        {nights} {nights === 1 ? t("common.night") : t("common.nights")}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => onPriceDetails(offer)}
-                        className="text-brand-700 text-[11px] font-medium underline underline-offset-2"
-                      >
-                        {t("agency.priceDetails")}
-                      </button>
-                    </div>
-
-                    {canIssue && (
-                      <Button size="sm" onClick={() => onAdd(offer, quote)}>
-                        <Icon name="cart" size={14} />
-                        {t("agency.add")}
-                      </Button>
-                    )}
+                    </p>
                   </div>
+
+                  {/* The money, in its own column so it makes a line. */}
+                  <div className="sm:text-end">
+                    {quote ? (
+                      <>
+                        <p className="tabular text-base font-bold leading-tight">
+                          {formatMoney(quote.sell, quote.currency as CurrencyCode, locale)}
+                        </p>
+                        <p className="text-muted tabular text-[11px]">
+                          {t("agency.costAndMargin", {
+                            cost: formatMoney(quote.cost, quote.currency as CurrencyCode, locale),
+                            margin: formatMoney(quote.margin, quote.currency as CurrencyCode, locale),
+                          })}
+                        </p>
+                      </>
+                    ) : (
+                      // Never the public price dressed as the agency's. If the
+                      // quote did not arrive, the line says so.
+                      <p className="text-muted text-xs">{t("agency.priceUnavailable")}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onPriceDetails(offer)}
+                      className="text-brand-700 text-[11px] font-medium hover:underline"
+                    >
+                      {t("agency.priceDetails")}
+                    </button>
+                  </div>
+
+                  {canIssue && (
+                    <Button size="sm" className="w-full sm:w-auto" onClick={() => onAdd(offer, quote)}>
+                      <Icon name="cart" size={14} />
+                      {t("agency.add")}
+                    </Button>
+                  )}
                 </li>
               );
             })}
           </ul>
-        </div>
+        </section>
       ))}
     </div>
   );

@@ -196,6 +196,55 @@ export function resolveDestination(intent: SearchIntent): {
   return { destinationId: raw };
 }
 
+/**
+ * One name per place, out of whatever the supplier called it.
+ *
+ * Zone names arrive as free text and the two suppliers disagree with
+ * themselves as much as with each other. A Dubai search offered "DEIRA",
+ * "DEIRA DUBAI" and "DEIRA - DUBAI" as three separate filters of one property
+ * each, plus "DUBAI" and "Dubai" as two more — thirteen rows for about six
+ * actual places, none of which could be filtered on usefully because picking
+ * one excluded the same neighbourhood spelled another way.
+ *
+ * So the raw string is folded to a key: the city qualifier trailing the zone
+ * is dropped, separators are normalised, and the result is title-cased for
+ * display. The facet and the filter both run through here, which is what keeps
+ * a click on "Deira" matching every property the supplier filed under any of
+ * its three spellings.
+ */
+export function zoneLabel(raw: string | undefined, locality: string | undefined): string {
+  const text = (raw ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+
+  // "Barsha Heights - Dubai", "Al Khan, Sharjah" — the tail is the city, and
+  // the city is already the search.
+  const city = fold(locality ?? "");
+  let parts = text.split(/\s*[-,/]\s*/).filter(Boolean);
+  if (parts.length > 1 && city && fold(parts[parts.length - 1]) === city) parts = parts.slice(0, -1);
+
+  let name = parts.join(" - ").trim();
+
+  /*
+   * Only where the supplier put a separator.
+   *
+   * The tempting next step is to strip a trailing city token with no
+   * punctuation too, so "DEIRA DUBAI" folds into "DEIRA". It also turns "BUR
+   * DUBAI" into "Bur", and Bur Dubai is a place whose name contains the city
+   * — the rule cannot tell the two apart from the string alone. A duplicate
+   * row is untidy; renaming a neighbourhood is wrong, and an agent looking for
+   * Bur Dubai would not find it. So the unpunctuated case is left alone.
+   */
+
+  // A zone that was only ever the city name stays the city name: it is where
+  // two thirds of the results are, and dropping it would remove the filter
+  // rather than tidy it.
+  if (!name) name = text;
+
+  return name
+    .toLocaleLowerCase()
+    .replace(/(^|[\s-])(\p{L})/gu, (_, lead, letter) => lead + letter.toLocaleUpperCase());
+}
+
 function distanceKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -449,8 +498,16 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const centre = dest?.coordinates ?? cards[0]?.coordinates ?? { lat: 0, lng: 0 };
   const withDistance = cards.map((c) => ({ card: c, distance: distanceKm(centre, c.coordinates) }));
 
-  const facets = buildFacets(cards, locale, normalized);
-  const filtered = applyFilters(withDistance, options.filters ?? {}, normalized);
+  /*
+   * The searched city, for tidying zone names.
+   *
+   * Not `card.locality`: the live suppliers fill that with the zone string
+   * itself, so "DEIRA - DUBAI" was being compared against "DEIRA - DUBAI" and
+   * nothing ever matched.
+   */
+  const cityName = dest ? localized(dest.name, locale) : resolved.destinationId;
+  const facets = buildFacets(cards, locale, normalized, cityName);
+  const filtered = applyFilters(withDistance, options.filters ?? {}, normalized, cityName);
   const sorted = applySort(filtered, options.sort ?? "recommended");
 
   /*
@@ -579,7 +636,12 @@ function priceRangeOf(prices: number[]): SearchFacets["priceRange"] {
   return { min, max, typicalMax: Math.min(max, Math.max(min, Math.ceil(p95))) };
 }
 
-function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: NormalizedHotel[]): SearchFacets {
+function buildFacets(
+  cards: HotelResultCard[],
+  locale: Locale,
+  normalized: NormalizedHotel[],
+  cityName: string,
+): SearchFacets {
   // Per room, so the range spans one kind of number and the filter that reads
   // it back compares like with like.
   const prices = cards.map((c) => comparableTotal(c.price));
@@ -590,7 +652,7 @@ function buildFacets(cards: HotelResultCard[], locale: Locale, normalized: Norma
   };
 
   const catCount = count(cards.map((c) => c.category));
-  const hoodCount = count(cards.map((c) => c.neighborhood));
+  const hoodCount = count(cards.map((c) => zoneLabel(c.neighborhood, cityName)));
   const typeCount = count(cards.map((c) => c.propertyType));
   /*
    * Labels come from the data, not from our own catalogue.
@@ -695,7 +757,12 @@ type Entry = { card: HotelResultCard; distance: number };
  * lead offer, which is correct — it is the "from" price — but the filter no
  * longer mistakes it for the whole inventory.
  */
-function applyFilters(entries: Entry[], f: SearchFilters, normalized: NormalizedHotel[]): Entry[] {
+function applyFilters(
+  entries: Entry[],
+  f: SearchFilters,
+  normalized: NormalizedHotel[],
+  cityName: string,
+): Entry[] {
   const byHotel = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
 
   return entries.filter(({ card, distance }) => {
@@ -710,7 +777,8 @@ function applyFilters(entries: Entry[], f: SearchFilters, normalized: Normalized
     if (f.maxPrice != null && comparableTotal(card.price) > f.maxPrice) return false;
     if (f.categories?.length && !f.categories.includes(card.category)) return false;
     if (f.minRating != null && (card.review?.score ?? 0) < f.minRating) return false;
-    if (f.neighborhoods?.length && !f.neighborhoods.includes(card.neighborhood)) return false;
+    if (f.neighborhoods?.length && !f.neighborhoods.includes(zoneLabel(card.neighborhood, cityName)))
+      return false;
     if (f.propertyTypes?.length && !f.propertyTypes.includes(card.propertyType)) return false;
     if (f.maxDistanceKm != null && distance > f.maxDistanceKm) return false;
     if (f.dealsOnly && !card.price.strikeTotal) return false;
