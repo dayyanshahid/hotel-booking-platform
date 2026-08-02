@@ -111,12 +111,11 @@ export async function cancelBooking({
         const mapped = mapTourmindError(error, locale);
         return {
           ok: false,
-          // TourMind's mapper types its action loosely; the envelope's default
-          // for the category is the right fallback rather than a cast.
           error: {
             category: mapped.category,
             messageKey: mapped.messageKey,
             status: mapped.status,
+            action: mapped.action,
             retryable: mapped.retryable,
             message: mapped.message,
           },

@@ -17,7 +17,8 @@
     "portal:sync": "tsx scripts/sync-portal.ts",
     "tourmind:smoke": "tsx --conditions=react-server scripts/tourmind-smoke.ts",
     "suppliers:conformance": "tsx --conditions=react-server scripts/supplier-conformance.ts",
-    "qa:search": "tsx scripts/search-qa.ts"
+    "qa:search": "tsx scripts/search-qa.ts",
+    "qa:booking": "tsx scripts/booking-qa.ts"
   },
   "dependencies": {
     "next": "16.2.12",

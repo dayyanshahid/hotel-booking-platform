@@ -10,6 +10,7 @@ import {
   linkSupplierReference,
   peekIdempotency,
   pushNotification,
+  rememberOffer,
   saveBooking,
   saveSession,
   setIdempotency,
@@ -18,7 +19,7 @@ import { confirmBooking } from "@/lib/server/hotelbeds/operations";
 import { HotelbedsError } from "@/lib/server/hotelbeds/client";
 import { logSupplierError, mapSupplierError } from "@/lib/server/hotelbeds/errors";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
-import { tourmindBook } from "@/lib/server/tourmind/operations";
+import { tourmindBook, tourmindPrebook } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import { activeAgent } from "@/lib/agency/session";
 import { canAtLeast } from "@/lib/agency/types";
@@ -192,7 +193,20 @@ export async function POST(req: Request) {
    */
   const lineOffers = session.lines.map((line) => ({ line, offer: getOffer(line.offerId) }));
   const lostLine = lineOffers.find((entry) => !entry.offer);
-  if (lostLine) {
+
+  /*
+   * E-10 and E-11 at the moment they actually hurt.
+   *
+   * Both scenarios were honoured at recheck and silently ignored here, so the
+   * one place a rate going away costs something — after the guest form, with
+   * an authorisation ready to go — could not be demonstrated or regression
+   * tested at all. The switch existed and did nothing, which is worse than not
+   * having it: a run of the edge-case harness reported the booking endpoint as
+   * handling a sold-out rate when what it had actually done was sell it.
+   */
+  const soldOut = scenario === "rateSoldOut" || scenario === "offerExpired";
+
+  if (lostLine || soldOut) {
     return fail("availabilityChanged", "error.availabilityChanged", locale, {
       status: 409,
       action: "selectAlternative",
@@ -347,13 +361,89 @@ export async function POST(req: Request) {
   let tourmindAgentRef: string | null = null;
   if (offer?.tourmind && !pending && !rejected) {
     const guests = guestList(session.rooms, body);
+
+    /*
+     * A fresh supplier session, immediately before the order.
+     *
+     * TourMind refuses CreateOrder outright unless a CheckRoomRate has just run
+     * for the rate — their code 102, "no valid session, please get the lastest
+     * price via CheckRoomRate message". The trade path happened to satisfy this
+     * by accident, because an agent rechecks before committing credit. The
+     * consumer checkout goes straight from a frozen price to the order, so
+     * every TourMind booking on the public site failed, as a validation error
+     * about dates and guests that no customer could act on and that named
+     * nothing they had got wrong.
+     *
+     * Done here rather than asked of the client: a supplier's session rule is
+     * the server's contract to keep, and a caller that forgets it reproduces
+     * exactly that failure. Doing it unconditionally also covers the trade
+     * path, where the recheck may have been several minutes and one guest form
+     * ago — long enough for their session to have lapsed again.
+     */
+    let binding = offer.tourmind;
+    try {
+      const confirmed = await tourmindPrebook(
+        binding,
+        { ...offer.intent, nationality: body.lead.nationality || offer.intent.nationality },
+        locale,
+        dest?.countryCode,
+      );
+
+      if (!confirmed) {
+        // They no longer hold it. Nothing has been charged at this point.
+        return fail("availabilityChanged", "error.availabilityChanged", locale, {
+          status: 409,
+          action: "selectAlternative",
+        });
+      }
+
+      /*
+       * Their final price has to be the one the customer agreed to.
+       *
+       * A prebook is also a price confirmation, and it is the last moment the
+       * rate can move. Booking a changed price because the order was already
+       * in flight is the one outcome worse than refusing: the customer accepted
+       * a number and would be charged another. Refused back to the recheck
+       * gate, which exists to show the new price and ask.
+       *
+       * A rounding difference is not a change — the comparison is in the
+       * display currency, which is converted.
+       */
+      if (Math.abs(confirmed.price.total - offer.price.total) > 1) {
+        return fail("availabilityChanged", "error.availabilityChanged", locale, {
+          status: 409,
+          action: "selectAlternative",
+          message:
+            locale === "ar"
+              ? "تغيّر السعر النهائي لدى المورد قبل تأكيد الحجز. لم يُخصم أي مبلغ — راجع السعر الجديد ثم أكّد."
+              : "The final price changed at the supplier before the booking was placed. Nothing was charged — review the new price and confirm.",
+        });
+      }
+
+      // Their prebook mints a new rate code, and it is the only one CreateOrder
+      // will accept; the availability code is already dead by this point.
+      binding = { ...binding, rateCode: confirmed.rateCode, net: confirmed.net };
+      rememberOffer(offer.offerId, { ...offer, tourmind: binding });
+    } catch (error) {
+      logTourmindError("bookings.prebook", error, ref);
+      const mapped = mapTourmindError(error, locale);
+      // Nothing has been sent to their order endpoint, so this is a clean
+      // refusal rather than an order in an unknown state.
+      return fail(mapped.category, mapped.messageKey, locale, {
+        status: mapped.status,
+        action: mapped.action,
+        retryable: mapped.retryable,
+        message: mapped.message,
+      });
+    }
+
     try {
       const result = await tourmindBook({
         sessionId: session.checkoutSessionId,
-        hotelCode: offer.tourmind.hotelCode,
-        rateCode: offer.tourmind.rateCode,
-        net: offer.tourmind.net,
-        supplierCurrency: offer.tourmind.supplierCurrency,
+        hotelCode: binding.hotelCode,
+        rateCode: binding.rateCode,
+        net: binding.net,
+        supplierCurrency: binding.supplierCurrency,
         // The session holds the stay, not the original intent; rebuild the
         // shape the supplier call needs from what checkout actually captured.
         intent: {
@@ -404,6 +494,7 @@ export async function POST(req: Request) {
         const mapped = mapTourmindError(error, locale);
         return fail(mapped.category, mapped.messageKey, locale, {
           status: mapped.status,
+          action: mapped.action,
           retryable: mapped.retryable,
           message: mapped.message,
         });

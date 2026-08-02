@@ -34,7 +34,25 @@ const CATEGORY: Record<string, ApiError["category"]> = {
   "103": "validation",
   "104": "temporaryService",
   "105": "temporaryService",
+  /*
+   * 301 is "No Room Available" — an answer, not a fault.
+   *
+   * It arrives as an error, so with no entry here it fell through to the
+   * default and a sold-out room was reported to the customer as "the supplier
+   * is not responding right now, try again shortly". That is a retry loop that
+   * cannot ever succeed, on the one message that should be sending them to a
+   * different room.
+   */
+  "301": "availabilityChanged",
 };
+
+/**
+ * How one of their error codes is classified. Exposed for the tests, which is
+ * the only way to assert the table without a live supplier saying "no room".
+ */
+export function __categoryForCode(code: string): ApiError["category"] {
+  return CATEGORY[code] ?? "temporaryService";
+}
 
 function requestHeader(): TmRequestHeader {
   const config = getTourmindConfig();
@@ -115,7 +133,7 @@ export async function tourmindPost<T extends { Error?: TmError }>(
   if (payload?.Error?.ErrorCode) {
     const code = String(payload.Error.ErrorCode);
     throw new TourmindError(
-      CATEGORY[code] ?? "temporaryService",
+      __categoryForCode(code),
       code,
       payload.Error.ErrorMessage || "The supplier rejected the request.",
     );

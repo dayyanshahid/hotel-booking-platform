@@ -16,13 +16,37 @@ export interface MappedSupplierError {
   message: string;
   status: number;
   retryable: boolean;
-  action?: string;
+  /**
+   * What the customer should do next.
+   *
+   * Typed to the union the API actually accepts rather than to `string`, which
+   * is why it used to be dropped at every call site: a loose type would not
+   * assign to `fail()`, so the recommended action was quietly left off and the
+   * UI fell back to a generic retry — including for a sold-out room, where
+   * retrying is the one thing that cannot work.
+   */
+  action?: ApiError["recommendedAction"];
 }
 
 export function mapTourmindError(error: unknown, locale: Locale): MappedSupplierError {
   const ar = locale === "ar";
   const category =
     error instanceof TourmindError ? error.category : ("temporaryService" as const);
+
+  if (category === "availabilityChanged") {
+    // Their answer is that the room has gone. The customer's next move is a
+    // different room, not the same one again in a minute.
+    return {
+      category,
+      messageKey: "error.availabilityChanged",
+      message: ar
+        ? "لم يعد هذا الخيار متاحًا. لم يُخصم أي مبلغ — اختر غرفة أخرى."
+        : "This option is no longer available. Nothing has been charged — please choose another room.",
+      status: 409,
+      action: "selectAlternative",
+      retryable: false,
+    };
+  }
 
   if (category === "validation") {
     return {
