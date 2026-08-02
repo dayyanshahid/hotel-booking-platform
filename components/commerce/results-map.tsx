@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Card, Photo, cx } from "@/components/ui";
 import { PerRoomNote } from "./price";
@@ -24,6 +24,7 @@ export function ResultsMap({
   onSelect,
   onSearchArea,
   hrefFor,
+  priceFor,
 }: {
   cards: HotelResultCard[];
   intent: SearchIntent;
@@ -32,6 +33,17 @@ export function ResultsMap({
   onSearchArea: (bounds: NonNullable<SearchFilters["bounds"]>) => void;
   /** Where a pin opens. The trade portal keeps agents inside the portal. */
   hrefFor?: (slug: string) => string;
+  /**
+   * What the callout says about money.
+   *
+   * The map is the same component on both sides of the platform, and the one
+   * thing that must not be the same is the price: the public total in a trade
+   * callout is the number an agent must never quote. The list beside the map
+   * already carries cost, sell and margin, so a bubble showing the public price
+   * put two different figures for one room on one screen. Given nothing, it
+   * keeps the public price, which is right for a traveller.
+   */
+  priceFor?: (card: HotelResultCard) => ReactNode;
 }) {
   const { t, locale, track } = useApp();
   const [zoom, setZoom] = useState(1);
@@ -90,6 +102,40 @@ export function ResultsMap({
   }, [cards, zoom, bounds]);
 
   const selectedCard = cards.find((c) => c.slug === selected) ?? null;
+
+  /**
+   * How far apart the pins actually are.
+   *
+   * The backdrop is a grid, not geography — there is no coastline under these
+   * pins and no street — so two dots forty pixels apart tell an agent their
+   * order and nothing about their distance. On the one screen whose question is
+   * "is this near the customer's meeting?", that is most of the answer missing.
+   *
+   * A scale bar is the honest half of it: it cannot say *where* a property is,
+   * but it makes "these two are a ten-minute walk apart, those two are across
+   * the city" readable off the picture. Rounded to a 1/2/5 step so the label is
+   * a number somebody can hold in their head.
+   */
+  const scale = (() => {
+    // Longitude degrees shrink towards the poles; at city scale the mid-latitude
+    // of the visible span is accurate enough to draw a bar with.
+    const midLat = ((bounds.north + bounds.south) / 2) * (Math.PI / 180);
+    const kmPerDegLng = 111.32 * Math.cos(midLat);
+    const kmAcross = ((bounds.east - bounds.west) / zoom) * kmPerDegLng;
+    if (!Number.isFinite(kmAcross) || kmAcross <= 0) return null;
+
+    // A bar around a fifth of the width, snapped to something round.
+    const target = kmAcross / 5;
+    const magnitude = 10 ** Math.floor(Math.log10(target));
+    const step = [1, 2, 5, 10].find((s) => s * magnitude >= target) ?? 10;
+    const km = step * magnitude;
+    const widthPx = (km / kmAcross) * W;
+    if (widthPx < 20 || widthPx > W / 2) return null;
+    return {
+      widthPx,
+      label: km >= 1 ? `${Number(km.toFixed(km < 10 ? 1 : 0))} km` : `${Math.round(km * 1000)} m`,
+    };
+  })();
 
   const visibleBounds = () => {
     // Convert the current pan/zoom viewport back into geographic bounds.
@@ -186,6 +232,20 @@ export function ResultsMap({
           )}
         </div>
 
+        {/*
+          Outside the panned group, so it stays put and stays legible while the
+          map moves under it — a scale that scrolls away is not a scale.
+        */}
+        {scale && (
+          <div className="pointer-events-none absolute bottom-3 end-3 flex flex-col items-end gap-1">
+            <span className="text-muted text-[11px] font-medium">{scale.label}</span>
+            <span
+              className="border-[var(--text-muted)] border-b-2 border-s-2 border-e-2"
+              style={{ width: `${(scale.widthPx / W) * 100}%`, minWidth: 40, height: 6 }}
+            />
+          </div>
+        )}
+
         {selectedCard && (
           <div className="absolute inset-x-3 bottom-3 lg:max-w-sm">
             <Card className="flex gap-3 overflow-hidden p-2">
@@ -202,12 +262,18 @@ export function ResultsMap({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{selectedCard.name}</p>
                 <p className="text-muted truncate text-xs">{selectedCard.neighborhood}</p>
-                <p className="tabular mt-1 text-sm font-bold">
-                  {formatMoney(selectedCard.price.total, selectedCard.price.currency, locale)}
-                </p>
-                {/* The callout has room for the whole caveat, so it carries it
-                    rather than the bare per-room figure the pin shows. */}
-                <PerRoomNote price={selectedCard.price} />
+                {priceFor ? (
+                  <div className="mt-1">{priceFor(selectedCard)}</div>
+                ) : (
+                  <>
+                    <p className="tabular mt-1 text-sm font-bold">
+                      {formatMoney(selectedCard.price.total, selectedCard.price.currency, locale)}
+                    </p>
+                    {/* The callout has room for the whole caveat, so it carries
+                        it rather than the bare per-room figure the pin shows. */}
+                    <PerRoomNote price={selectedCard.price} />
+                  </>
+                )}
                 <div className="mt-1 flex items-center gap-2">
                   <Badge tone={selectedCard.offerSummary.refundable ? "positive" : "critical"}>
                     {selectedCard.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}

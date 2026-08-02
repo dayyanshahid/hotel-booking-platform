@@ -227,6 +227,59 @@ export interface SearchOptions {
 /** Whether a live supplier answered, failed, or was never asked. */
 type LiveStatus = "ok" | "unavailable" | "skipped";
 
+/**
+ * How long a search may take, whatever the suppliers are doing.
+ *
+ * Nothing used to bound this. Each supplier call carried its own timeout and
+ * its own retry, so a Hotelbeds availability request that timed out cost twenty
+ * seconds, backed off, and cost twenty more before the page gave up on it. A
+ * measured Singapore search took thirty-seven seconds and the caller abandoned
+ * it first — which is not a slow search, it is a lost phone call.
+ *
+ * Fifteen seconds is the outer bound, and it is a promise about the page rather
+ * than about any one supplier: whatever has arrived by then is what gets
+ * ranked, and a source that has not answered is reported as unavailable. That
+ * is the same state the page already knows how to render — "this page is
+ * missing some options" — so the honest partial answer costs nothing new.
+ *
+ * It deliberately does not shorten the per-call timeouts. A retry after a fast
+ * network blip still happens and still helps; what cannot happen any more is
+ * waiting out a second full timeout on a supplier that has already failed to
+ * answer once. Set `SEARCH_DEADLINE_MS=0` to wait indefinitely again.
+ */
+function searchDeadlineMs(): number {
+  const raw = Number(process.env.SEARCH_DEADLINE_MS);
+  if (Number.isFinite(raw)) return raw > 0 ? raw : Number.POSITIVE_INFINITY;
+  return 15_000;
+}
+
+/**
+ * Whatever the source produced by the deadline, or nothing and a reason.
+ *
+ * The abandoned work carries on and is discarded; there is nothing to cancel
+ * safely mid-flight, and a supplier request that lands late has still written
+ * its rates to the offer store, where the next search will find them warm.
+ */
+async function bySearchDeadline<T>(
+  work: Promise<T>,
+  deadlineAt: number,
+  onLate: () => T,
+): Promise<T> {
+  const remaining = deadlineAt - Date.now();
+  if (!Number.isFinite(remaining)) return work;
+  if (remaining <= 0) return onLate();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(onLate()), remaining);
+  });
+  try {
+    return await Promise.race([work, late]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function runSearch(intent: SearchIntent, options: SearchOptions): Promise<SearchResponse> {
   // Pick up any markup the console has set before a single rate is priced.
   await primeMarkup();
@@ -282,8 +335,21 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    * shared flag meant a Hotelbeds success overwrote a TourMind failure and the
    * page called itself complete while a supplier was down.
    */
+  /*
+   * One clock for both of them.
+   *
+   * Shared and absolute rather than a budget each, because the agent is waiting
+   * on the page and not on a supplier: two sources given fifteen seconds apiece
+   * is a thirty-second page the moment they do not overlap.
+   */
+  const deadlineAt = Date.now() + searchDeadlineMs();
+  const late = (): { status: LiveStatus; hotels: NormalizedHotel[] } => ({
+    status: "unavailable",
+    hotels: [],
+  });
+
   const [tourmindOutcome, hotelbedsOutcome] = await Promise.all([
-    (async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+    bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
       if (!isTourmindEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
       try {
         const results = await searchTourmind(effectiveIntent, locale);
@@ -342,8 +408,8 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
         // simulated and other live results still stand.
         return { status: "unavailable", hotels: [] };
       }
-    })(),
-    (async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+    })(), deadlineAt, late),
+    bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
       if (!isHotelbedsEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
       // A coordinate for every city, or a supplier destination code on a deep link.
       const where = await resolveHotelbedsDestination(resolved.destinationId);
@@ -358,7 +424,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
           sourceCount: 1,
         })),
       };
-    })(),
+    })(), deadlineAt, late),
   ]);
 
   normalized.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);

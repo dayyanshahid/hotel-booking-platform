@@ -584,6 +584,28 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
               // A pin must not walk an agent out of the portal and onto the
               // public price.
               hrefFor={(slug) => `${href(locale, `/agency/hotel/${slug}`)}?${propertyQuery(applied)}`}
+              /*
+               * And the callout must not show it either. The rail on the list
+               * carries cost, sell and margin; the bubble was still showing the
+               * struck public total, so the same room had two prices on one
+               * screen depending on which half the agent was reading.
+               */
+              priceFor={(card) => {
+                const quote = quotes[card.offerSummary.offerId];
+                if (!quote) return <p className="text-muted text-xs">{t("agency.priceUnavailable")}</p>;
+                return (
+                  <TradePrices
+                    cost={quote.cost}
+                    sell={quote.sell}
+                    margin={quote.margin}
+                    currency={card.price.currency as CurrencyCode}
+                    locale={locale}
+                    publicPrice={card.price.total}
+                    compact
+                    perRoomOf={isPerRoomTotal(card.price) ? card.price.roomsRequested : undefined}
+                  />
+                );
+              }}
             />
           )}
         </div>
