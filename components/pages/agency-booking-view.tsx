@@ -337,13 +337,11 @@ function Detail({
           <Button
             onClick={async () => {
               setBusy(true);
-              const res = await fetch(apiUrl(`/api/agency/bookings/${encodeURIComponent(reference)}/change`), {
+              const result = await apiFetch<{ alreadyOpen: boolean }>(`/api/agency/bookings/${encodeURIComponent(reference)}/change`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                credentials: apiCredentials(),
                 body: JSON.stringify({ kind: changeKind, detail: changeDetail }),
               });
-              const result = (await res.json()) as { ok: boolean; data?: { alreadyOpen: boolean } };
               setBusy(false);
               if (!result.ok) {
                 setError(t("error.validation"));

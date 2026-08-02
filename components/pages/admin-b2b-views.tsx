@@ -315,13 +315,11 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}`), {
+    const result = await apiFetch<unknown>(`/api/admin/agencies/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(body),
     });
-    const result = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!result.ok) {
       setError(result.error?.message ?? t("error.validation"));
@@ -342,13 +340,11 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/agents`), {
+    const result = await apiFetch<{ leavesNoAdmin: boolean }>(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(body),
     });
-    const result = (await res.json()) as { ok: boolean; data?: { leavesNoAdmin: boolean }; error?: { message: string } };
     setBusy(false);
     if (!result.ok) {
       setError(result.error?.message ?? t("error.validation"));
@@ -361,13 +357,11 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   async function addAgent() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/agents`), {
+    const result = await apiFetch<unknown>(`/api/admin/agencies/${encodeURIComponent(id)}/agents`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(newAgent),
     });
-    const result = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!result.ok) {
       setError(result.error?.message ?? t("error.validation"));
@@ -382,13 +376,11 @@ function AgencyDetail({ locale, id }: { locale: Locale; id: string }) {
   async function post() {
     setBusy(true);
     setError(null);
-    const res = await fetch(apiUrl(`/api/admin/agencies/${encodeURIComponent(id)}/ledger`), {
+    const result = await apiFetch<unknown>(`/api/admin/agencies/${encodeURIComponent(id)}/ledger`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
       body: JSON.stringify(payment),
     });
-    const result = (await res.json()) as { ok: boolean; error?: { message: string } };
     setBusy(false);
     if (!result.ok) {
       setError(result.error?.message ?? t("error.validation"));

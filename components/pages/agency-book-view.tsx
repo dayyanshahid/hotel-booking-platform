@@ -210,13 +210,11 @@ function TradeCheckout({
       setSession(body.data);
       setOthers(seedGuests(body.data.rooms));
 
-      const priced = await fetch(apiUrl("/api/agency/quote"), {
+      const pricedBody = await apiFetch<{ quotes: AgencyOfferView[] }>("/api/agency/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: apiCredentials(),
         body: JSON.stringify({ offerIds: offerIdsFrom(offerId) }),
       });
-      const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
       if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(sumQuotes(pricedBody.data.quotes));
 
       // Ask the supplier whether the rate still stands, before the agent has
@@ -226,13 +224,11 @@ function TradeCheckout({
       const distinct = [...new Set(offerIdsFrom(offerId))];
       const refreshed = await Promise.all(
         distinct.map(async (id) => {
-          const response = await fetch(apiUrl("/api/rates/recheck"), {
+          const parsed = await apiFetch<RecheckResult>("/api/rates/recheck", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            credentials: apiCredentials(),
             body: JSON.stringify({ offerId: id, checkoutSessionId: sessionId }),
           });
-          const parsed = (await response.json()) as { ok: boolean; data?: RecheckResult };
           return parsed.ok ? (parsed.data ?? null) : null;
         }),
       );
@@ -307,13 +303,11 @@ function TradeCheckout({
     const current = body.data.current;
     if (current) {
       setSession({ ...session, price: current.price, cancellation: current.cancellation });
-      const priced = await fetch(apiUrl("/api/agency/quote"), {
+      const pricedBody = await apiFetch<{ quotes: AgencyOfferView[] }>("/api/agency/quote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: apiCredentials(),
         body: JSON.stringify({ offerIds: offerIdsFrom(offerId) }),
       });
-      const pricedBody = (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
       if (pricedBody.ok && pricedBody.data?.quotes.length) setQuote(sumQuotes(pricedBody.data.quotes));
     }
     setRecheck({ ...body.data, requiresAcceptance: false });
