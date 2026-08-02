@@ -230,7 +230,7 @@ export function SearchResultsView({
 
         <div>
           {loading && !data && (
-            <ul className="space-y-4">
+            <ul className="@container space-y-4">
               {Array.from({ length: 4 }, (_, i) => (
                 <HotelCardSkeleton key={i} />
               ))}
@@ -243,7 +243,7 @@ export function SearchResultsView({
 
           {data && data.totalCount > 0 && view === "list" && (
             <>
-              <ul className="space-y-4">
+              <ul className="@container space-y-4">
                 {cards.map((card, i) => (
                   <HotelCard
                     key={card.canonicalHotelId}

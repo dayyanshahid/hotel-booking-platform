@@ -131,6 +131,32 @@ export function useCart(): CartApi {
 }
 
 /**
+ * Whether there is room to dock the cart beside the work.
+ *
+ * A CSS `lg:hidden` was not enough. The sheet's own effect locks body scroll
+ * while it is open, and a hidden element runs its effects like any other — so
+ * on a laptop the cart docked correctly, the overlay was invisible, and the
+ * results underneath silently would not scroll. The two shapes have to be
+ * mutually exclusive in the tree, not merely in the paint.
+ *
+ * Matches Tailwind's `lg`. Starts false so the server and the first client
+ * render agree, then corrects itself on mount.
+ */
+export function useHasRoomToDock(): boolean {
+  const [roomy, setRoomy] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 64rem)");
+    const sync = () => setRoomy(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return roomy;
+}
+
+/**
  * How long the earliest rate in the cart has left.
  *
  * A real number off the supplier's own `expiresAt`, not a made-up shopping

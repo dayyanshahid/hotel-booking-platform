@@ -571,6 +571,7 @@ export function Drawer({
   children,
   footer,
   side = "end",
+  className,
 }: {
   open: boolean;
   onClose: () => void;
@@ -578,6 +579,12 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   side?: "start" | "end";
+  /**
+   * Applied to the scrim, so a caller can retire the whole overlay at a
+   * breakpoint. The cart uses it to be a sheet on a phone and a docked panel
+   * on a laptop, where there is room to sit beside the work instead of over it.
+   */
+  className?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -593,7 +600,7 @@ export function Drawer({
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="scrim fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+    <div className={cx("scrim fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end", className)}>
       <div
         role="dialog"
         aria-modal="true"

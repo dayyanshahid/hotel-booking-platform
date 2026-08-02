@@ -8,7 +8,7 @@ import { Badge, Button, Drawer, Spinner, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { Wordmark } from "@/components/ui/wordmark";
 import { CartProvider } from "./cart";
-import { CartButton, CartDrawer } from "./cart-drawer";
+import { CartButton, CartDock, CartSheet } from "./cart-drawer";
 import { Meter, Money } from "./ui";
 import { href } from "@/lib/nav";
 import { refreshAgency, useAgency, type AgencyContext } from "./use-agency";
@@ -307,15 +307,23 @@ export function PortalShell({
         )}
       </div>
 
-      <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} title={t("agency.portal")}>
-        <div className="space-y-5">
-          <CreditRail locale={locale} context={context} />
-          {nav}
-        </div>
-      </Drawer>
+        <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} title={t("agency.portal")}>
+          <div className="space-y-5">
+            <CreditRail locale={locale} context={context} />
+            {nav}
+          </div>
+        </Drawer>
 
-        <CartDrawer locale={locale} />
+        {/*
+          The third column. Inside the flex row, so opening the cart narrows
+          the results rather than covering them — which is the whole point:
+          every Add button on the left stays live while it is open.
+        */}
+        <CartDock locale={locale} />
       </div>
+
+      {/* No room to dock on a phone, so there it stays a sheet. */}
+      <CartSheet locale={locale} />
     </CartProvider>
   );
 }

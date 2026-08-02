@@ -95,7 +95,19 @@ export function HotelCard({
       position on every row, so the eye scans one column instead of hunting.
     */
     <Card as="li" className="overflow-hidden p-2" ref={cardRef}>
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,240px)_1fr]">
+      {/*
+        Container queries, not viewport ones.
+
+        The card was laying out against the window while sitting in a column
+        the window knows nothing about. Open the cart and the results column
+        drops to about 450px — still "lg" as far as the viewport is concerned,
+        so the card kept its two-column desktop grid, and the title, the
+        amenities and the price rail rendered on top of each other.
+
+        Measured against its own width, the same card simply stacks when the
+        column is narrow and spreads when it is not, whatever else is on screen.
+      */}
+      <div className="grid gap-3 @lg:grid-cols-[minmax(0,240px)_1fr]">
         <Link
           href={href}
           className="block aspect-[4/3] overflow-hidden rounded-[6px] sm:aspect-auto sm:h-full sm:min-h-[190px]"
@@ -118,7 +130,7 @@ export function HotelCard({
           column: left as siblings of the price rail they were laid out as
           separate cells, which is what left a void down the middle of the row.
         */}
-        <div className="grid items-start gap-3 py-1 pe-1 lg:grid-cols-[1fr_minmax(0,210px)]">
+        <div className="grid items-start gap-3 py-1 pe-1 @3xl:grid-cols-[1fr_minmax(0,210px)]">
           <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -337,7 +349,7 @@ export function HotelCard({
 export function HotelCardSkeleton() {
   return (
     <Card as="li" className="overflow-hidden">
-      <div className="grid sm:grid-cols-[minmax(0,240px)_1fr]">
+      <div className="grid @lg:grid-cols-[minmax(0,240px)_1fr]">
         <div className="surface-sunken shimmer aspect-[4/3]" />
         <div className="space-y-3 p-4">
           <div className="surface-sunken shimmer h-4 w-1/3 rounded" />

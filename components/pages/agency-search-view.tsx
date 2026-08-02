@@ -448,7 +448,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
         <div>
           {busy && !data && (
-            <ul className="space-y-4">
+            <ul className="@container space-y-4">
               {Array.from({ length: 3 }, (_, i) => (
                 <HotelCardSkeleton key={i} />
               ))}
@@ -469,7 +469,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
           {data && data.totalCount > 0 && view === "list" && applied && (
             <>
-              <ul className="space-y-4">
+              <ul className="@container space-y-4">
                 {ordered.map((card, index) => {
                   const quote = quotes[card.offerSummary.offerId];
                   const currency = card.price.currency as CurrencyCode;
