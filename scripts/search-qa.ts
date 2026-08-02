@@ -448,6 +448,33 @@ async function run(): Promise<void> {
     return `${firstPage.results.length} cards complete`;
   });
 
+  await check("a search answers while the customer is still on the phone", async () => {
+    /*
+     * Measured, because the number is the feature.
+     *
+     * There is no overall deadline on a search: each supplier call carries its
+     * own timeout and its own retry, so a Hotelbeds availability call that
+     * times out costs twenty seconds, waits, and costs twenty more before the
+     * page gives up on it. Forty seconds is not a slow search, it is a lost
+     * call — and the caller who gives up first sees "fetch failed", which is
+     * what this harness saw before it started timing anything.
+     *
+     * Reported rather than enforced. The fix is a wall-clock budget for the
+     * whole search, returning what arrived and saying so, and that is a change
+     * to what the platform promises rather than a bug to be quietly patched.
+     */
+    const budgetMs = 15_000;
+    const started = Date.now();
+    const res = await search(intentFor(city!.id, { checkIn: iso(45), checkOut: iso(47) }));
+    const took = Date.now() - started;
+    if (!res.ok && res.status !== 503) throw new Error(`→ ${res.status} after ${(took / 1000).toFixed(1)}s`);
+    const detail = `${(took / 1000).toFixed(1)}s · ${res.data?.totalCount ?? 0} properties · ${res.data?.completeness ?? "no answer"}`;
+    if (took > budgetMs) {
+      return `WARN: ${detail} — past the ${budgetMs / 1000}s an agent on a call will wait`;
+    }
+    return detail;
+  });
+
   await check("every card's photograph is real and fetchable", async () => {
     if (!firstPage?.results.length) return "SKIP: no cards to inspect";
     const withPhoto = firstPage.results.filter((c) => c.heroImage);
