@@ -6,6 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Skeleton, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { useCart } from "@/components/agency/cart";
+import { PriceDetailsModal, RoomDetailsModal } from "@/components/agency/rate-panels";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { formatDeadline, formatMoney, nightsBetween } from "@/lib/format";
 import { guestLabel, roomLabel } from "@/lib/i18n";
@@ -59,6 +60,16 @@ export function RateShelf({
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [openRooms, setOpenRooms] = useState<Set<string>>(new Set());
+  /**
+   * The panel an agent has opened over the sheet.
+   *
+   * One at a time and held here rather than per row: a rate line is a flex
+   * container with four things in it already, and giving each one its own
+   * modal state mounts a dialog per rate — thirty-seven of them on the
+   * property this was built against.
+   */
+  const [priceFor, setPriceFor] = useState<Offer | null>(null);
+  const [roomFor, setRoomFor] = useState<CanonicalRoom | null>(null);
 
   const nights = nightsBetween(intent.checkIn, intent.checkOut);
 
@@ -215,7 +226,7 @@ export function RateShelf({
                         {room.beds.map((b) => `${b.count} × ${b.type}`).join(" / ")}
                       </span>
                     )}
-                    <span className="text-brand-700 underline">{t("agency.rateCount", { count: offers.length })}</span>
+                    <span className="text-brand-700">{t("agency.rateCount", { count: offers.length })}</span>
                   </span>
                 </span>
 
@@ -232,6 +243,17 @@ export function RateShelf({
                 </span>
               </button>
 
+              {/* Beside the row rather than inside the toggle: nesting a button
+                  in a button is invalid, and clicking it should open the room,
+                  not close it. */}
+              <button
+                type="button"
+                onClick={() => setRoomFor(room)}
+                className="text-brand-700 mt-1 text-xs font-medium underline underline-offset-2"
+              >
+                {t("agency.roomDetails")}
+              </button>
+
               {open && (
                 <BoardGroups
                   offers={offers}
@@ -239,6 +261,7 @@ export function RateShelf({
                   locale={locale}
                   nights={nights}
                   canIssue={canIssue}
+                  onPriceDetails={setPriceFor}
                   onAdd={(offer, quote) =>
                     cart.add({
                       offerId: offer.offerId,
@@ -260,6 +283,28 @@ export function RateShelf({
           );
         })}
       </ul>
+
+      {priceFor && (
+        <PriceDetailsModal
+          open
+          onClose={() => setPriceFor(null)}
+          hotelName={hotelName}
+          offer={priceFor}
+          quote={quotes[priceFor.offerId]}
+          checkIn={intent.checkIn}
+          locale={locale}
+        />
+      )}
+
+      {roomFor && (
+        <RoomDetailsModal
+          open
+          onClose={() => setRoomFor(null)}
+          hotelName={hotelName}
+          room={roomFor}
+          locale={locale}
+        />
+      )}
 
       <div className="hairline flex justify-center border-t px-4 py-3">
         <Link href={`${href(locale, `/agency/hotel/${slug}`)}?${new URLSearchParams({ from: "search" }).toString()}`}>
@@ -287,6 +332,7 @@ function BoardGroups({
   nights,
   canIssue,
   onAdd,
+  onPriceDetails,
 }: {
   offers: Offer[];
   quotes: Record<string, AgencyOfferView>;
@@ -294,6 +340,8 @@ function BoardGroups({
   nights: number;
   canIssue: boolean;
   onAdd: (offer: Offer, quote?: AgencyOfferView) => void;
+  /** Opens the night-by-night breakdown for one rate. */
+  onPriceDetails: (offer: Offer) => void;
 }) {
   const { t } = useApp();
 
@@ -376,6 +424,13 @@ function BoardGroups({
                       <p className="text-muted text-[11px]">
                         {nights} {nights === 1 ? t("common.night") : t("common.nights")}
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => onPriceDetails(offer)}
+                        className="text-brand-700 text-[11px] font-medium underline underline-offset-2"
+                      >
+                        {t("agency.priceDetails")}
+                      </button>
                     </div>
 
                     {canIssue && (

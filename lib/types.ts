@@ -88,6 +88,22 @@ export interface PriceStack {
   chargeCurrency?: CurrencyCode;
   fxBasis?: string;
   nights: number;
+  /**
+   * What each night of the stay costs, when the supplier says.
+   *
+   * Hotelbeds returns a daily breakdown and it was being thrown away, so a
+   * price-details panel had nothing to show but the total divided by the
+   * nights — which is a different claim. A weekend night is routinely dearer
+   * than the Tuesday beside it, and an agent quoting a four-night stay is
+   * often asked exactly that.
+   *
+   * Carried as a share of the total rather than the supplier's own net
+   * figures: the total on screen has been marked up and converted, and a
+   * breakdown that does not add up to the number above it is worse than no
+   * breakdown. Absent where the supplier prices the stay as a whole, and the
+   * panel then says it is showing an average.
+   */
+  nightly?: { date: string; amount: number }[];
   /** Guests this total covers — the occupancy of `roomsCovered`, not the party. */
   guests: number;
   /**

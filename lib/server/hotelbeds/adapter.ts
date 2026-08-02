@@ -142,6 +142,33 @@ function buildPrice(
 
   const includedSum = included.reduce((sum, line) => sum + line.amount, 0);
 
+  /*
+   * The supplier's own night-by-night split, rescaled onto the total we show.
+   *
+   * `dailyNet` is in the supplier's currency before markup, and the total
+   * beside it is neither. Converting each night separately would round seven
+   * times and leave a breakdown that does not sum to the price above it, so
+   * the daily figures are used for their *shape* — each night's share of the
+   * supplier's own sum — and applied to the final total. The last night takes
+   * the rounding remainder, so the column always adds up exactly.
+   */
+  const nightly = (() => {
+    const daily = (rate.dailyRates ?? [])
+      .map((day) => toNumber(day.dailyNet, NaN))
+      .filter((amount) => Number.isFinite(amount) && amount > 0);
+    if (daily.length !== nights || nights < 1) return undefined;
+    const sum = daily.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return undefined;
+
+    let allocated = 0;
+    return daily.map((amount, index) => {
+      const last = index === nights - 1;
+      const share = last ? total - allocated : Math.round((amount / sum) * total);
+      allocated += share;
+      return { date: addDays(intent.checkIn, index), amount: share };
+    });
+  })();
+
   // A strike-through only where the supplier itself quotes a comparable higher
   // selling rate (§8.2 — valid comparable basis only).
   const sellingRaw = toNumber(rate.sellingRate ?? rate.hotelSellingRate, 0);
@@ -155,6 +182,7 @@ function buildPrice(
       currency: display,
       total,
       nightlyAverage: Math.round(total / nights),
+      nightly,
       base: Math.max(0, total - includedSum),
       includedCharges: included,
       payAtProperty,
