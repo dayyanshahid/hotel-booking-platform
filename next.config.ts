@@ -23,6 +23,25 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./data-seed/**/*"],
   },
+
+  /**
+   * Every response is the type it says it is.
+   *
+   * The API echoes what was typed — a destination query, a trip sentence — and
+   * those responses are JSON, which a browser will not execute. That protection
+   * lasts exactly as long as the browser believes the content type, and content
+   * sniffing is the mechanism by which it stops believing it. One header ends
+   * the argument for the whole app rather than for the routes somebody
+   * remembered, which is how the logo endpoint already does it.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [{ key: "X-Content-Type-Options", value: "nosniff" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

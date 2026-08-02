@@ -5,7 +5,7 @@ import { bookableCountryList, DESTINATIONS } from "@/lib/data/destinations";
 import { localized } from "@/lib/data/catalog";
 import { REGIONS, type Region } from "@/lib/data/geo/countries";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
-import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { cityLabel, countLabel, countryLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
@@ -26,6 +26,8 @@ export async function generateMetadata({
     description: t("browse.allDescription", {
       cities: DESTINATIONS.length,
       countries: bookableCountryList().length,
+      cityUnit: cityLabel(t, DESTINATIONS.length, locale),
+      countryUnit: countryLabel(t, bookableCountryList().length, locale),
     }),
     alternates: {
       canonical: `/${locale}/destinations`,
@@ -70,6 +72,8 @@ export default async function DestinationsIndexPage({
           {t("browse.allDescription", {
             cities: DESTINATIONS.length,
             countries: countries.length,
+            cityUnit: cityLabel(t, DESTINATIONS.length, locale),
+            countryUnit: countryLabel(t, countries.length, locale),
           })}
         </p>
       </header>

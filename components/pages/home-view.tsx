@@ -10,7 +10,7 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { destinationPhoto, heroPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneUrl } from "@/lib/illustration/scenes";
 import { formatMoney } from "@/lib/format";
-import { countLabel } from "@/lib/i18n";
+import { cityLabel, countLabel } from "@/lib/i18n";
 import { href, searchHref, searchParamsFromIntent, typedSearchHref } from "@/lib/nav";
 import type { CurrencyCode, Locale, SearchFilters, SearchIntent } from "@/lib/types";
 
@@ -198,7 +198,11 @@ export function HomeView({
             {t("home.heroTitle")}
           </h1>
           <p className="mt-4 max-w-2xl leading-relaxed text-white/80 sm:text-lg">
-            {t("home.heroSubtitle", { properties: totalProperties, cities: totalCities })}
+            {t("home.heroSubtitle", {
+              properties: totalProperties,
+              cities: totalCities,
+              cityUnit: cityLabel(t, totalCities, locale),
+            })}
           </p>
 
           {/*

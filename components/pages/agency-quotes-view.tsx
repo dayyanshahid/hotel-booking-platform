@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { brandingOf } from "@/lib/agency/branding";
+import { roomLabel } from "@/lib/i18n";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
@@ -192,7 +193,11 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
       {shortRooms && (
         <div className="no-print">
           <Alert tone="warning" title={t("agency.quoteShortRooms")}>
-            {t("agency.quoteShortRoomsBody", { quoted: roomsQuoted, wanted: roomsWanted })}
+            {t("agency.quoteShortRoomsBody", {
+              quoted: roomsQuoted,
+              wanted: roomsWanted,
+              unit: roomLabel(t, roomsWanted, locale),
+            })}
           </Alert>
         </div>
       )}

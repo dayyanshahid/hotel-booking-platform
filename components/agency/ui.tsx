@@ -5,6 +5,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Button, Card, Skeleton, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { formatMoney } from "@/lib/format";
+import { roomLabel } from "@/lib/i18n";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
 /**
@@ -476,7 +477,7 @@ export function RateQuantity({
   onRemove: () => void;
   onFillAll: () => void;
 }) {
-  const { t } = useApp();
+  const { t, locale } = useApp();
   const full = roomsHeld >= roomsWanted;
 
   if (count === 0) {
@@ -507,7 +508,7 @@ export function RateQuantity({
           −
         </button>
         <span aria-live="polite" className="min-w-14 text-center text-sm font-semibold">
-          {t("agency.roomsAtRate", { count })}
+          {t("agency.roomsAtRate", { count, unit: roomLabel(t, count, locale) })}
         </span>
         <button
           type="button"

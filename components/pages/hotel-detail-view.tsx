@@ -25,6 +25,7 @@ import {
 } from "@/components/ui";
 import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { addDays, distanceLabel, formatDate, formatMoney, guestCount, todayIso } from "@/lib/format";
+import { guestLabel, nightLabel } from "@/lib/i18n";
 import { href, hotelHref } from "@/lib/nav";
 import type {
   ApiError,
@@ -584,7 +585,12 @@ export function HotelDetailView({
                 {formatMoney(lowest.price.total, lowest.price.currency, locale)}
               </p>
               <p className="text-muted truncate text-xs">
-                {t("rate.totalFor", { nights: lowest.price.nights, guests: lowest.price.guests })}
+                {t("rate.totalFor", {
+                  nights: lowest.price.nights,
+                  guests: lowest.price.guests,
+                  nightUnit: nightLabel(t, lowest.price.nights, locale),
+                  guestUnit: guestLabel(t, lowest.price.guests, locale),
+                })}
               </p>
               <PerRoomNote price={lowest.price} showEstimate={false} />
             </>

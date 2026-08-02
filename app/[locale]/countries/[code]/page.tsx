@@ -10,7 +10,7 @@ import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { destinationFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
 import { formatMoney } from "@/lib/format";
 import { sceneUrl } from "@/lib/illustration/scenes";
-import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
+import { cityLabel, countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
 
@@ -129,6 +129,9 @@ export default async function CountryPage({
             properties: totalProperties,
             cities: cities.length,
             currency: country.currency,
+            propertyUnit: countLabel(t, totalProperties),
+            // A country with one city is not a rounding error — Singapore is one.
+            cityUnit: cityLabel(t, cities.length, locale),
           })}
         </p>
       </header>

@@ -481,7 +481,13 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                   basketCoverage.covered < basketCoverage.wanted ? "text-caution-700" : "text-muted",
                 )}
               >
-                {t("agency.basketCovers", { covered: basketCoverage.covered, wanted: basketCoverage.wanted })}
+                {t("agency.basketCovers", {
+                  covered: basketCoverage.covered,
+                  wanted: basketCoverage.wanted,
+                  // Counted rather than assumed plural: a one-room party read
+                  // "covers 1 of 1 rooms" on the commonest search there is.
+                  unit: roomLabel(t, basketCoverage.wanted, locale),
+                })}
               </span>
             </p>
             {/*
@@ -503,7 +509,10 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                       router.push(href(locale, `/agency/book/${basket.map(encodeURIComponent).join(",")}`))
                     }
                   >
-                    {t("agency.bookRooms", { rooms: basketCoverage.covered })}
+                    {t("agency.bookRooms", {
+                      rooms: basketCoverage.covered,
+                      unit: roomLabel(t, basketCoverage.covered, locale),
+                    })}
                   </Button>
                 ) : (
                   <span className="text-muted self-center text-xs">

@@ -88,6 +88,10 @@ const en: Dict = {
   "count.adults": "adults",
   "count.child": "child",
   "count.children": "children",
+  "count.city": "city",
+  "count.cities": "cities",
+  "count.country": "country",
+  "count.countries": "countries",
   "common.rooms": "Rooms",
   "common.room": "Room",
   "common.adults": "Adults",
@@ -138,7 +142,8 @@ const en: Dict = {
 
   "home.heroTitle": "Your Journey, Our Expertise",
   "home.heroEyebrow": "Trusted by thousands since 1984",
-  "home.heroSubtitle": "{properties} places to stay in {cities} cities, priced as a full total — taxes and fees in, cancellation terms on the card.",
+  "home.heroSubtitle": "{properties} places to stay in {cities} {cityUnit}, priced as a full total — taxes and fees in, cancellation terms on the card.",
+  "home.metaDescription": "Hotels worldwide, priced as a full total — taxes and fees in, cancellation terms on the card.",
   "home.heroSearchHint": "Enter a city, a landmark or a property name.",
   "home.collections": "Browse by travel style",
   "home.recent": "Pick up where you left off",
@@ -146,12 +151,12 @@ const en: Dict = {
   "home.upcoming": "Your next trip",
   "home.valueTitle": "Why book here",
   "browse.allTitle": "Every destination",
-  "browse.allDescription": "{cities} cities in {countries} countries, and a total price on every one of them.",
+  "browse.allDescription": "{cities} {cityUnit} in {countries} {countryUnit}, and a total price on every one of them.",
   "browse.regions": "Jump to a region",
   "browse.cities": "Cities",
   "browse.countryTitle": "Hotels in {country}",
   "browse.countryDescription": "Compare stays across {country}. Total prices, cancellation terms and local charges shown before you choose.",
-  "browse.countryStats": "{properties} properties across {cities} cities. Prices are usually quoted locally in {currency}; switch the display currency at any time.",
+  "browse.countryStats": "{properties} {propertyUnit} across {cities} {cityUnit}. Prices are usually quoted locally in {currency}; switch the display currency at any time.",
   "browse.staysIn": "Stays in {country}",
   "browse.elsewhere": "Nearby countries",
   "region.europe": "Europe",
@@ -163,7 +168,7 @@ const en: Dict = {
   "region.oceania": "Oceania",
   "home.browseByType": "Browse by property type",
   "home.exploreWorld": "Explore the world",
-  "home.regionStats": "{cities} cities · {countries} countries",
+  "home.regionStats": "{cities} {cityUnit} · {countries} {countryUnit}",
   "home.browseAll": "Browse every destination",
   "home.destinations": "Popular destinations",
   "home.aiPrompt": "Describe your trip",
@@ -367,7 +372,7 @@ const en: Dict = {
   "rate.included": "Included in the total",
   "rate.payAtPropertyCharges": "Payable at the property",
   "rate.estimated": "estimated",
-  "rate.totalFor": "Total for {nights} nights, {guests} guests",
+  "rate.totalFor": "Total for {nights} {nightUnit}, {guests} {guestUnit}",
   "rate.nightlyAverage": "{amount} average per night",
   "rate.perRoom": "Per room",
   "rate.perRoomOf": "Per room — your search needs {rooms}",
@@ -490,7 +495,6 @@ const en: Dict = {
   "trips.lookupBody": "Enter the booking reference and the email used at checkout. We will send a one-time code.",
   "trips.merge": "Add to my account",
   "trips.mergeDone": "Booking added to your account.",
-  "trips.nights": "{n} nights",
   "trips.viewBooking": "View booking",
 
   "bookingDetail.status": "Booking status",
@@ -940,7 +944,6 @@ const en: Dict = {
   "agency.priceUnavailable": "Price unavailable",
   "agency.pricingFailed": "These rooms are live and bookable, but we could not work out your cost and selling price for them just now.",
   "agency.retryPricing": "Price them again",
-  "agency.resultCount": "{n} properties",
   "agency.pricedIn": "Priced in {currency}",
   "agency.describeTrip": "Describe the trip",
   "agency.describeTripPlaceholder": "Family of four, Jeddah beachfront, 3 nights in October, free cancellation",
@@ -1148,15 +1151,15 @@ const en: Dict = {
   "agency.preparedFor": "Prepared for",
   "agency.validUntil": "Valid until",
   "agency.quoteFooter": "Prices are held until the date shown and are subject to availability at the time of booking.",
-  "agency.basketCovers": "covers {covered} of {wanted} rooms",
-  "agency.bookRooms": "Book {rooms} rooms",
+  "agency.basketCovers": "covers {covered} of {wanted} {unit}",
+  "agency.bookRooms": "Book {rooms} {unit}",
   "agency.useForAllRooms": "Use for all {rooms} rooms",
-  "agency.roomsAtRate": "{count} rooms",
+  "agency.roomsAtRate": "{count} {unit}",
   "agency.addRoomAtRate": "One more room at this rate",
   "agency.removeRoomAtRate": "One fewer room at this rate",
   "agency.basketManyHotels": "Rates at more than one property — quote them together, or book each property on its own.",
   "agency.quoteShortRooms": "This quote does not cover every room",
-  "agency.quoteShortRoomsBody": "The lines add up to {quoted} of the {wanted} rooms searched, because a supplier prices a rate per room. Add a line for each remaining room before sending this — the total below is correct for what is listed, which is what makes it easy to send short.",
+  "agency.quoteShortRoomsBody": "The lines add up to {quoted} of the {wanted} {unit} searched, because a supplier prices a rate per room. Add a line for each remaining room before sending this — the total below is correct for what is listed, which is what makes it easy to send short.",
   "agency.markAccepted": "Mark accepted",
   "agency.markDeclined": "Mark declined",
   "agency.quoteStatus.open": "Open",
@@ -1292,6 +1295,10 @@ const ar: Dict = {
   "count.adults": "بالغين",
   "count.child": "طفل",
   "count.children": "أطفال",
+  "count.city": "مدينة",
+  "count.cities": "مدن",
+  "count.country": "دولة",
+  "count.countries": "دول",
   "common.rooms": "الغرف",
   "common.room": "غرفة",
   "common.adults": "بالغون",
@@ -1342,7 +1349,8 @@ const ar: Dict = {
 
   "home.heroTitle": "رحلتك، بخبرتنا",
   "home.heroEyebrow": "موثوق به من الآلاف منذ 1984",
-  "home.heroSubtitle": "{properties} مكان إقامة في {cities} مدينة، بسعر إجمالي كامل — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
+  "home.heroSubtitle": "{properties} مكان إقامة في {cities} {cityUnit}، بسعر إجمالي كامل — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
+  "home.metaDescription": "فنادق حول العالم بسعر إجمالي كامل — الضرائب والرسوم مشمولة، وشروط الإلغاء على البطاقة.",
   "home.heroSearchHint": "أدخل مدينة أو معلمًا أو اسم عقار.",
   "home.collections": "تصفَّح حسب أسلوب السفر",
   "home.recent": "أكمل من حيث توقفت",
@@ -1392,12 +1400,12 @@ const ar: Dict = {
   "home.faqA5": "أنت تختار عملة العرض. وإذا تمت التسوية بعملة أخرى نوضح ذلك على السعر، ويُثبَّت سعر الصرف لحظة الدفع لا بعده تقديرًا.",
   "home.valueTitle": "لماذا تحجز معنا",
   "browse.allTitle": "كل الوجهات",
-  "browse.allDescription": "{cities} مدينة في {countries} دولة، وسعر إجمالي على كل واحدة منها.",
+  "browse.allDescription": "{cities} {cityUnit} في {countries} {countryUnit}، وسعر إجمالي على كل واحدة منها.",
   "browse.regions": "انتقل إلى منطقة",
   "browse.cities": "المدن",
   "browse.countryTitle": "فنادق في {country}",
   "browse.countryDescription": "قارن أماكن الإقامة في {country}. الأسعار الإجمالية وشروط الإلغاء والرسوم المحلية معروضة قبل الاختيار.",
-  "browse.countryStats": "{properties} عقارًا في {cities} مدينة. تُسعَّر الإقامة محليًا عادةً بعملة {currency}، ويمكنك تغيير عملة العرض في أي وقت.",
+  "browse.countryStats": "{properties} {propertyUnit} في {cities} {cityUnit}. تُسعَّر الإقامة محليًا عادةً بعملة {currency}، ويمكنك تغيير عملة العرض في أي وقت.",
   "browse.staysIn": "أماكن الإقامة في {country}",
   "browse.elsewhere": "دول قريبة",
   "region.europe": "أوروبا",
@@ -1409,7 +1417,7 @@ const ar: Dict = {
   "region.oceania": "أوقيانوسيا",
   "home.browseByType": "تصفّح حسب نوع العقار",
   "home.exploreWorld": "استكشف العالم",
-  "home.regionStats": "{cities} مدينة · {countries} دولة",
+  "home.regionStats": "{cities} {cityUnit} · {countries} {countryUnit}",
   "home.browseAll": "تصفّح كل الوجهات",
   "home.destinations": "وجهات مميزة",
   "home.aiPrompt": "صف رحلتك",
@@ -1566,7 +1574,7 @@ const ar: Dict = {
   "rate.included": "مشمول في الإجمالي",
   "rate.payAtPropertyCharges": "يُدفع في الفندق",
   "rate.estimated": "تقديري",
-  "rate.totalFor": "الإجمالي لـ {nights} ليالٍ، {guests} ضيوف",
+  "rate.totalFor": "الإجمالي لـ {nights} {nightUnit}، {guests} {guestUnit}",
   "rate.nightlyAverage": "{amount} متوسط الليلة",
   "rate.perRoom": "للغرفة الواحدة",
   "rate.perRoomOf": "للغرفة الواحدة — بحثك يحتاج {rooms} غرف",
@@ -1689,7 +1697,6 @@ const ar: Dict = {
   "trips.lookupBody": "أدخل رقم الحجز والبريد المستخدم عند الحجز. سنرسل رمزًا لمرة واحدة.",
   "trips.merge": "أضف إلى حسابي",
   "trips.mergeDone": "تمت إضافة الحجز إلى حسابك.",
-  "trips.nights": "{n} ليالٍ",
   "trips.viewBooking": "عرض الحجز",
 
   "bookingDetail.status": "حالة الحجز",
@@ -2139,7 +2146,6 @@ const ar: Dict = {
   "agency.priceUnavailable": "السعر غير متاح",
   "agency.pricingFailed": "هذه الغرف متاحة وقابلة للحجز، لكن تعذّر حساب تكلفتك وسعر بيعك لها الآن.",
   "agency.retryPricing": "أعد حساب الأسعار",
-  "agency.resultCount": "{n} عقارًا",
   "agency.pricedIn": "التسعير بعملة {currency}",
   "agency.describeTrip": "صف الرحلة",
   "agency.describeTripPlaceholder": "عائلة من أربعة، جدة على الواجهة البحرية، 3 ليالٍ في أكتوبر، إلغاء مجاني",
@@ -2347,15 +2353,15 @@ const ar: Dict = {
   "agency.preparedFor": "مُعد لـ",
   "agency.validUntil": "صالح حتى",
   "agency.quoteFooter": "الأسعار محجوزة حتى التاريخ المذكور وتخضع للتوافر عند الحجز.",
-  "agency.basketCovers": "تغطي {covered} من {wanted} غرف",
-  "agency.bookRooms": "احجز {rooms} غرف",
+  "agency.basketCovers": "تغطي {covered} من {wanted} {unit}",
+  "agency.bookRooms": "احجز {rooms} {unit}",
   "agency.useForAllRooms": "استخدمه لكل الغرف ({rooms})",
-  "agency.roomsAtRate": "{count} غرف",
+  "agency.roomsAtRate": "{count} {unit}",
   "agency.addRoomAtRate": "غرفة إضافية بهذا السعر",
   "agency.removeRoomAtRate": "غرفة أقل بهذا السعر",
   "agency.basketManyHotels": "أسعار من أكثر من عقار — يمكن عرضها معًا، أما الحجز فيتم لكل عقار على حدة.",
   "agency.quoteShortRooms": "هذا العرض لا يغطي كل الغرف",
-  "agency.quoteShortRoomsBody": "البنود تغطي {quoted} من {wanted} غرف مطلوبة، لأن المورّد يسعّر الغرفة الواحدة. أضف بندًا لكل غرفة متبقية قبل الإرسال — الإجمالي أدناه صحيح لما هو مدرج، وهذا ما يجعل إرساله ناقصًا سهلًا.",
+  "agency.quoteShortRoomsBody": "البنود تغطي {quoted} من {wanted} {unit} مطلوبة، لأن المورّد يسعّر الغرفة الواحدة. أضف بندًا لكل غرفة متبقية قبل الإرسال — الإجمالي أدناه صحيح لما هو مدرج، وهذا ما يجعل إرساله ناقصًا سهلًا.",
   "agency.markAccepted": "تعليم كمقبول",
   "agency.markDeclined": "تعليم كمرفوض",
   "agency.quoteStatus.open": "مفتوح",
@@ -2444,6 +2450,18 @@ const ar: Dict = {
 
 const dictionaries: Record<Locale, Dict> = { en, ar };
 
+/**
+ * The dictionaries themselves, for the test that keeps them honest.
+ *
+ * Nothing in the app should read a whole dictionary — `createTranslator` is the
+ * only sanctioned way in — but a suite that cannot see them cannot check that
+ * the two locales still say the same things with the same placeholders. Both
+ * halves of that have gone wrong: an Arabic key quietly falling back to English,
+ * and a `{unit}` added to one language and not the other, which renders the
+ * braces to the reader.
+ */
+export const DICTIONARIES: Record<Locale, Readonly<Dict>> = dictionaries;
+
 export type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
 
 export function createTranslator(locale: Locale): TranslateFn {
@@ -2516,4 +2534,12 @@ export function adultLabel(t: (key: never) => string, n: number, locale = "en"):
 
 export function childLabel(t: (key: never) => string, n: number, locale = "en"): string {
   return plural(t, n, locale, "count.child", "count.children");
+}
+
+export function cityLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.city", "count.cities");
+}
+
+export function countryLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.country", "count.countries");
 }

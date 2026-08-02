@@ -16,7 +16,7 @@ import type { CurrencyCode, Locale } from "@/lib/types";
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
   const t = createTranslator(isLocale(locale) ? locale : "en");
-  return { title: t("home.heroTitle"), description: t("home.heroSubtitle") };
+  return { title: t("home.heroTitle"), description: t("home.metaDescription") };
 }
 
 /**

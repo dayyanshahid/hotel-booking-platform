@@ -47,7 +47,7 @@ export async function generateMetadata({
       default: `${t("brand.name")} — ${t("brand.tagline")}`,
       template: `%s · ${t("brand.name")}`,
     },
-    description: t("home.heroSubtitle"),
+    description: t("home.metaDescription"),
     // hreflang for every locale, with a stable canonical (§12.4).
     alternates: {
       canonical: `/${locale}`,

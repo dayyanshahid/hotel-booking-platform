@@ -37,6 +37,7 @@ import {
   isPerRoomTotal,
   todayIso,
 } from "@/lib/format";
+import { roomLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import type {
@@ -278,7 +279,7 @@ function HotelDetail({
                   router.push(href(locale, `/agency/book/${basket.map(encodeURIComponent).join(",")}`))
                 }
               >
-                {t("agency.bookRooms", { rooms: basket.length })}
+                {t("agency.bookRooms", { rooms: basket.length, unit: roomLabel(t, basket.length, locale) })}
               </Button>
             )}
           </div>

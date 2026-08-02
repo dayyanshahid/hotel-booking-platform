@@ -387,8 +387,21 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const filtered = applyFilters(withDistance, options.filters ?? {}, normalized);
   const sorted = applySort(filtered, options.sort ?? "recommended");
 
-  const page = options.page ?? 1;
-  const pageSize = options.pageSize ?? 12;
+  /*
+   * Paging here is cumulative, and deliberately so.
+   *
+   * The results screen appends — "load more" adds twelve rows below the ones
+   * already read — so page three means everything up to the end of page three,
+   * not rows twenty-five to thirty-six. Returning a window instead would make
+   * the caller stitch pages together and re-stitch them whenever a filter
+   * changed, and a stitch that drops a row is a room the agent never sees.
+   *
+   * What it does need is a ceiling. Both numbers come from the request body,
+   * and `slice(0, page * pageSize)` with either of them unbounded is a way to
+   * ask one request for every row of a large city.
+   */
+  const pageSize = Math.min(Math.max(Math.floor(options.pageSize ?? 12), 1), 48);
+  const page = Math.min(Math.max(Math.floor(options.page ?? 1), 1), 40);
   const pageItems = sorted.slice(0, page * pageSize).map((x) => x.card);
 
   // Every live supplier that was asked counts as a source, and each one that

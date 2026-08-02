@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Modal, cx } from "@/components/ui";
 import { formatDeadline, formatMoney, isPerRoomTotal, partyEstimate } from "@/lib/format";
+import { guestLabel, nightLabel } from "@/lib/i18n";
 import type { CancellationPolicy, PriceStack as PriceStackType } from "@/lib/types";
 
 /**
@@ -86,7 +87,12 @@ export function PriceBlock({
         {formatMoney(price.total, price.currency, locale)}
       </p>
       <p className="text-muted text-xs">
-        {t("rate.totalFor", { nights: price.nights, guests: price.guests })}
+        {t("rate.totalFor", {
+          nights: price.nights,
+          guests: price.guests,
+          nightUnit: nightLabel(t, price.nights, locale),
+          guestUnit: guestLabel(t, price.guests, locale),
+        })}
       </p>
       <p className="text-muted text-xs">
         {t("rate.nightlyAverage", { amount: formatMoney(price.nightlyAverage, price.currency, locale) })}

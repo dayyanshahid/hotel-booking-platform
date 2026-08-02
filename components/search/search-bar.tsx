@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Button, cx } from "@/components/ui";
-import { DestinationAutocomplete } from "./destination-autocomplete";
+import { DestinationAutocomplete, type DestinationResolver } from "./destination-autocomplete";
 import { DateRangePicker } from "./date-range-picker";
 import { OccupancyPicker } from "./occupancy-picker";
 import { addDays, guestCount, todayIso } from "@/lib/format";
@@ -66,13 +66,45 @@ export function SearchBar({
     accessibleRoom: initial?.accessibleRoom ?? false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Set while the typed destination is being settled on submit. */
+  const [resolving, setResolving] = useState(false);
+  const resolver = useRef<DestinationResolver | null>(null);
 
-  function submit(e: React.FormEvent) {
+  /**
+   * Search what was typed, not only what was clicked.
+   *
+   * A combobox distinguishes the text from the selection, and nobody using it
+   * does. Typing a city and pressing Search — the most natural thing to do with
+   * a search bar — met "Choose a destination from the list", with the correctly
+   * spelled city sitting in the field above the message. So before refusing,
+   * the field is given the chance to settle its own text: an unambiguous name
+   * becomes the destination, and only a genuinely ambiguous one still asks.
+   *
+   * The refusal is kept for the case it was written for. Two cities called
+   * Cairo is not a formality — picking one silently would put a customer in the
+   * wrong country — and there the list opens instead of the error appearing.
+   */
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
+
+    let picked = destination;
+    if (!picked && resolver.current) {
+      setResolving(true);
+      try {
+        const settled = await resolver.current.resolve();
+        if (settled) {
+          picked = { id: settled.id, label: settled.label, type: settled.type };
+          setDestination(picked);
+        }
+      } finally {
+        setResolving(false);
+      }
+    }
+
     const intent: SearchIntent = {
-      destinationId: destination?.id ?? "",
-      destinationDisplay: destination?.label ?? "",
-      destinationType: destination?.type ?? "city",
+      destinationId: picked?.id ?? "",
+      destinationDisplay: picked?.label ?? "",
+      destinationType: picked?.type ?? "city",
       checkIn: dates.checkIn,
       checkOut: dates.checkOut,
       flexibility: dates.flexibility,
@@ -114,7 +146,7 @@ export function SearchBar({
 
   return (
     <form
-      onSubmit={submit}
+      onSubmit={(e) => void submit(e)}
       className={cx(
         // The hero form is framed by the yellow outline its parent draws, so it
         // carries no border of its own — two edges 3px apart reads as a mistake.
@@ -132,6 +164,7 @@ export function SearchBar({
           value={destination}
           onSelect={(next) => setDestination(next)}
           error={errors.destinationId}
+          resolverRef={resolver}
         />
         <DateRangePicker
           checkIn={dates.checkIn}
@@ -151,7 +184,7 @@ export function SearchBar({
             type="submit"
             variant="primary"
             size={variant === "hero" ? "lg" : "md"}
-            loading={busy}
+            loading={busy || resolving}
             className="h-full w-full lg:w-auto lg:px-8"
           >
             {submitLabel ?? t("common.search")}
