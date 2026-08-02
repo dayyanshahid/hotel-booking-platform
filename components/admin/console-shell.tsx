@@ -116,6 +116,24 @@ export function ConsoleShell({
     },
   ];
 
+  /**
+   * The name of the page, taken from whichever nav entry is current.
+   *
+   * The same rule the sidebar highlights with, so the heading and the
+   * highlight can never disagree. A detail page — one booking, one agency —
+   * falls to its section's name, which is still the right answer for an
+   * outline: "Bookings" is where the reader is.
+   */
+  const pageTitle =
+    groups
+      .flatMap((section) => section.links)
+      .filter((link) => {
+        const target = href(locale, link.path);
+        return link.path === "/admin" ? pathname === target : pathname.startsWith(target);
+      })
+      // Longest match wins, so /admin never beats /admin/bookings.
+      .sort((a, b) => b.path.length - a.path.length)[0]?.label ?? t("admin.console");
+
   async function signOut() {
     await fetch(apiUrl("/api/admin/session"), { method: "DELETE", credentials: apiCredentials() });
     refreshAdmin();
@@ -164,6 +182,24 @@ export function ConsoleShell({
           </div>
         ))}
       </nav>
+
+      {/*
+        The console's one top-level heading.
+
+        Every signed-in page here titled itself with `SectionHeading`, which is
+        an h2 — so the whole console rendered documents whose outline began at
+        the second level with nothing above it. A screen reader announcing
+        "heading level 2, Operations" with no level 1 gives no anchor for where
+        that section sits, and the pages genuinely do have several equal
+        sections, so promoting one of the h2s would have been picking a
+        favourite among siblings.
+
+        Taken by the shell instead, from the navigation, which is by definition
+        the name of the page. Visually hidden because the page already shows
+        its title; this is the outline, not decoration. The agency portal has
+        always done the equivalent through its own `PageHeader`.
+      */}
+      <h1 className="sr-only">{pageTitle}</h1>
 
       {children(session)}
     </div>
