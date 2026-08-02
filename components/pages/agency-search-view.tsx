@@ -19,7 +19,7 @@ import {
   SortControl,
 } from "@/components/commerce/filters-panel";
 import { PageHeader, TradePrices } from "@/components/agency/ui";
-import { QuoteModal } from "@/components/agency/quote-modal";
+import { RateShelf } from "@/components/agency/rate-shelf";
 import Link from "next/link";
 import {
   addDays,
@@ -134,44 +134,18 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * a button whose only outcome is a refusal. Browsing rates with cost and
    * margin on them is exactly what the permission is for.
    */
-  const canQuote = may(context, "booking");
   const canIssue = may(context, "issue");
 
-  /** Offers the agent has set aside for a quote, in the order they picked them. */
-  const [basket, setBasket] = useState<string[]>([]);
-  const [quoteOpen, setQuoteOpen] = useState(false);
-
   /**
-   * How much of the party the basket currently houses.
+   * Which property has its rate sheet open. One at a time.
    *
-   * A rate that covers one room contributes one, whatever the search asked for.
-   * An offer picked from an earlier page and no longer on screen counts as one
-   * rather than as nothing: undercounting would nag about a basket that is
-   * already complete, and the conservative direction here is to assume less
-   * coverage, not more.
+   * Two open sheets is four hundred pixels of rates above the row an agent is
+   * reading, and every one of them costs a supplier request. Comparing two
+   * properties is done by opening one, reading it, and opening the next — the
+   * results themselves stay in place either way, which is the thing the old
+   * page could not do.
    */
-  const basketCoverage = (() => {
-    const byOfferId = new Map((data?.results ?? []).map((card) => [card.offerSummary.offerId, card]));
-    /*
-     * Which properties the basket spans.
-     *
-     * A quote happily lists three hotels — that is what a quote is for. A booking
-     * cannot: one order is one property, and the checkout refuses a mixed set.
-     * Offering "Book 3 rooms" over rates at three hotels sent the agent to a page
-     * that could only turn them away, so the button knows before they click it.
-     */
-    const hotels = new Set(
-      basket.map((offerId) => byOfferId.get(offerId)?.slug).filter(Boolean) as string[],
-    );
-    return {
-      wanted: Math.max(1, (applied ?? seed).rooms.length),
-      covered: basket.reduce(
-        (sum, offerId) => sum + Math.max(1, byOfferId.get(offerId)?.price.roomsCovered ?? 1),
-        0,
-      ),
-      oneProperty: hotels.size <= 1,
-    };
-  })();
+  const [openShelf, setOpenShelf] = useState<string | null>(null);
 
   /**
    * One entry point for every way the page can change.
@@ -455,77 +429,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         </Alert>
       )}
 
-      {/*
-        The basket follows the page down. An agent adding a fifth rate should
-        not have to scroll back up to find out how many they have, or to act on
-        them — that scroll is where a half-built quote gets abandoned.
-      */}
-      {basket.length > 0 && (
-        <div className="sticky top-2 z-20">
-          <Card className="border-brand-300 bg-brand-50/90 flex flex-wrap items-center justify-between gap-3 p-3 backdrop-blur">
-            <p className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="bg-brand-600 grid size-6 place-items-center rounded-full text-xs font-bold text-white">
-                {basket.length}
-              </span>
-              {t("agency.selectedRates")}
-              {/*
-                Rooms, not rates — the number that decides whether this basket
-                houses the party. A rate can cover one room, so five rates and
-                five rooms are different facts, and the quote built from here
-                totals correctly either way. Said while the agent is still
-                picking, which is the only point at which it is cheap to fix.
-              */}
-              <span
-                className={cx(
-                  "text-xs font-medium",
-                  basketCoverage.covered < basketCoverage.wanted ? "text-caution-700" : "text-muted",
-                )}
-              >
-                {t("agency.basketCovers", {
-                  covered: basketCoverage.covered,
-                  wanted: basketCoverage.wanted,
-                  // Counted rather than assumed plural: a one-room party read
-                  // "covers 1 of 1 rooms" on the commonest search there is.
-                  unit: roomLabel(t, basketCoverage.wanted, locale),
-                })}
-              </span>
-            </p>
-            {/*
-              One basket, two outcomes.
-              An agent builds the group once and then chooses: price it and send
-              it, or put it on the account. Making these two separate flows is
-              what had them rebuild the same selection twice — and is why the
-              basket only ever produced a quote before.
-            */}
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setQuoteOpen(true)}>
-                {t("agency.newQuote")}
-              </Button>
-              {canIssue &&
-                (basketCoverage.oneProperty ? (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      router.push(href(locale, `/agency/book/${basket.map(encodeURIComponent).join(",")}`))
-                    }
-                  >
-                    {t("agency.bookRooms", {
-                      rooms: basketCoverage.covered,
-                      unit: roomLabel(t, basketCoverage.covered, locale),
-                    })}
-                  </Button>
-                ) : (
-                  <span className="text-muted self-center text-xs">
-                    {t("agency.basketManyHotels")}
-                  </span>
-                ))}
-              <Button size="sm" variant="ghost" onClick={() => setBasket([])}>
-                {t("common.clear")}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <aside className="hidden lg:block">
@@ -569,7 +472,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
               <ul className="space-y-4">
                 {ordered.map((card, index) => {
                   const quote = quotes[card.offerSummary.offerId];
-                  const picked = basket.includes(card.offerSummary.offerId);
                   const currency = card.price.currency as CurrencyCode;
                   const property = `${href(locale, `/agency/hotel/${card.slug}`)}?${propertyQuery(applied)}`;
                   return (
@@ -610,39 +512,46 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                         )
                       }
                       actions={
+                        /*
+                          Two things, and they are different questions.
+                          "View rooms" opens every rate here, because comparing
+                          boards and cancellation terms across two properties is
+                          the work and it cannot be done a page at a time.
+                          "See property details" is for the things a page is
+                          for — the photographs, the facilities, the address.
+                        */
                         <div className="mt-2 flex flex-col gap-2 lg:items-end">
+                          <Button
+                            variant="action"
+                            size="md"
+                            className="w-full"
+                            aria-expanded={openShelf === card.slug}
+                            onClick={() => setOpenShelf((prev) => (prev === card.slug ? null : card.slug))}
+                          >
+                            {openShelf === card.slug ? t("agency.hideRooms") : t("agency.viewRooms")}
+                            <Icon
+                              name="chevronDown"
+                              size={16}
+                              className={cx("transition-transform", openShelf === card.slug && "rotate-180")}
+                            />
+                          </Button>
                           <Link href={property} className="block w-full">
-                            <Button variant="action" size="md" className="w-full">
-                              {t("agency.allRates")}
+                            <Button variant="secondary" size="sm" className="w-full">
+                              {t("agency.seePropertyDetails")}
                             </Button>
                           </Link>
-                          <div className="flex gap-2">
-                            {canQuote && (
-                              <Button
-                                size="sm"
-                                variant={picked ? "ghost" : "secondary"}
-                                onClick={() =>
-                                  setBasket((prev) =>
-                                    picked
-                                      ? prev.filter((id) => id !== card.offerSummary.offerId)
-                                      : [...prev, card.offerSummary.offerId],
-                                  )
-                                }
-                              >
-                                {picked && <Icon name="check" size={14} />}
-                                {picked ? t("agency.inQuote") : t("agency.addToQuote")}
-                              </Button>
-                            )}
-                            {canIssue && (
-                              <Button
-                                size="sm"
-                                onClick={() => router.push(href(locale, `/agency/book/${card.offerSummary.offerId}`))}
-                              >
-                                {t("agency.book")}
-                              </Button>
-                            )}
-                          </div>
                         </div>
+                      }
+                      below={
+                        openShelf === card.slug ? (
+                          <RateShelf
+                            slug={card.slug}
+                            hotelName={card.name}
+                            intent={applied}
+                            locale={locale}
+                            canIssue={canIssue}
+                          />
+                        ) : undefined
                       }
                     />
                   );
@@ -697,15 +606,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         </div>
       </Drawer>
 
-      <QuoteModal
-        open={quoteOpen}
-        onClose={() => setQuoteOpen(false)}
-        offerIds={basket}
-        onCreated={(id) => {
-          setBasket([]);
-          router.push(href(locale, `/agency/quotes/${id}`));
-        }}
-      />
     </div>
   );
 }

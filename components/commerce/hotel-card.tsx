@@ -31,6 +31,7 @@ export function HotelCard({
   href: hrefOverride,
   priceRail,
   actions,
+  below,
 }: {
   card: HotelResultCard;
   intent: SearchIntent;
@@ -42,6 +43,15 @@ export function HotelCard({
   priceRail?: ReactNode;
   /** Replaces "Show prices", save and compare. */
   actions?: ReactNode;
+  /**
+   * Opened inside the card, under the row.
+   *
+   * The trade rate sheet goes here rather than after the card, so the rates
+   * belong visibly to the property above them and the row does not become two
+   * things with a gap between. A card with this open is still one item in the
+   * list, which is what keeps the agent's place while they read it.
+   */
+  below?: ReactNode;
 }) {
   const { t, locale, isSaved, toggleSaved, compare, toggleCompare, toast, track } = useApp();
   const [whyOpen, setWhyOpen] = useState(false);
@@ -318,6 +328,8 @@ export function HotelCard({
           </ul>
         </div>
       </Modal>
+
+      {below}
     </Card>
   );
 }

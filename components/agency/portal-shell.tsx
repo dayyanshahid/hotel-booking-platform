@@ -7,6 +7,8 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Drawer, Spinner, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { Wordmark } from "@/components/ui/wordmark";
+import { CartProvider } from "./cart";
+import { CartButton, CartDrawer } from "./cart-drawer";
 import { Meter, Money } from "./ui";
 import { href } from "@/lib/nav";
 import { refreshAgency, useAgency, type AgencyContext } from "./use-agency";
@@ -127,7 +129,8 @@ export function PortalShell({
   );
 
   return (
-    <div className="lg:flex lg:gap-6">
+    <CartProvider>
+      <div className="lg:flex lg:gap-6">
       {/* Desktop rail. Sticky, so navigation never scrolls away mid-task. */}
       <aside className="hairline no-print hidden w-60 shrink-0 border-e pe-4 lg:block">
         <div className="sticky top-4 space-y-4 py-1">
@@ -185,6 +188,9 @@ export function PortalShell({
                 />
               </Link>
             )}
+            {/* The selection follows the agent between screens, so its
+                handle has to be somewhere that does the same. */}
+            <CartButton />
             <Button variant="ghost" size="sm" onClick={signOut}>
               {t("agency.signOut")}
             </Button>
@@ -206,7 +212,10 @@ export function PortalShell({
           {nav}
         </div>
       </Drawer>
-    </div>
+
+        <CartDrawer locale={locale} />
+      </div>
+    </CartProvider>
   );
 }
 
