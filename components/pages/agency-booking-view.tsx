@@ -18,6 +18,7 @@ import type {
   SupplierConfirmation,
 } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { dayLabel } from "@/lib/i18n";
 
 /**
  * One booking, as the agency that sold it needs to see it.
@@ -262,7 +263,7 @@ function Detail({
       )}
 
       {daysToTravel !== null && daysToTravel >= 0 && daysToTravel <= 7 && (
-        <Alert tone="warning">{t("agency.travellingSoon", { days: daysToTravel })}</Alert>
+        <Alert tone="warning">{t("agency.travellingSoon", { days: daysToTravel, unit: dayLabel(t as never, daysToTravel, locale) })}</Alert>
       )}
 
       <Card className="grid gap-4 p-5 sm:grid-cols-4">

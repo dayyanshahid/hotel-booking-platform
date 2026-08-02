@@ -11,7 +11,9 @@ import { Badge, Button, Card, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { SearchBar } from "@/components/search/search-bar";
 import { formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
+import { dayLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
+import { attentionItems, type AttentionItem } from "@/lib/agency/attention";
 import type { AgencyBooking, AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -28,6 +30,85 @@ export function AgencyDashboardView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <Dashboard locale={locale} context={context} />}</PortalShell>;
 }
 
+/**
+ * A row in "Needs you today".
+ *
+ * Each kind states the consequence rather than the status. "On hold" is a
+ * state; "the room goes back in 40 minutes" is the reason to act, and it is
+ * the second one that gets somebody to click.
+ */
+function AttentionRow({
+  item,
+  locale,
+  currency,
+}: {
+  item: AttentionItem;
+  locale: Locale;
+  currency: string;
+}) {
+  const { t } = useApp();
+  const { booking, kind } = item;
+
+  const tone =
+    kind === "stalled" ? "critical" : kind === "unconfirmed" ? "caution" : item.at < 3_600_000 ? "critical" : "caution";
+
+  const detail =
+    kind === "hold"
+      ? item.at <= 0
+        ? t("agency.holdReleasingNow")
+        : t("agency.holdReleasesIn", { when: untilLabel(item.at, t, locale) })
+      : kind === "unconfirmed"
+        ? t("agency.cancellationUnconfirmedBody")
+        : t("agency.bookingStalledBody");
+
+  return (
+    <Link
+      href={href(locale, `/agency/bookings/${booking.reference}`)}
+      className="hover:bg-brand-50/40 flex flex-wrap items-center justify-between gap-3 p-3.5 transition-colors"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        {/* `tag` is this page's mark for money, which is what an unconfirmed
+            cancellation is holding on to. */}
+        <Icon
+          name={kind === "hold" ? "clock" : kind === "unconfirmed" ? "tag" : "alert"}
+          size={18}
+          className={tone === "critical" ? "text-critical-700" : "text-caution-700"}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{booking.hotelName}</p>
+          <p className="text-muted truncate text-xs">
+            {booking.leadGuest} · {booking.reference}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <Badge tone={tone === "critical" ? "critical" : "caution"}>{detail}</Badge>
+        <Money amount={booking.sell} currency={currency} locale={locale} size="sm" />
+      </div>
+    </Link>
+  );
+}
+
+/**
+ * How long is left, in the largest unit that is still useful.
+ *
+ * Minutes past an hour are noise when there are nine hours to go, and hours
+ * are uselessly coarse when there are twenty minutes — the point of the label
+ * is to make somebody act now or later, and those are different sentences.
+ */
+function untilLabel(
+  ms: number,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  locale: Locale,
+): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 90) return t("agency.minutesShort", { n: minutes });
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return t("agency.hoursShort", { n: hours });
+  const days = Math.round(hours / 24);
+  return t("agency.daysShort", { n: days, unit: dayLabel(t as never, days, locale) });
+}
+
 function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
   const router = useRouter();
@@ -39,23 +120,57 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
    * once a month.
    */
   const [months, setMonths] = useState<{ thisMonth: string; lastMonth: string } | null>(null);
+  /**
+   * The load did not work.
+   *
+   * Held separately from "not loaded yet", because they look identical from
+   * here and must not look identical on screen. Without this the fetch could
+   * reject — the API down, the origin refusing the cookie — and `bookings`
+   * stayed null for ever, so the page sat showing skeletons that were never
+   * going to resolve into anything. An agent reads that as slow, waits, and
+   * eventually reloads; nothing ever tells them it is broken.
+   */
+  const [failed, setFailed] = useState(false);
+  /** Bumped by the retry button to re-run the effect. */
+  const [reloads, setReloads] = useState(0);
+  /**
+   * Re-read on a timer so the countdowns below are honest.
+   *
+   * A hold expiring "in 40 minutes" that says so for the next three hours is
+   * worse than no countdown, so this also drives the clock rather than only
+   * the data.
+   */
+  const [tick, setTick] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
-      const [b, q] = await Promise.all([
-        fetch(apiUrl("/api/agency/bookings"), { credentials: apiCredentials() }).then((r) => r.json()),
-        fetch(apiUrl("/api/agency/quotes"), { credentials: apiCredentials() }).then((r) => r.json()),
-      ]);
-      if (!alive) return;
-      setBookings(b.ok ? b.data.bookings : []);
-      setQuotes(q.ok ? q.data.quotes : []);
+      try {
+        const [b, q] = await Promise.all([
+          fetch(apiUrl("/api/agency/bookings"), { credentials: apiCredentials() }).then((r) => r.json()),
+          fetch(apiUrl("/api/agency/quotes"), { credentials: apiCredentials() }).then((r) => r.json()),
+        ]);
+        if (!alive) return;
+        // A refusal is as much a failure as a thrown fetch: an empty list from
+        // a 401 reads on screen as an agency with no bookings.
+        if (!b?.ok || !q?.ok) {
+          setFailed(true);
+          return;
+        }
+        setFailed(false);
+        setBookings(b.data.bookings);
+        setQuotes(q.data.quotes);
 
-      const now = new Date();
-      const month = (offset: number) =>
-        new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString().slice(0, 7);
-      setMonths({ thisMonth: month(0), lastMonth: month(-1) });
+        const now = new Date();
+        const month = (offset: number) =>
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1)).toISOString().slice(0, 7);
+        setMonths({ thisMonth: month(0), lastMonth: month(-1) });
+      } catch {
+        if (alive) setFailed(true);
+      } finally {
+        if (alive) setTick(Date.now());
+      }
     }
 
     void load();
@@ -71,16 +186,41 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [reloads]);
 
   const currency = context.balance?.currency ?? context.agency.credit.currency;
   const today = todayIso();
 
   const live = (bookings ?? []).filter((b) => b.status === "confirmed" || b.status === "pending");
   const margin = live.reduce((sum, b) => sum + (b.sell - b.cost), 0);
-  // Arrivals inside a fortnight: far enough ahead to act on, near enough to matter.
+
+  /**
+   * Holds, which are neither live nor finished.
+   *
+   * A hold is a real supplier booking on a refundable rate, reserving the
+   * agency's credit, that something will cancel unless somebody issues it.
+   * Counting it as live overstates the book; leaving it out entirely — which
+   * is what happened — makes the single most time-critical thing on the
+   * account invisible on the screen an agent opens first. It gets its own
+   * figure and, below, its own countdown.
+   */
+  const holds = (bookings ?? [])
+    .filter((b) => b.status === "held")
+    .sort((a, b) => (a.holdExpiresAt ?? "").localeCompare(b.holdExpiresAt ?? ""));
+
+  // Work that does not wait, soonest first. Derived against `tick` so the
+  // countdowns move with the poll rather than freezing at first paint.
+  const attention = attentionItems(bookings ?? [], tick);
+
+  /*
+   * Arrivals inside a fortnight: far enough ahead to act on, near enough to
+   * matter. The bound is applied rather than only described — without it this
+   * was "the next five arrivals whenever they are", which on a quiet account
+   * is a list of stays four months out presented as though they need doing.
+   */
+  const fortnight = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
   const arrivals = live
-    .filter((b) => b.checkIn >= today)
+    .filter((b) => b.checkIn >= today && b.checkIn <= fortnight)
     .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
     .slice(0, 5);
   const openQuotes = (quotes ?? []).filter((q) => q.status === "open");
@@ -136,7 +276,40 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         }
       />
 
-      {!bookings && <StatSkeleton />}
+      {/*
+        The load failed, said so, and offers the way out.
+        Anything below this point renders from `bookings`, so without this the
+        whole page is skeletons for ever and reads as merely slow.
+      */}
+      {failed && (
+        <Card className="border-caution-300 bg-caution-50 flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">{t("agency.dashboardUnavailable")}</p>
+            <p className="text-muted text-xs">{t("agency.dashboardUnavailableBody")}</p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setReloads((n) => n + 1)}>
+            {t("common.retry")}
+          </Button>
+        </Card>
+      )}
+
+      {/*
+        Work that does not wait, above everything else on the page.
+        Absent entirely when there is none — an empty "nothing needs you"
+        panel every morning teaches an agent to stop looking at this spot,
+        which is the one place something urgent will eventually appear.
+      */}
+      {attention.length > 0 && (
+        <Section title={t("agency.needsYou")} description={t("agency.needsYouBody")}>
+          <Card className="divide-ink-100 divide-y">
+            {attention.slice(0, 6).map((item) => (
+              <AttentionRow key={`${item.kind}-${item.booking.reference}`} item={item} locale={locale} currency={currency} />
+            ))}
+          </Card>
+        </Section>
+      )}
+
+      {!bookings && !failed && <StatSkeleton />}
       {bookings && (
         <StatGrid>
           <Stat
@@ -151,15 +324,55 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
                 className="text-xl"
               />
             }
-            hint={t("agency.creditTerms", { days: context.agency.credit.paymentDays })}
+            /*
+             * What is already committed, alongside what is left.
+             *
+             * The balance has always carried `used` and `heldAmount` and the
+             * page showed neither, so an agency near its limit saw a number
+             * getting smaller with nothing to say where it had gone — and
+             * money tied up in holds, which is the part they can get back by
+             * issuing or releasing, was indistinguishable from money owed.
+             */
+            hint={
+              context.balance
+                ? context.balance.heldAmount > 0
+                  ? t("agency.creditUsedWithHolds", {
+                      used: formatMoney(context.balance.used, currency as CurrencyCode, locale),
+                      held: formatMoney(context.balance.heldAmount, currency as CurrencyCode, locale),
+                    })
+                  : t("agency.creditUsedOf", {
+                      used: formatMoney(context.balance.used, currency as CurrencyCode, locale),
+                      limit: formatMoney(context.balance.limit, currency as CurrencyCode, locale),
+                    })
+                : t("agency.creditTerms", {
+                    days: context.agency.credit.paymentDays,
+                    unit: dayLabel(t as never, context.agency.credit.paymentDays, locale),
+                  })
+            }
           />
           <Stat icon="plane" label={t("agency.liveBookings")} value={String(live.length)} hint={t("agency.liveBookingsHint")} />
-          <Stat
-            icon="receipt"
-            label={t("agency.openQuotes")}
-            value={String(openQuotes.length)}
-            hint={t("agency.openQuotesHint")}
-          />
+          {/*
+            Holds take the quotes slot when there are any.
+            Both matter, and four figures is the row; a hold releases itself
+            within hours and an unanswered quote sits there for days, so when
+            they compete the clock wins. Quotes keep their own panel below.
+          */}
+          {holds.length > 0 ? (
+            <Stat
+              icon="clock"
+              label={t("agency.onHold")}
+              value={String(holds.length)}
+              tone="caution"
+              hint={t("agency.onHoldHint")}
+            />
+          ) : (
+            <Stat
+              icon="receipt"
+              label={t("agency.openQuotes")}
+              value={String(openQuotes.length)}
+              hint={t("agency.openQuotesHint")}
+            />
+          )}
           <Stat
             icon="star"
             label={t("agency.marginToDate")}
@@ -278,7 +491,7 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
                     </div>
                     {/* Urgency, not a date: "in 2 days" is read faster than a date. */}
                     <Badge tone={days <= 2 ? "caution" : "neutral"}>
-                      {days === 0 ? t("agency.today") : t("agency.inDays", { n: days })}
+                      {days === 0 ? t("agency.today") : t("agency.inDays", { n: days, unit: dayLabel(t as never, days, locale) })}
                     </Badge>
                   </Link>
                 );
@@ -333,7 +546,9 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
                     <div className="text-end">
                       <Money amount={total} currency={quote.currency} locale={locale} />
                       <p className={cx("text-xs", daysLeft <= 1 ? "text-caution-700" : "text-muted")}>
-                        {daysLeft <= 0 ? t("agency.expiresToday") : t("agency.expiresInDays", { n: daysLeft })}
+                        {daysLeft <= 0
+                          ? t("agency.expiresToday")
+                          : t("agency.expiresInDays", { n: daysLeft, unit: dayLabel(t as never, daysLeft, locale) })}
                       </p>
                     </div>
                   </Link>
@@ -363,7 +578,10 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
           <Stat
             label={t("agency.creditLimit")}
             value={<Money amount={context.agency.credit.limit} currency={currency} locale={locale} size="lg" className="text-xl" />}
-            hint={t("agency.creditTerms", { days: context.agency.credit.paymentDays })}
+            hint={t("agency.creditTerms", {
+                    days: context.agency.credit.paymentDays,
+                    unit: dayLabel(t as never, context.agency.credit.paymentDays, locale),
+                  })}
           />
         </StatGrid>
       </Section>

@@ -9,6 +9,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CurrencyCode, Locale, SupportCase, TravelerProfile } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { hourLabel } from "@/lib/i18n";
 
 /* --------------------------------------------------------- operations */
 
@@ -127,7 +128,7 @@ function Operations({ locale }: { locale: Locale }) {
       {clean && <Alert tone="success">{t("admin.queueClear")}</Alert>}
 
       {data.oldestHours > 24 && (
-        <Alert tone="critical" title={t("admin.oldestWaiting", { hours: data.oldestHours })} />
+        <Alert tone="critical" title={t("admin.oldestWaiting", { hours: data.oldestHours, unit: hourLabel(t as never, data.oldestHours, locale) })} />
       )}
 
       {data.reconciliation.length > 0 && (

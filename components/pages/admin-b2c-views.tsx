@@ -21,6 +21,7 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CancellationQuote, CurrencyCode, Locale, SupportCase } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { minuteLabel } from "@/lib/i18n";
 
 /* ------------------------------------------------------------ bookings */
 
@@ -597,7 +598,7 @@ function CaseQueue({ locale }: { locale: Locale }) {
                   <p className={cx("mt-1 text-xs", item.breached ? "text-critical-700" : "text-muted")}>
                     {item.breached
                       ? t("admin.slaBreached")
-                      : t("admin.slaDue", { minutes: Math.max(0, item.minutesToDue) })}
+                      : t("admin.slaDue", { minutes: Math.max(0, item.minutesToDue), unit: minuteLabel(t as never, Math.max(0, item.minutesToDue), locale) })}
                   </p>
                 </div>
                 <Button size="sm" variant="secondary" onClick={() => setActive(item)}>

@@ -20,6 +20,7 @@ import { EmptyTripsArt, SupportArt } from "@/components/ui/illustrations";
 import { formatRelative } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AppNotification, Locale, PriceAlert, SupportCase } from "@/lib/types";
+import { hourLabel } from "@/lib/i18n";
 
 /* --------------------------------------------------------------- support */
 
@@ -98,7 +99,7 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
               </li>
             ))}
           </ul>
-          <p className="text-muted mt-3 text-xs">{t("support.sla", { hours: created.slaHours })}</p>
+          <p className="text-muted mt-3 text-xs">{t("support.sla", { hours: created.slaHours, unit: hourLabel(t as never, created.slaHours, locale) })}</p>
           <Button variant="secondary" className="mt-4" onClick={() => setCreated(null)}>
             {t("common.back")}
           </Button>
@@ -154,7 +155,7 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
             <p className="text-muted mt-2 text-xs">
               {/* A one-hour SLA needs its own string; "within 1 hours" is not a
                   sentence in either language. */}
-              {slaHours === 1 ? t("support.slaOne") : t("support.sla", { hours: slaHours })}
+              {slaHours === 1 ? t("support.slaOne") : t("support.sla", { hours: slaHours, unit: hourLabel(t as never, slaHours, locale) })}
             </p>
           </div>
 

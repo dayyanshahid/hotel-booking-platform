@@ -24,6 +24,7 @@ import type {
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
+import { dayLabel } from "@/lib/i18n";
 
 /** One label for a permission, wherever it is shown. */
 function permissionLabel(t: (key: string) => string, permission: AgentPermission): string {
@@ -201,7 +202,7 @@ function CreditPanel({ locale, context }: { locale: Locale; context: AgencyConte
           style={{ width: `${Math.round(used * 100)}%` }}
         />
       </div>
-      <p className="text-muted text-xs">{t("agency.creditTerms", { days: context.agency.credit.paymentDays })}</p>
+      <p className="text-muted text-xs">{t("agency.creditTerms", { days: context.agency.credit.paymentDays, unit: dayLabel(t as never, context.agency.credit.paymentDays, locale) })}</p>
     </Card>
   );
 }

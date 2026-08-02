@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DICTIONARIES, LOCALES, createTranslator } from "@/lib/i18n";
+import { DICTIONARIES, LOCALES, createTranslator, dayLabel } from "@/lib/i18n";
 
 /**
  * The two dictionaries have to stay the same shape.
@@ -85,12 +85,54 @@ describe("the dictionaries", () => {
      * is. A string that hard-codes a plural noun after a placeholder cannot be
      * right for every number, so the noun has to come from the pluraliser.
      */
-    const nouns = ["rooms", "nights", "guests", "adults", "children", "properties", "cities"];
+    /*
+     * "days" was missing from this list, and `agency.inDays` had read
+     * "in {n} days" the whole time — so the trade dashboard said "in 1 days"
+     * about every arrival landing tomorrow. A guard is only as good as its
+     * vocabulary, and the countable nouns this product uses are a closed set
+     * worth keeping complete rather than adding to after each new sighting.
+     */
+    const nouns = [
+      "rooms",
+      "nights",
+      "days",
+      "hours",
+      "minutes",
+      "guests",
+      "adults",
+      "children",
+      "properties",
+      "cities",
+      "bookings",
+      "quotes",
+    ];
     const guilty = Object.entries(DICTIONARIES.en)
       .filter(([key]) => !(key in ALWAYS_PLURAL))
       .filter(([, value]) => nouns.some((noun) => new RegExp(`\\{\\w+\\}\\s+${noun}\\b`).test(value)))
       .map(([key, value]) => `${key}: "${value}"`);
     expect(guilty).toEqual([]);
+  });
+
+  it("counts in Arabic the way Arabic counts", () => {
+    /*
+     * Arabic splits at two, at three-to-ten, and again at eleven — and the
+     * eleven-and-up form is the accusative singular, so a thirty-day credit
+     * term is "30 يومًا" and never "30 أيام". Routing these through a
+     * one/other pluraliser silently broke a settlement line that had been
+     * right for months, which is the kind of thing nobody who does not read
+     * Arabic will ever notice on a screenshot.
+     */
+    const t = ((key: string) => DICTIONARIES.ar[key] ?? key) as never as (key: never) => string;
+    expect(dayLabel(t, 1, "ar")).toBe("يوم");
+    expect(dayLabel(t, 2, "ar")).toBe("يومان");
+    expect(dayLabel(t, 5, "ar")).toBe("أيام");
+    expect(dayLabel(t, 30, "ar")).toBe("يومًا");
+  });
+
+  it("leaves English alone, where one and other is the whole story", () => {
+    const t = ((key: string) => DICTIONARIES.en[key] ?? key) as never as (key: never) => string;
+    expect(dayLabel(t, 1, "en")).toBe("day");
+    for (const n of [2, 5, 30, 100]) expect(dayLabel(t, n, "en")).toBe("days");
   });
 
   it("keeps the exemption list honest", () => {

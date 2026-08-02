@@ -80,6 +80,21 @@ const en: Dict = {
    */
   "count.night": "night",
   "count.nights": "nights",
+  "count.day": "day",
+  "count.days": "days",
+  "count.dayTwo": "days",
+  "count.dayFew": "days",
+  "count.dayMany": "days",
+  "count.hour": "hour",
+  "count.hours": "hours",
+  "count.hourTwo": "hours",
+  "count.hourFew": "hours",
+  "count.hourMany": "hours",
+  "count.minute": "minute",
+  "count.minutes": "minutes",
+  "count.minuteTwo": "minutes",
+  "count.minuteFew": "minutes",
+  "count.minuteMany": "minutes",
   "count.room": "room",
   "count.rooms": "rooms",
   "count.guest": "guest",
@@ -582,7 +597,7 @@ const en: Dict = {
   "support.call": "Call support",
   "support.email": "Email support",
   "support.whatsapp": "WhatsApp",
-  "support.sla": "Typical first reply within {hours} hours",
+  "support.sla": "Typical first reply within {hours} {unit}",
   "support.slaOne": "Typical first reply within an hour",
   "support.caseCreated": "Case created",
   "support.caseRef": "Case reference",
@@ -694,7 +709,7 @@ const en: Dict = {
   "admin.casesResolved": "Resolved",
   "admin.noCases": "Nothing in the queue.",
   "admin.slaBreached": "Past its response time",
-  "admin.slaDue": "Due in {minutes} minutes",
+  "admin.slaDue": "Due in {minutes} {unit}",
   "admin.workCase": "Open",
   "admin.reply": "Reply",
   "admin.sendReply": "Send reply",
@@ -744,7 +759,7 @@ const en: Dict = {
   "admin.operations": "Operations",
   "admin.operationsBody": "The two states that end with a person rather than with time: bookings we cannot confirm, and refunds we have promised but not sent.",
   "admin.queueClear": "Nothing is waiting. Every booking is resolved and every refund is settled.",
-  "admin.oldestWaiting": "Something has been waiting {hours} hours",
+  "admin.oldestWaiting": "Something has been waiting {hours} {unit}",
   "admin.awaitingConfirmation": "Awaiting confirmation",
   "admin.awaitingBody": "Reconciliation runs while the customer watches the page. These are the ones whose customer left.",
   "admin.waitingFor": "waiting {hours}h",
@@ -895,7 +910,7 @@ const en: Dict = {
   "admin.overview": "Overview",
   "admin.overviewBody": "Both verticals on one page. Direct and trade are kept apart — they are different businesses on the same inventory.",
   "admin.attention": "Needs attention",
-  "admin.attentionBookings": "{n} bookings are pending, failed or awaiting reconciliation",
+  "admin.attentionBookings": "Pending, failed or awaiting reconciliation: {n}",
   "admin.attentionCredit": "{n} agencies are close to their credit limit",
   "admin.bookingsTotal": "Bookings, all time",
   "admin.bookingsLive": "Live bookings",
@@ -932,18 +947,33 @@ const en: Dict = {
   "agency.openQuotesHint": "Sent and not yet answered",
   "agency.marginToDate": "Margin on the book",
   "agency.marginHint": "Across bookings that still stand",
+  "agency.needsYou": "Needs you today",
+  "agency.needsYouBody": "Holds about to release, and anything that has gone wrong.",
+  "agency.holdReleasesIn": "releases in {when}",
+  "agency.holdReleasingNow": "releasing now",
+  "agency.cancellationUnconfirmedBody": "cancellation unconfirmed",
+  "agency.bookingStalledBody": "still not confirmed",
+  "agency.onHold": "On hold",
+  "agency.onHoldHint": "Booked but not issued — released automatically",
+  "agency.creditUsedOf": "{used} committed of {limit}",
+  "agency.creditUsedWithHolds": "{used} committed, {held} of it on holds",
+  "agency.dashboardUnavailable": "This page could not load",
+  "agency.dashboardUnavailableBody": "Your bookings and quotes are safe — we just could not read them just now.",
+  "agency.minutesShort": "{n} min",
+  "agency.hoursShort": "{n} hr",
+  "agency.daysShort": "{n} {unit}",
   "agency.arrivals": "Next arrivals",
   "agency.arrivalsBody": "Guests checking in soonest, so nothing is a surprise.",
   "agency.noArrivals": "No arrivals coming up",
   "agency.noArrivalsBody": "Nothing your agency has booked is due to check in.",
   "agency.today": "Today",
-  "agency.inDays": "in {n} days",
+  "agency.inDays": "in {n} {unit}",
   "agency.quotesToChase": "Quotes to chase",
   "agency.quotesToChaseBody": "Open quotes, soonest to expire first.",
   "agency.noOpenQuotes": "No open quotes",
   "agency.noOpenQuotesBody": "Build one from a search and it appears here until the customer answers.",
   "agency.expiresToday": "expires today",
-  "agency.expiresInDays": "expires in {n} days",
+  "agency.expiresInDays": "expires in {n} {unit}",
   "agency.yourTerms": "Your terms",
   "agency.yourTermsBody": "What you are charged, what you add, and what you can commit.",
   "agency.commissionShort": "Your discount off the public price",
@@ -1073,7 +1103,7 @@ const en: Dict = {
   "agency.quoteMarkupHint": "Leave blank to use your usual margin. Never sells below your cost.",
   "agency.quoteMarkupDefault": "Your usual margin",
   "agency.statusHeld": "On hold",
-  "agency.travellingSoon": "Travelling in {days} days — cancellation is usually chargeable this close to arrival.",
+  "agency.travellingSoon": "Travelling in {days} {unit} — cancellation is usually chargeable this close to arrival.",
   "agency.ledgerHold": "Held (not charged)",
   "agency.ledgerHoldRelease": "Hold released",
   "agency.cannotHold": "This rate cannot be held.",
@@ -1253,7 +1283,7 @@ const en: Dict = {
   "agency.creditLimit": "Credit limit",
   "agency.creditUsed": "Committed",
   "agency.creditAvailable": "Available",
-  "agency.creditTerms": "Settlement {days} days from booking",
+  "agency.creditTerms": "Settlement {days} {unit} from booking",
   "agency.statement": "Statement",
   "agency.statementBody": "Every movement against your line, newest first. Each one names the booking behind it.",
   "agency.noMovements": "No movements yet.",
@@ -1333,6 +1363,21 @@ const ar: Dict = {
   "common.guest": "ضيف",
   "count.night": "ليلة",
   "count.nights": "ليالٍ",
+  "count.day": "يوم",
+  "count.days": "يوم",
+  "count.dayTwo": "يومان",
+  "count.dayFew": "أيام",
+  "count.dayMany": "يومًا",
+  "count.hour": "ساعة",
+  "count.hours": "ساعة",
+  "count.hourTwo": "ساعتان",
+  "count.hourFew": "ساعات",
+  "count.hourMany": "ساعة",
+  "count.minute": "دقيقة",
+  "count.minutes": "دقيقة",
+  "count.minuteTwo": "دقيقتان",
+  "count.minuteFew": "دقائق",
+  "count.minuteMany": "دقيقة",
   "count.room": "غرفة",
   "count.rooms": "غرف",
   "count.guest": "ضيف",
@@ -1830,7 +1875,7 @@ const ar: Dict = {
   "support.call": "اتصال هاتفي",
   "support.email": "البريد الإلكتروني",
   "support.whatsapp": "واتساب",
-  "support.sla": "أول رد عادةً خلال {hours} ساعات",
+  "support.sla": "أول رد عادةً خلال {hours} {unit}",
   "support.slaOne": "أول رد عادةً خلال ساعة",
   "support.caseCreated": "تم إنشاء الطلب",
   "support.caseRef": "رقم الطلب",
@@ -1942,7 +1987,7 @@ const ar: Dict = {
   "admin.casesResolved": "منتهية",
   "admin.noCases": "لا شيء في قائمة الانتظار.",
   "admin.slaBreached": "تجاوزت وقت الاستجابة",
-  "admin.slaDue": "تستحق خلال {minutes} دقيقة",
+  "admin.slaDue": "تستحق خلال {minutes} {unit}",
   "admin.workCase": "فتح",
   "admin.reply": "الرد",
   "admin.sendReply": "إرسال الرد",
@@ -1992,7 +2037,7 @@ const ar: Dict = {
   "admin.operations": "العمليات",
   "admin.operationsBody": "الحالتان اللتان تنتهيان بشخص لا بالوقت: حجوزات لا نستطيع تأكيدها، ومبالغ مستردة وعدنا بها ولم نرسلها.",
   "admin.queueClear": "لا شيء في الانتظار. كل الحجوزات محسومة وكل المبالغ المستردة سُدّدت.",
-  "admin.oldestWaiting": "هناك ما ينتظر منذ {hours} ساعة",
+  "admin.oldestWaiting": "هناك ما ينتظر منذ {hours} {unit}",
   "admin.awaitingConfirmation": "بانتظار التأكيد",
   "admin.awaitingBody": "تعمل المطابقة ما دام العميل يشاهد الصفحة. هذه حجوزات غادر أصحابها.",
   "admin.waitingFor": "منتظر {hours} ساعة",
@@ -2143,7 +2188,7 @@ const ar: Dict = {
   "admin.overview": "نظرة عامة",
   "admin.overviewBody": "القطاعان في صفحة واحدة. المبيعات المباشرة ومبيعات الوكالات منفصلة — فهما نشاطان مختلفان على المخزون نفسه.",
   "admin.attention": "يحتاج انتباهًا",
-  "admin.attentionBookings": "{n} حجوزات معلّقة أو فاشلة أو بانتظار المطابقة",
+  "admin.attentionBookings": "معلّقة أو فاشلة أو بانتظار المطابقة: {n}",
   "admin.attentionCredit": "{n} وكالات قاربت حد الائتمان",
   "admin.bookingsTotal": "الحجوزات، الإجمالي",
   "admin.bookingsLive": "الحجوزات القائمة",
@@ -2180,18 +2225,33 @@ const ar: Dict = {
   "agency.openQuotesHint": "أُرسلت ولم يُرد عليها",
   "agency.marginToDate": "هامش الحجوزات القائمة",
   "agency.marginHint": "على الحجوزات التي ما زالت قائمة",
+  "agency.needsYou": "يحتاج انتباهك اليوم",
+  "agency.needsYouBody": "حجوزات مؤقتة على وشك التحرّر، وكل ما لم يتم كما ينبغي.",
+  "agency.holdReleasesIn": "يتحرّر خلال {when}",
+  "agency.holdReleasingNow": "يتحرّر الآن",
+  "agency.cancellationUnconfirmedBody": "إلغاء غير مؤكد",
+  "agency.bookingStalledBody": "لم يُؤكَّد بعد",
+  "agency.onHold": "محجوز مؤقتًا",
+  "agency.onHoldHint": "محجوز ولم يُصدر — يتحرّر تلقائيًا",
+  "agency.creditUsedOf": "{used} مرتبطة من {limit}",
+  "agency.creditUsedWithHolds": "{used} مرتبطة، منها {held} على حجوزات مؤقتة",
+  "agency.dashboardUnavailable": "تعذّر تحميل هذه الصفحة",
+  "agency.dashboardUnavailableBody": "حجوزاتك وعروضك بخير — لم نتمكن من قراءتها الآن فقط.",
+  "agency.minutesShort": "{n} دقيقة",
+  "agency.hoursShort": "{n} ساعة",
+  "agency.daysShort": "{n} {unit}",
   "agency.arrivals": "الوصول القادم",
   "agency.arrivalsBody": "الضيوف الأقرب وصولًا، فلا مفاجآت.",
   "agency.noArrivals": "لا وصول قريب",
   "agency.noArrivalsBody": "لا يوجد حجز لوكالتك موعد وصوله قريب.",
   "agency.today": "اليوم",
-  "agency.inDays": "خلال {n} أيام",
+  "agency.inDays": "خلال {n} {unit}",
   "agency.quotesToChase": "عروض للمتابعة",
   "agency.quotesToChaseBody": "العروض المفتوحة، الأقرب انتهاءً أولًا.",
   "agency.noOpenQuotes": "لا عروض مفتوحة",
   "agency.noOpenQuotesBody": "أنشئ عرضًا من البحث وسيظهر هنا حتى يرد العميل.",
   "agency.expiresToday": "ينتهي اليوم",
-  "agency.expiresInDays": "ينتهي خلال {n} أيام",
+  "agency.expiresInDays": "ينتهي خلال {n} {unit}",
   "agency.yourTerms": "شروطك",
   "agency.yourTermsBody": "ما تُحاسب عليه، وما تضيفه، وما تستطيع الالتزام به.",
   "agency.commissionShort": "خصمك عن السعر المعلن",
@@ -2321,7 +2381,7 @@ const ar: Dict = {
   "agency.quoteMarkupHint": "اتركه فارغًا لاستخدام هامشك المعتاد. لا يقل السعر عن تكلفتك أبدًا.",
   "agency.quoteMarkupDefault": "هامشك المعتاد",
   "agency.statusHeld": "محجوز مؤقتًا",
-  "agency.travellingSoon": "السفر بعد {days} يومًا — عادةً ما يكون الإلغاء مدفوعًا في هذه الفترة القريبة.",
+  "agency.travellingSoon": "السفر بعد {days} {unit} — عادةً ما يكون الإلغاء مدفوعًا في هذه الفترة القريبة.",
   "agency.ledgerHold": "محجوز (بدون خصم)",
   "agency.ledgerHoldRelease": "تحرير الحجز المؤقت",
   "agency.cannotHold": "لا يمكن حجز هذا السعر مؤقتًا.",
@@ -2501,7 +2561,7 @@ const ar: Dict = {
   "agency.creditLimit": "حد الائتمان",
   "agency.creditUsed": "المرتبط بحجوزات",
   "agency.creditAvailable": "المتاح",
-  "agency.creditTerms": "السداد خلال {days} يومًا من الحجز",
+  "agency.creditTerms": "السداد خلال {days} {unit} من الحجز",
   "agency.statement": "كشف الحساب",
   "agency.statementBody": "كل حركة على حدك الائتماني، الأحدث أولًا، ومعها الحجز الذي سببها.",
   "agency.noMovements": "لا حركات بعد.",
@@ -2605,7 +2665,28 @@ function plural(
   other: string,
 ): string {
   const category = new Intl.PluralRules(locale).select(n);
-  return t((category === "one" ? one : other) as never);
+  if (category === "one") return t(one as never);
+
+  /*
+   * Arabic really does need more than two forms.
+   *
+   * Its categories split at two, at three-to-ten, and again at eleven, and the
+   * eleven-and-up form is the accusative singular — "30 يومًا", not "30 أيام".
+   * Falling back to the plural for every non-`one` category got that wrong on
+   * every credit term the portal prints, which is how a settlement line that
+   * had been correct for months became ungrammatical the moment it was routed
+   * through here.
+   *
+   * Looked up rather than required: a base with no extra forms behaves exactly
+   * as it did before, so adding a category to one noun does not oblige every
+   * other noun to declare all six.
+   */
+  const suffix = category === "two" ? "Two" : category === "few" ? "Few" : category === "many" ? "Many" : "";
+  if (suffix) {
+    const specific = `${one}${suffix}`;
+    if (specific in DICTIONARIES[locale as Locale]) return t(specific as never);
+  }
+  return t(other as never);
 }
 
 export function roomLabel(t: (key: never) => string, n: number, locale = "en"): string {
@@ -2618,6 +2699,18 @@ export function guestLabel(t: (key: never) => string, n: number, locale = "en"):
 
 export function nightLabel(t: (key: never) => string, n: number, locale = "en"): string {
   return plural(t, n, locale, "count.night", "count.nights");
+}
+
+export function dayLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.day", "count.days");
+}
+
+export function hourLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.hour", "count.hours");
+}
+
+export function minuteLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.minute", "count.minutes");
 }
 
 export function adultLabel(t: (key: never) => string, n: number, locale = "en"): string {
