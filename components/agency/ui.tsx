@@ -376,6 +376,33 @@ export function Nothing({
   );
 }
 
+/**
+ * The screen could not read its data, said so, and offers the way out.
+ *
+ * Deliberately not `Nothing`. "You have no quotes" and "we could not fetch
+ * your quotes" are different sentences about somebody's own money, and the
+ * loaders here used to collapse them into the first one — `body.ok ? data :
+ * []` renders a refusal as an empty account, confidently and wrongly. A
+ * failure has to look like a failure and offer a retry, because unlike an
+ * empty list it is something the reader can act on.
+ */
+export function LoadFailed({ title, body, onRetry }: { title: string; body?: string; onRetry?: () => void }) {
+  const { t } = useApp();
+  return (
+    <Card className="border-caution-300 bg-caution-50 flex flex-wrap items-center justify-between gap-3 p-4">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        {body && <p className="text-muted text-xs">{body}</p>}
+      </div>
+      {onRetry && (
+        <Button size="sm" variant="secondary" onClick={onRetry}>
+          {t("common.retry")}
+        </Button>
+      )}
+    </Card>
+  );
+}
+
 /* ------------------------------------------------------------ price block */
 
 /**

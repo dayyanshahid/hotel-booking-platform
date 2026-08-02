@@ -93,4 +93,28 @@ describe("calling our own API from the browser", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it("turns an unreachable API into an answer, not an exception", () => {
+    /*
+     * `useApi` is the helper sixteen screens go through, and its `try` used to
+     * begin after the fetch — so it caught a malformed body and nothing else.
+     * A request that never completes at all (no network, DNS gone, the origin
+     * refusing a cross-site call) rejected straight out of the helper, and
+     * every loader awaiting it was left on a skeleton that would never
+     * resolve. Slow and broken looked the same, and only one of them ends.
+     *
+     * Read from the source rather than exercised, because the failure is a
+     * missing `try` around one statement: the shape of the code is the whole
+     * of the bug.
+     */
+    const source = readFileSync(path.join(ROOT, "components/providers/app-provider.tsx"), "utf8");
+    const helper = source.slice(source.indexOf("export function useApi()"));
+    const fetchAt = helper.indexOf("await fetch(apiUrl(input)");
+    const tryAt = helper.lastIndexOf("try {", fetchAt);
+    const catchBetween = helper.slice(tryAt, fetchAt).includes("catch");
+
+    expect(fetchAt, "useApi no longer fetches the way this guard expects").toBeGreaterThan(-1);
+    expect(tryAt, "the fetch in useApi is not inside a try").toBeGreaterThan(-1);
+    expect(catchBetween, "the nearest try closes before the fetch, so a rejection escapes").toBe(false);
+  });
 });

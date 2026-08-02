@@ -53,11 +53,16 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
   const [shareContext, setShareContext] = useState(true);
   const [created, setCreated] = useState<SupportCase | null>(null);
   const [cases, setCases] = useState<SupportCase[]>([]);
+  const [casesFailed, setCasesFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     void (async () => {
       const res = await api<{ cases: SupportCase[] }>("/api/support/cases");
+      // A failed read used to leave the list at its initial empty array, so
+      // the section simply vanished and somebody who had raised a case saw no
+      // trace of it. Silence is the one answer this screen must not give.
+      setCasesFailed(!res.ok);
       if (res.ok) setCases(res.data.cases);
     })();
   }, [api, created]);
@@ -202,6 +207,12 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
         </Card>
       )}
 
+      {casesFailed && (
+        <Alert tone="warning" title={t("support.casesUnavailable")}>
+          {t("support.casesUnavailableBody")}
+        </Alert>
+      )}
+
       {cases.length > 0 && (
         <section>
           <SectionHeading title={t("support.openCases")} />
@@ -304,6 +315,7 @@ export function AlertsView({ locale }: { locale: Locale }) {
   const { t, currency, recent, track } = useApp();
   const api = useApi();
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [alertsFailed, setAlertsFailed] = useState(false);
   const [target, setTarget] = useState("");
   const [consent, setConsent] = useState(false);
   const [selected, setSelected] = useState(0);
@@ -312,6 +324,9 @@ export function AlertsView({ locale }: { locale: Locale }) {
 
   const load = async () => {
     const res = await api<{ alerts: PriceAlert[] }>("/api/price-alerts");
+    // Same trap, and worse here: the empty state below states outright that
+    // there are no alerts, which is a claim about the reader's own watchlist.
+    setAlertsFailed(!res.ok);
     if (res.ok) setAlerts(res.data.alerts);
   };
 
@@ -392,7 +407,10 @@ export function AlertsView({ locale }: { locale: Locale }) {
 
       <section>
         <SectionHeading title={t("alerts.title")} />
-        {!alerts.length && <EmptyState title={t("alerts.empty")} />}
+        {alertsFailed && (
+          <Alert tone="warning" title={t("alerts.unavailable")}>{t("alerts.unavailableBody")}</Alert>
+        )}
+        {!alertsFailed && !alerts.length && <EmptyState title={t("alerts.empty")} />}
         <ul className="space-y-2">
           {alerts.map((alert) => (
             <li key={alert.id}>

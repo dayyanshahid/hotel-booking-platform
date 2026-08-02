@@ -394,16 +394,46 @@ export function useApi() {
   const { locale, scenario } = useApp();
   return useCallback(
     async <T,>(input: string, init: RequestInit = {}): Promise<{ ok: true; data: T } | { ok: false; error: import("@/lib/types").ApiError }> => {
-      const res = await fetch(apiUrl(input), {
-        credentials: apiCredentials(),
-        ...init,
-        headers: {
-          "content-type": "application/json",
-          "x-locale": locale,
-          "x-scenario": scenario,
-          ...(init.headers ?? {}),
-        },
-      });
+      /*
+       * The request itself can fail, not only its body.
+       *
+       * The `try` below used to start after this line, so it caught a
+       * malformed response and nothing else. A fetch that rejects — no
+       * network, DNS gone, the origin refusing a cross-site request — threw
+       * straight out of the helper, and since sixteen screens `await` this
+       * inside a loader that has no catch of its own, every one of them was
+       * left on a skeleton that would never resolve. Slow and broken looked
+       * identical, and only one of them goes away if you wait.
+       */
+      let res: Response;
+      try {
+        res = await fetch(apiUrl(input), {
+          credentials: apiCredentials(),
+          ...init,
+          headers: {
+            "content-type": "application/json",
+            "x-locale": locale,
+            "x-scenario": scenario,
+            ...(init.headers ?? {}),
+          },
+        });
+      } catch {
+        return {
+          ok: false,
+          error: {
+            category: "temporaryService",
+            messageKey: "error.temporaryService",
+            // Distinct from the parse failure below: this one never reached
+            // us at all, which is the difference between "try again" and
+            // "something is wrong with the response".
+            message: "Could not reach the service",
+            retryable: true,
+            correlationId: "cid_offline",
+            recommendedAction: "retry",
+          },
+        };
+      }
+
       try {
         return (await res.json()) as { ok: true; data: T };
       } catch {

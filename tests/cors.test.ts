@@ -107,9 +107,19 @@ describe("every call to the API reaches it, and carries its cookie", () => {
       const out: string[] = [];
       for (const entry of entries) {
         if (["node_modules", ".next", ".git"].includes(entry.name)) continue;
+        /*
+         * The suite is not client code.
+         *
+         * A guard that quotes the pattern it is guarding against — and one of
+         * them now does, because the way to check a fetch sits inside a `try`
+         * is to look for the fetch — reads to this scanner as a real call with
+         * no credentials. Scanning the tests never proved anything about the
+         * running app; it only made the two files sensitive to each other.
+         */
+        if (entry.name === "tests" && entry.isDirectory()) continue;
         const full = join(dir, entry.name);
         if (entry.isDirectory()) out.push(...(await walk(full)));
-        else if (/\.tsx?$/.test(entry.name)) out.push(full);
+        else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(full);
       }
       return out;
     };

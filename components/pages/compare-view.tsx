@@ -33,6 +33,8 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
   const api = useApi();
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [hideSame, setHideSame] = useState(false);
+  /** How many of the chosen properties could not be read this time. */
+  const [missing, setMissing] = useState(0);
 
   const load = useCallback(async () => {
     if (!compare.length || !intent) {
@@ -52,7 +54,18 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
         return { slug, hotel: res.data.hotel, rooms: res.data.rooms, best } satisfies Entry;
       }),
     );
-    setEntries(loaded.filter((x): x is Entry => Boolean(x)));
+    const usable = loaded.filter((x): x is Entry => Boolean(x));
+    /*
+     * Say which ones are not here.
+     *
+     * A property that would not load was dropped from the array and nothing
+     * else happened, so a three-way comparison quietly became a two-way one —
+     * and the whole purpose of this screen is that the reader is weighing a
+     * known set against each other. Deciding between two when you asked about
+     * three, with nothing to say the third is missing, is worse than an error.
+     */
+    setMissing(compare.length - usable.length);
+    setEntries(usable);
   }, [api, compare, intent]);
 
   useEffect(() => {
@@ -233,6 +246,12 @@ export function CompareView({ locale, intent }: { locale: Locale; intent: Search
         {t("compare.occupancyWarning")} — {intent.rooms.length} × {t("common.room")}, {guestCount(intent.rooms)}{" "}
         {t("common.guests")}
       </Alert>
+
+      {missing > 0 && (
+        <Alert tone="warning" title={t("compare.someMissing")}>
+          {t("compare.someMissingBody", { n: missing })}
+        </Alert>
+      )}
 
       <div className="scrollbar-slim overflow-x-auto">
         <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { Card } from "@/components/ui";
-import { Money, PageHeader, Section, StatSkeleton, Stat, StatGrid } from "@/components/agency/ui";
+import { LoadFailed, Money, PageHeader, Section, StatSkeleton, Stat, StatGrid } from "@/components/agency/ui";
+import { useResource } from "@/components/providers/use-resource";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -41,17 +42,23 @@ interface Payload {
 
 function Reports({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const [data, setData] = useState<Payload | null>(null);
+  /*
+   * The refusal branch was missing entirely — `if (body.ok) setData(...)` and
+   * no else — so any failure left `data` null and the early return below held
+   * the page on a skeleton for ever. Production figures that never arrive look
+   * exactly like production figures still loading.
+   */
+  const { data, failed, loading, reload } = useResource<Payload>("/api/agency/reports");
 
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch(apiUrl("/api/agency/reports"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: Payload };
-      if (body.ok && body.data) setData(body.data);
-    })();
-  }, []);
-
-  if (!data) return <StatSkeleton />;
+  if (loading) return <StatSkeleton />;
+  if (failed || !data) {
+    return (
+      <div className="space-y-5">
+        <PageHeader title={t("agency.reports")} description={t("agency.reportsBody")} />
+        <LoadFailed title={t("agency.reportsUnavailable")} body={t("agency.reportsUnavailableBody")} onRetry={reload} />
+      </div>
+    );
+  }
   const currency = data.currency as CurrencyCode;
 
   return (

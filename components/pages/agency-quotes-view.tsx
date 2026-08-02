@@ -9,7 +9,8 @@ import { DocumentBrand, DocumentFooter } from "@/components/agency/document-bran
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Skeleton } from "@/components/ui";
-import { Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { useResource } from "@/components/providers/use-resource";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { AgencyQuote } from "@/lib/agency/types";
@@ -31,15 +32,16 @@ const QUOTE_TONE: Record<AgencyQuote["status"], "positive" | "caution" | "neutra
 
 function QuoteList({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const [quotes, setQuotes] = useState<AgencyQuote[] | null>(null);
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch(apiUrl("/api/agency/quotes"), { credentials: apiCredentials() });
-      const body = (await res.json()) as { ok: boolean; data?: { quotes: AgencyQuote[] } };
-      setQuotes(body.ok && body.data ? body.data.quotes : []);
-    })();
-  }, []);
+  /*
+   * Three states, not two.
+   *
+   * This used to read `body.ok ? body.data.quotes : []`, so an account whose
+   * quotes could not be fetched — a lapsed session, a bad gateway — was shown
+   * the empty state and told to go and build one. Being confidently wrong
+   * about somebody's own pipeline is worse than admitting the read failed.
+   */
+  const { data, failed, loading, reload } = useResource<{ quotes: AgencyQuote[] }>("/api/agency/quotes");
+  const quotes = data?.quotes ?? null;
 
   return (
     <div className="space-y-4">
@@ -55,7 +57,10 @@ function QuoteList({ locale }: { locale: Locale }) {
         }
       />
 
-      {!quotes && <TableSkeleton rows={3} />}
+      {loading && <TableSkeleton rows={3} />}
+      {failed && (
+        <LoadFailed title={t("agency.quotesUnavailable")} body={t("agency.quotesUnavailableBody")} onRetry={reload} />
+      )}
       {quotes && !quotes.length && (
         <Nothing
           icon="receipt"
