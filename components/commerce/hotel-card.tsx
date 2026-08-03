@@ -8,6 +8,7 @@ import { HeartIcon, Icon, amenityIcon } from "@/components/ui/icons";
 import { PriceBlock } from "./price";
 import { distanceLabel, formatDeadline } from "@/lib/format";
 import { hotelHref } from "@/lib/nav";
+import { SUPPLIER_LABEL, showSupplierSource, supplierOf } from "@/lib/supplier-source";
 import type { HotelResultCard, SearchIntent } from "@/lib/types";
 import type { ReactNode } from "react";
 
@@ -217,6 +218,21 @@ export function HotelCard({
           </div>
 
           <div className="flex flex-wrap gap-1.5">
+            {/*
+              Test phase only, behind NEXT_PUBLIC_SHOW_SUPPLIER=1.
+
+              Which wholesaler this row came from, so the two catalogues can be
+              checked against each other during acceptance. The same property
+              carried by both suppliers already appears as two rows — they mint
+              different slugs and nothing merges them — so this is what tells
+              the pair apart. Marked as a test artefact rather than styled to
+              belong, because it must not quietly become part of the product.
+            */}
+            {showSupplierSource() && (
+              <Badge tone="critical" title="Test phase — supplier attribution">
+                {SUPPLIER_LABEL[supplierOf(card.slug)]}
+              </Badge>
+            )}
             {card.badges.slice(0, 3).map((badge) => (
               <Badge
                 key={badge.code}
