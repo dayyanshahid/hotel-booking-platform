@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { LOCALES, DEFAULT_LOCALE } from "@/lib/i18n";
+import { isAllowedOrigin, portalOriginList } from "@/lib/portal-origins";
 
 /**
  * Origins allowed to call this backend from another site.
@@ -9,10 +10,7 @@ import { LOCALES, DEFAULT_LOCALE } from "@/lib/i18n";
  * the same one `lib/server/cors.ts` reads; both come from the environment.
  */
 function portalOrigins(): string[] {
-  return (process.env.PORTAL_ORIGINS ?? "")
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
+  return portalOriginList(process.env.PORTAL_ORIGINS);
 }
 
 /**
@@ -26,7 +24,7 @@ function portalOrigins(): string[] {
 function withCors(request: NextRequest): NextResponse | null {
   const origin = request.headers.get("origin");
   if (!origin) return null;
-  if (!portalOrigins().includes(origin.replace(/\/+$/, ""))) return null;
+  if (!isAllowedOrigin(origin, portalOrigins())) return null;
 
   const headers = {
     "access-control-allow-origin": origin,

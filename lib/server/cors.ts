@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isAllowedOrigin, portalOriginList } from "@/lib/portal-origins";
+
 /**
  * Who is allowed to call this backend from a browser.
  *
@@ -20,10 +22,7 @@ import "server-only";
 
 /** Origins allowed to call the API with a session, from configuration. */
 export function allowedOrigins(): string[] {
-  return (process.env.PORTAL_ORIGINS ?? "")
-    .split(",")
-    .map((origin) => origin.trim().replace(/\/+$/, ""))
-    .filter(Boolean);
+  return portalOriginList(process.env.PORTAL_ORIGINS);
 }
 
 /**
@@ -35,7 +34,7 @@ export function allowedOrigins(): string[] {
  */
 export function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin");
-  if (!origin || !allowedOrigins().includes(origin.replace(/\/+$/, ""))) return {};
+  if (!origin || !isAllowedOrigin(origin, allowedOrigins())) return {};
 
   return {
     "access-control-allow-origin": origin,
