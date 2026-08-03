@@ -204,7 +204,14 @@ export function PortalShell({
       <aside
         className={cx(
           "hairline no-print hidden shrink-0 border-e transition-[width] duration-200 ease-[var(--ease-out)] lg:block",
-          railClosed ? "w-16 pe-2" : "w-60 pe-4",
+          /*
+            256, not 240. The lockup is 34px of globe plus two lines of
+            non-wrapping type, and with the collapse button beside it the row
+            needed about ten pixels more than w-60 gave — so the brand rendered
+            as "TRAVEL & MOR". Clipping a company's own name in its own
+            product is not a rounding error.
+          */
+          railClosed ? "w-16 pe-2" : "w-64 pe-3",
         )}
       >
         <div className="sticky top-4 space-y-4 py-1">

@@ -175,7 +175,12 @@ export function CartDock({ locale }: { locale: Locale }) {
   return (
     <aside
       aria-label={t("agency.cart")}
-      className="hairline no-print hidden w-[340px] shrink-0 border-s ps-4 lg:block xl:w-[380px]"
+      /*
+        `2xl`, matching useHasRoomToDock. The gate above already decides this,
+        but the class has to agree — a dock that renders at a width the hook
+        calls too narrow is the same squeeze by another route.
+      */
+      className="hairline no-print hidden w-[340px] shrink-0 border-s ps-4 2xl:block"
     >
       <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto pb-2">
         <div className="flex items-center justify-between gap-2">

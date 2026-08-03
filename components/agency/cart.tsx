@@ -173,14 +173,25 @@ export function useCart(): CartApi {
  * results underneath silently would not scroll. The two shapes have to be
  * mutually exclusive in the tree, not merely in the paint.
  *
- * Matches Tailwind's `lg`. Starts false so the server and the first client
- * render agree, then corrects itself on mount.
+ * The threshold is 96rem, not the `lg` it started at.
+ *
+ * Four columns compete for this page: the navigation rail, the filter panel,
+ * the results, and this. Docking from 1024px meant that on a 1280px laptop —
+ * which is most of them — adding a single room split the working area into two
+ * ~340px columns, and a result card at that width is a photograph with a few
+ * words beside it. The cart was taking its space from the thing an agent is
+ * reading in order to decide what goes in the cart.
+ *
+ * 1536px is where all four fit without anything being squeezed: rail 300 plus
+ * filters 280 plus a card wide enough to stay two-column plus this. Below it
+ * the sheet takes over, which overlays instead of displacing, so opening the
+ * cart costs nothing and closing it gives everything back.
  */
 export function useHasRoomToDock(): boolean {
   const [roomy, setRoomy] = useState(false);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 64rem)");
+    const query = window.matchMedia("(min-width: 96rem)");
     const sync = () => setRoomy(query.matches);
     sync();
     query.addEventListener("change", sync);
