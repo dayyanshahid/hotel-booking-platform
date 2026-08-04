@@ -80,7 +80,9 @@ describe("interpreting a described trip", () => {
     expect(result.intent?.destinationDisplay).toBe("Jeddah");
     const guests = result.intent!.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
     expect(guests).toBe(4);
-    expect(result.filters.refundableOnly).toBe(true);
+    // "free cancellation" now sets the three-way condition rather than the old
+    // boolean, so the sidebar shows the state the sentence asked for.
+    expect(result.filters.rateConditions).toEqual(["free"]);
     expect(stayLength(result.intent!)).toBe(3);
   });
 
@@ -131,7 +133,9 @@ describe("interpreting a described trip", () => {
       TODAY,
     );
     expect(result.filters.categories).toEqual([3]);
-    expect(result.filters.refundableOnly).toBe(true);
+    // "free cancellation" now sets the three-way condition rather than the old
+    // boolean, so the sidebar shows the state the sentence asked for.
+    expect(result.filters.rateConditions).toEqual(["free"]);
     expect(result.filters.boards).toEqual(["BB"]);
     // A nightly ceiling becomes a stay total, because that is what a card shows.
     expect(result.filters.maxPrice).toBe(270);

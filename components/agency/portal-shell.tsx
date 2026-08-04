@@ -111,7 +111,14 @@ export function PortalShell({
     {
       label: t("agency.navSell"),
       items: [
-        { path: "/agency", label: t("agency.dashboard"), icon: "grid" },
+        /*
+         * Home is where the searching happens, so it is named for that.
+         * It used to be called Overview and hold the month's figures, which is
+         * a question nobody has at nine in the morning — those moved to their
+         * own page under Manage, where somebody goes looking for them on
+         * purpose.
+         */
+        { path: "/agency", label: t("agency.home"), icon: "search" },
         { path: "/agency/search", label: t("agency.searchStays"), icon: "search" },
         { path: "/agency/quotes", label: t("agency.quotes"), icon: "receipt" },
         { path: "/agency/customers", label: t("agency.customers"), icon: "users" },
@@ -120,6 +127,7 @@ export function PortalShell({
     {
       label: t("agency.navManage"),
       items: [
+        { path: "/agency/overview", label: t("agency.dashboard"), icon: "grid" },
         { path: "/agency/bookings", label: t("agency.bookings"), icon: "plane" },
         { path: "/agency/credit", label: t("agency.credit"), icon: "tag" },
         { path: "/agency/reports", label: t("agency.reports"), icon: "list" },

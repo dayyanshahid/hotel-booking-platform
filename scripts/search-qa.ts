@@ -164,7 +164,18 @@ interface SearchResponse {
   searchToken: string;
   results: Card[];
   totalCount: number;
-  facets: Record<string, unknown>;
+  /*
+   * Typed only where a check reads it. The rest stays opaque on purpose: this
+   * harness asserts behaviour against a running server, and mirroring the
+   * whole facet shape here is a second definition to keep in step.
+   */
+  facets: Record<string, unknown> & {
+    categories: { value: number; count: number }[];
+    priceRange: { min: number; max: number; typicalMax: number };
+    roomCategories?: { value: string; count: number }[];
+    rateConditions?: { value: string; count: number }[];
+    distanceAnchors?: { id: string; label: string; type: string }[];
+  };
   completeness: string;
   completenessMessage?: string;
   sourcesUnavailable?: number;
@@ -578,9 +589,8 @@ async function run(): Promise<void> {
   section("Filters and sort");
 
   await check("the star facet matches what the filter gives", async () => {
-    if (!firstPage) return "SKIP: no page to read facets from";
-    const facets = firstPage.facets as { categories?: { value: number; count: number }[] };
-    const star = facets.categories?.find((s) => s.count > 0);
+    const now = await supplied(intentFor(city!.id));
+    const star = now.facets.categories?.find((s) => s.count > 0);
     if (!star) return "SKIP: no star facet with a count on this page";
     const page = await supplied(intentFor(city!.id), { filters: { categories: [star.value] } });
     if (page.totalCount !== star.count) {
@@ -590,8 +600,8 @@ async function run(): Promise<void> {
   });
 
   await check("the board facet matches what the filter gives", async () => {
-    if (!firstPage) return "SKIP: no page to read facets from";
-    const facets = firstPage.facets as { boards?: { code: string; label: string; count: number }[] };
+    const now = await supplied(intentFor(city!.id));
+    const facets = now.facets as { boards?: { code: string; label: string; count: number }[] };
     const board = facets.boards?.find((b) => b.count > 0);
     if (!board) return "SKIP: no board facet with a count on this page";
     const page = await supplied(intentFor(city!.id), { filters: { boards: [board.code] } });
@@ -667,6 +677,118 @@ async function run(): Promise<void> {
       throw new Error(`sorting changed the count: ${plain.totalCount} → ${sorted.totalCount}`);
     }
     return `${sorted.totalCount} either way`;
+  });
+
+  /**
+   * A fresh unfiltered page, read now.
+   *
+   * Facet-versus-filter checks used to compare `firstPage`, captured minutes
+   * earlier at the top of the run, against a filter applied to whatever supply
+   * came back just now — and live availability moves in between, so the two
+   * numbers disagreed for reasons that had nothing to do with filtering. Both
+   * halves of the comparison now come from the same moment, which the supply
+   * cache makes essentially free.
+   */
+  async function baseline(): Promise<SearchResponse> {
+    return supplied(intentFor(city!.id));
+  }
+
+  /* ------------------------------------------------- the SRP filter sidebar */
+
+  section("The filters an agent actually asks for");
+
+  /*
+   * Each of these ticks one control and checks the page narrowed to exactly
+   * what the facet promised. A facet that overcounts is worse than a missing
+   * filter: the agent picks the option that says 27 and gets nine.
+   */
+  await check("the sidebar can find one property by name", async () => {
+    const now = await baseline();
+    if (!now.results.length) return "SKIP: nothing to search within";
+    const target = now.results[0].name;
+    const word = target.split(/\s+/).find((part) => part.length > 4) ?? target;
+    const narrowed = await supplied(intentFor(city!.id), { filters: { hotelName: word } });
+    if (!narrowed.totalCount) throw new Error(`"${word}" matched nothing, but it came from a row on the page`);
+    const stray = narrowed.results.find((c) => !c.name.toLowerCase().includes(word.toLowerCase()));
+    if (stray) throw new Error(`"${stray.name}" does not contain "${word}"`);
+    return `"${word}" → ${narrowed.totalCount} of ${now.totalCount}`;
+  });
+
+  await check("room category is offered, and means something", async () => {
+    const now = await baseline();
+    const kinds = now.facets.roomCategories ?? [];
+    if (!kinds.length) return "SKIP: no room categories in this city";
+    const pick = kinds.find((k) => k.count < now.totalCount) ?? kinds[0];
+    const narrowed = await supplied(intentFor(city!.id), { filters: { roomCategories: [pick.value] } });
+    if (narrowed.totalCount !== pick.count) {
+      throw new Error(`the facet promised ${pick.count} ${pick.value} rooms, the filter gave ${narrowed.totalCount}`);
+    }
+    return `${kinds.length} categories · ${pick.value} ${pick.count} = ${narrowed.totalCount}`;
+  });
+
+  await check("cancellation is three answers, not one", async () => {
+    const now = await baseline();
+    const conditions = now.facets.rateConditions ?? [];
+    if (!conditions.length) throw new Error("no rate conditions were faceted at all");
+    for (const condition of conditions) {
+      const narrowed = await supplied(intentFor(city!.id), { filters: { rateConditions: [condition.value] } });
+      if (narrowed.totalCount !== condition.count) {
+        throw new Error(`${condition.value}: facet ${condition.count}, filter ${narrowed.totalCount}`);
+      }
+    }
+    return conditions.map((c) => `${c.value} ${c.count}`).join(" · ");
+  });
+
+  await check("a radius is measured from the place it names", async () => {
+    const now = await baseline();
+    const anchors = now.facets.distanceAnchors ?? [];
+    if (anchors.length < 2) return `SKIP: only ${anchors.length} anchor(s) for this city`;
+    const [centre, other] = anchors;
+    const near = await supplied(intentFor(city!.id), {
+      filters: { distanceFrom: centre.id, maxDistanceKm: 5 },
+    });
+    const elsewhere = await supplied(intentFor(city!.id), {
+      filters: { distanceFrom: other.id, maxDistanceKm: 5 },
+    });
+    // Two anchors kilometres apart must not return the identical set, or the
+    // picker is decorative and "near the airport" quietly means "near town".
+    const a = near.results.map((c) => c.canonicalHotelId).join();
+    const b = elsewhere.results.map((c) => c.canonicalHotelId).join();
+    if (a === b && near.totalCount === elsewhere.totalCount) {
+      throw new Error(`${centre.label} and ${other.label} gave the same properties — the anchor is not being applied`);
+    }
+    return `${centre.label} ${near.totalCount} · ${other.label} ${elsewhere.totalCount}`;
+  });
+
+  await check("unrated properties stay reachable", async () => {
+    const now = await baseline();
+    const unrated = now.facets.categories.find((c) => c.value === 0);
+    if (!unrated) return "SKIP: every property here carries a star rating";
+    const narrowed = await supplied(intentFor(city!.id), { filters: { categories: [0] } });
+    if (narrowed.totalCount !== unrated.count) {
+      throw new Error(`facet said ${unrated.count} unrated, filter gave ${narrowed.totalCount}`);
+    }
+    return `${unrated.count} unrated, and selectable`;
+  });
+
+  await check("a price floor is honoured, not only a ceiling", async () => {
+    const now = await baseline();
+    if (!now.results.length) return "SKIP: nothing to price";
+    const floor = Math.round(now.facets.priceRange.min + 1);
+    const narrowed = await supplied(intentFor(city!.id), { filters: { minPrice: floor } });
+    const under = narrowed.results.filter((c) => c.price.total < floor - 0.5);
+    if (under.length) throw new Error(`${under.length} row(s) below the floor of ${floor}`);
+    return `≥ ${floor} → ${narrowed.totalCount} of ${now.totalCount}`;
+  });
+
+  await check("working the sidebar does not cost a supplier call each time", async () => {
+    // The whole sidebar is unusable if it does not: a live search runs to
+    // thirteen seconds, and three filters would be a minute of an agent's day.
+    const started = Date.now();
+    await supplied(intentFor(city!.id), { filters: { rateConditions: ["free"] } });
+    const elapsed = Date.now() - started;
+    if (elapsed > 6_000) throw new Error(`a filter change took ${(elapsed / 1000).toFixed(1)}s — supply is not being reused`);
+    return `${(elapsed / 1000).toFixed(1)}s`;
   });
 
   /* ------------------------------------------------------------------ paging */

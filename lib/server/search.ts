@@ -41,6 +41,10 @@ import {
 import type { ScenarioId } from "./scenarios";
 import { hash01 } from "./pricing";
 import { fold, foldedIncludes as matches } from "../text";
+import { readSupply, supplyKey, writeSupply, type LiveStatus as CachedLiveStatus } from "./supply-cache";
+import { anchorPoint, anchorsFor } from "@/lib/geo/anchors";
+import { roomCategoryOf, ROOM_CATEGORY_ORDER } from "@/lib/search/room-category";
+import { conditionOf, RATE_CONDITIONS } from "@/lib/search/rate-conditions";
 
 /* ------------------------------------------------------- suggestions */
 
@@ -274,7 +278,7 @@ export interface SearchOptions {
 }
 
 /** Whether a live supplier answered, failed, or was never asked. */
-type LiveStatus = "ok" | "unavailable" | "skipped";
+type LiveStatus = CachedLiveStatus;
 
 /**
  * How long a search may take, whatever the suppliers are doing.
@@ -355,140 +359,175 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
     }
   }
 
-  const normalized: NormalizedHotel[] = [];
-  for (const [slug, offers] of bySlug) {
-    const seed = getHotelSeed(slug);
-    if (!seed) continue;
-    if (resolved.neighborhoodKey && seed.neighborhood !== resolved.neighborhoodKey) continue;
-    const n = normalizeHotel(seed, offers, effectiveIntent, locale, scenario);
-    if (n && n.offers.length) normalized.push(n);
-  }
-
-  /**
-   * Live supply is merged in as one more source. It produces the same canonical
-   * shape, so filters, sorting, facets and cards treat it identically (§9.1).
-   * The scenario harness stays authoritative: a forced outage must also suppress
-   * the live source, or the edge case could not be demonstrated.
-   */
-  const supplierOutageForced = scenario === "allSuppliersFail" || scenario === "zeroResults";
-
   /*
-   * Live supply, both suppliers at once.
+   * What is available, which does not change when a filter does.
    *
-   * They used to run one after the other, which was invisible while only one of
-   * them had credentials and costs a guest the sum of both the moment the
-   * second one is switched on. They share nothing, so there is no reason to
-   * make one wait for the other.
+   * Held for two minutes against the stay, so working the sidebar re-reads the
+   * same supply instead of asking both suppliers again. See
+   * lib/server/supply-cache.ts for why that is safe.
    *
-   * Each is a source in its own right for the completeness count. A single
-   * shared flag meant a Hotelbeds success overwrote a TourMind failure and the
-   * page called itself complete while a supplier was down.
+   * A hit also implies the offers behind these rooms are still in this
+   * process's offer store, because both caches live in the same process — so
+   * nothing has to re-register them for checkout to find them.
    */
-  /*
-   * One clock for both of them.
-   *
-   * Shared and absolute rather than a budget each, because the agent is waiting
-   * on the page and not on a supplier: two sources given fifteen seconds apiece
-   * is a thirty-second page the moment they do not overlap.
-   */
-  const deadlineAt = Date.now() + searchDeadlineMs();
-  const late = (): { status: LiveStatus; hotels: NormalizedHotel[] } => ({
-    status: "unavailable",
-    hotels: [],
-  });
+  const cacheKey = supplyKey(effectiveIntent, locale, options.supply ?? "all", scenario);
+  const cachedSupply = readSupply(cacheKey);
 
-  const [tourmindOutcome, hotelbedsOutcome] = await Promise.all([
-    bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
-      if (!isTourmindEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
-      try {
-        const results = await searchTourmind(effectiveIntent, locale);
-        const hotels = results
-          .map((result) => normalizeTourmind(result, effectiveIntent, locale))
-          .filter((adapted) => adapted.offers.length)
-          .map((adapted) => {
-            /*
-             * Remember every rate, exactly as the Hotelbeds path does.
-             *
-             * Without this a TourMind room could be searched, ranked and shown
-             * with a price, and then refused at checkout: the offer id on the
-             * card resolved to nothing in the store, so the session endpoint
-             * answered "this option changed or sold out" every single time. The
-             * supplier was fine and the search was fine — the rate was simply
-             * never written down, so nothing could be bought from one of the
-             * two suppliers we sell.
-             */
-            for (const offer of adapted.offers) {
-              const binding = adapted.contexts.get(offer.offerId);
-              if (!binding) continue;
-              const room = adapted.rooms.find((r) => r.canonicalRoomId === offer.canonicalRoomId);
-              rememberOffer(offer.offerId, {
-                offerId: offer.offerId,
-                hotelSlug: adapted.hotel.slug,
-                roomKey: room?.canonicalRoomId ?? offer.canonicalRoomId,
-                canonicalRoomKey: offer.canonicalRoomId,
-                board: offer.board.code as never,
-                rateClass: offer.cancellation.refundable ? "flex" : "nrf",
-                sourceCode: "TM",
-                // Their CheckRoomRate is mandatory before an order, so every
-                // rate here has to be re-priced before it can be committed.
-                rateTypeInternal: "RECHECK",
-                conditionCodes: [],
-                memberRate: false,
-                guaranteeEligible: offer.capabilities.guaranteeEligible,
-                modifiable: offer.capabilities.modifyAllowed,
-                // What the supplier said it still holds. Hard-coding zero here made the
-                // checkout's overbooking guard inert: it reads zero as "the source did not
-                // say" and waves the basket through.
-                allotment: offer.allotment,
-                intent: effectiveIntent,
-                price: offer.price,
-                cancellation: offer.cancellation,
-                expiresAt: offer.expiresAt,
-                supplierRoomLabel: room?.name ?? offer.canonicalRoomId,
-                hotelName: adapted.hotel.name,
-                roomLabel: room?.name ?? offer.canonicalRoomId,
-                boardLabel: offer.board.label,
-                comments: offer.comments,
-                tourmind: binding,
-              });
-            }
-            return { ...adapted, sourceCount: 1 };
-          });
-        return { status: "ok", hotels };
-      } catch {
-        // A live source failing degrades the page; it never empties it. The
-        // simulated and other live results still stand.
-        return { status: "unavailable", hotels: [] };
-      }
-    })(), deadlineAt, late),
-    bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
-      if (!isHotelbedsEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
-      // A coordinate for every city, or a supplier destination code on a deep link.
-      const where = await resolveHotelbedsDestination(resolved.destinationId);
-      if (!where) return { status: "skipped", hotels: [] };
-      const live = await searchHotelbedsDestination(where, effectiveIntent, locale);
-      return {
-        status: live.status,
-        hotels: live.hotels.map((adapted) => ({
-          hotel: adapted.hotel,
-          rooms: adapted.rooms,
-          offers: adapted.offers,
-          sourceCount: 1,
-        })),
-      };
-    })(), deadlineAt, late),
-  ]);
+  let normalized: NormalizedHotel[];
+  let liveStatuses: LiveStatus[];
 
-  normalized.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);
-  const liveStatuses = [tourmindOutcome.status, hotelbedsOutcome.status];
+  if (cachedSupply) {
+    normalized = cachedSupply.normalized;
+    liveStatuses = cachedSupply.liveStatuses;
+  } else {
+    const gathered: NormalizedHotel[] = [];
+    for (const [slug, offers] of bySlug) {
+      const seed = getHotelSeed(slug);
+      if (!seed) continue;
+      if (resolved.neighborhoodKey && seed.neighborhood !== resolved.neighborhoodKey) continue;
+      const n = normalizeHotel(seed, offers, effectiveIntent, locale, scenario);
+      if (n && n.offers.length) gathered.push(n);
+    }
 
-  /*
-   * Score once, across everything, before anything is ranked or a lead offer is
-   * chosen. Ranking is a comparison, and until the sources are merged there is
-   * nothing to compare against — which is why leaving it to the adapters gave
-   * one supplier a full set of scores and the other a row of zeroes.
-   */
-  scoreSupply(normalized, effectiveIntent);
+    /**
+     * Live supply is merged in as one more source. It produces the same canonical
+     * shape, so filters, sorting, facets and cards treat it identically (§9.1).
+     * The scenario harness stays authoritative: a forced outage must also suppress
+     * the live source, or the edge case could not be demonstrated.
+     */
+    const supplierOutageForced = scenario === "allSuppliersFail" || scenario === "zeroResults";
+
+    /*
+     * Live supply, both suppliers at once.
+     *
+     * They used to run one after the other, which was invisible while only one of
+     * them had credentials and costs a guest the sum of both the moment the
+     * second one is switched on. They share nothing, so there is no reason to
+     * make one wait for the other.
+     *
+     * Each is a source in its own right for the completeness count. A single
+     * shared flag meant a Hotelbeds success overwrote a TourMind failure and the
+     * page called itself complete while a supplier was down.
+     */
+    /*
+     * One clock for both of them.
+     *
+     * Shared and absolute rather than a budget each, because the agent is waiting
+     * on the page and not on a supplier: two sources given fifteen seconds apiece
+     * is a thirty-second page the moment they do not overlap.
+     */
+    const deadlineAt = Date.now() + searchDeadlineMs();
+    const late = (): { status: LiveStatus; hotels: NormalizedHotel[] } => ({
+      status: "unavailable",
+      hotels: [],
+    });
+
+    const [tourmindOutcome, hotelbedsOutcome] = await Promise.all([
+      bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+        if (!isTourmindEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
+        try {
+          const results = await searchTourmind(effectiveIntent, locale);
+          const hotels = results
+            .map((result) => normalizeTourmind(result, effectiveIntent, locale))
+            .filter((adapted) => adapted.offers.length)
+            .map((adapted) => {
+              /*
+               * Remember every rate, exactly as the Hotelbeds path does.
+               *
+               * Without this a TourMind room could be searched, ranked and shown
+               * with a price, and then refused at checkout: the offer id on the
+               * card resolved to nothing in the store, so the session endpoint
+               * answered "this option changed or sold out" every single time. The
+               * supplier was fine and the search was fine — the rate was simply
+               * never written down, so nothing could be bought from one of the
+               * two suppliers we sell.
+               */
+              for (const offer of adapted.offers) {
+                const binding = adapted.contexts.get(offer.offerId);
+                if (!binding) continue;
+                const room = adapted.rooms.find((r) => r.canonicalRoomId === offer.canonicalRoomId);
+                rememberOffer(offer.offerId, {
+                  offerId: offer.offerId,
+                  hotelSlug: adapted.hotel.slug,
+                  roomKey: room?.canonicalRoomId ?? offer.canonicalRoomId,
+                  canonicalRoomKey: offer.canonicalRoomId,
+                  board: offer.board.code as never,
+                  rateClass: offer.cancellation.refundable ? "flex" : "nrf",
+                  sourceCode: "TM",
+                  // Their CheckRoomRate is mandatory before an order, so every
+                  // rate here has to be re-priced before it can be committed.
+                  rateTypeInternal: "RECHECK",
+                  conditionCodes: [],
+                  memberRate: false,
+                  guaranteeEligible: offer.capabilities.guaranteeEligible,
+                  modifiable: offer.capabilities.modifyAllowed,
+                  // What the supplier said it still holds. Hard-coding zero here made the
+                  // checkout's overbooking guard inert: it reads zero as "the source did not
+                  // say" and waves the basket through.
+                  allotment: offer.allotment,
+                  intent: effectiveIntent,
+                  price: offer.price,
+                  cancellation: offer.cancellation,
+                  expiresAt: offer.expiresAt,
+                  supplierRoomLabel: room?.name ?? offer.canonicalRoomId,
+                  hotelName: adapted.hotel.name,
+                  roomLabel: room?.name ?? offer.canonicalRoomId,
+                  boardLabel: offer.board.label,
+                  comments: offer.comments,
+                  tourmind: binding,
+                });
+              }
+              return { ...adapted, sourceCount: 1 };
+            });
+          return { status: "ok", hotels };
+        } catch {
+          // A live source failing degrades the page; it never empties it. The
+          // simulated and other live results still stand.
+          return { status: "unavailable", hotels: [] };
+        }
+      })(), deadlineAt, late),
+      bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
+        if (!isHotelbedsEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
+        // A coordinate for every city, or a supplier destination code on a deep link.
+        const where = await resolveHotelbedsDestination(resolved.destinationId);
+        if (!where) return { status: "skipped", hotels: [] };
+        const live = await searchHotelbedsDestination(where, effectiveIntent, locale);
+        return {
+          status: live.status,
+          hotels: live.hotels.map((adapted) => ({
+            hotel: adapted.hotel,
+            rooms: adapted.rooms,
+            offers: adapted.offers,
+            sourceCount: 1,
+          })),
+        };
+      })(), deadlineAt, late),
+    ]);
+
+    gathered.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);
+
+      /*
+       * Scored here rather than after the branch, because scoring mutates the
+       * offers in place — running it again over cached supply would score
+       * already-scored rates a second time.
+       */
+      scoreSupply(gathered, effectiveIntent);
+
+      normalized = gathered;
+      liveStatuses = [tourmindOutcome.status, hotelbedsOutcome.status];
+
+      /*
+       * A failed run is not an answer worth keeping.
+       *
+       * Caching it would hold the outage open: both suppliers time out once,
+       * and every search for that stay is told "nothing available" for the
+       * next two minutes, long after they came back. The cache exists to save
+       * repeating a question we have the answer to, and "we could not ask" is
+       * not one of those.
+       */
+      const answered = liveStatuses.some((status) => status === "ok");
+      if (answered || normalized.length) writeSupply(cacheKey, { normalized, liveStatuses });
+    }
 
   let cards = normalized.map((n) => buildResultCard(n, effectiveIntent, locale));
 
@@ -509,8 +548,15 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    * nothing ever matched.
    */
   const cityName = dest ? localized(dest.name, locale) : resolved.destinationId;
-  const facets = buildFacets(cards, locale, normalized, cityName);
-  const filtered = applyFilters(withDistance, options.filters ?? {}, normalized, cityName);
+  const anchors = anchorsFor(resolved.destinationId, locale);
+  const facets = buildFacets(cards, locale, normalized, cityName, anchors.map(({ id, label, type }) => ({ id, label, type })));
+  const filtered = applyFilters(
+    withDistance,
+    options.filters ?? {},
+    normalized,
+    cityName,
+    anchorPoint(resolved.destinationId, options.filters?.distanceFrom, locale),
+  );
   const sorted = applySort(filtered, options.sort ?? "recommended");
 
   /*
@@ -644,6 +690,7 @@ function buildFacets(
   locale: Locale,
   normalized: NormalizedHotel[],
   cityName: string,
+  anchors: SearchFacets["distanceAnchors"],
 ): SearchFacets {
   // Per room, so the range spans one kind of number and the filter that reads
   // it back compares like with like.
@@ -683,6 +730,8 @@ function buildFacets(
   const boardCount = new Map<string, number>();
   const boardLabel = new Map<string, string>();
   const payCount = new Map<string, number>();
+  const roomKindCount = new Map<string, number>();
+  const conditionCount = new Map<string, number>();
   for (const card of cards) {
     const offers = bySlug.get(card.slug)?.offers ?? [];
     const boards = offers.length
@@ -700,6 +749,30 @@ function buildFacets(
       ? new Set(offers.map((offer) => offer.paymentTiming))
       : new Set([card.offerSummary.paymentTiming]);
     for (const timing of timings) payCount.set(timing, (payCount.get(timing) ?? 0) + 1);
+
+    /*
+     * Counted per property, not per rate.
+     *
+     * Every count in this object answers "how many rows will I still have if I
+     * tick this", and a hotel with nine deluxe rates is one row. Counting rates
+     * would promise ninety.
+     */
+    const rooms = bySlug.get(card.slug)?.rooms ?? [];
+    const kinds = new Set<string>();
+    for (const room of rooms) {
+      const kind = roomCategoryOf(room.name);
+      if (kind) kinds.add(kind);
+    }
+    if (!kinds.size) {
+      const kind = roomCategoryOf(card.offerSummary.roomSummary);
+      if (kind) kinds.add(kind);
+    }
+    for (const kind of kinds) roomKindCount.set(kind, (roomKindCount.get(kind) ?? 0) + 1);
+
+    const conditions = offers.length
+      ? new Set(offers.map((offer) => conditionOf(offer.cancellation)))
+      : new Set([card.offerSummary.refundable ? "free" : "nonRefundable"]);
+    for (const condition of conditions) conditionCount.set(condition, (conditionCount.get(condition) ?? 0) + 1);
   }
 
   return {
@@ -711,10 +784,14 @@ function buildFacets(
      * result from a filter set to the maximum.
      */
     priceRange: priceRangeOf(prices),
-    // A property whose supplier gave no star rating is not a "0-star hotel";
-    // it is a property with no rating, and it must not appear as a filter.
+    /*
+     * Zero is not a zero-star hotel, it is a property the supplier gave no
+     * rating for — which is why it used to be dropped. But dropping it made it
+     * unreachable: tick 3★ and 4★ and the unrated properties vanish with no
+     * control anywhere to bring them back. It stays, and the panel labels it
+     * "Unrated" rather than "0★".
+     */
     categories: [...catCount.entries()]
-      .filter(([value]) => value > 0)
       .map(([value, c]) => ({ value, count: c }))
       .sort((a, b) => b.value - a.value),
     // A supplier that places a property in a city but not a district leaves
@@ -740,6 +817,15 @@ function buildFacets(
       .sort((a, b) => b.count - a.count),
     propertyTypes: [...typeCount.entries()].map(([value, c]) => ({ value, count: c })),
     paymentTiming: [...payCount.entries()].map(([value, c]) => ({ value: value as HotelResultCard["offerSummary"]["paymentTiming"], count: c })),
+    roomCategories: ROOM_CATEGORY_ORDER.filter((kind) => roomKindCount.has(kind)).map((kind) => ({
+      value: kind,
+      count: roomKindCount.get(kind)!,
+    })),
+    rateConditions: RATE_CONDITIONS.filter((value) => conditionCount.has(value)).map((value) => ({
+      value,
+      count: conditionCount.get(value)!,
+    })),
+    distanceAnchors: anchors,
   };
 }
 
@@ -765,8 +851,10 @@ function applyFilters(
   f: SearchFilters,
   normalized: NormalizedHotel[],
   cityName: string,
+  anchor: { lat: number; lng: number } | null,
 ): Entry[] {
   const byHotel = new Map(normalized.map((entry) => [entry.hotel.slug, entry]));
+  const needle = f.hotelName?.trim() ? fold(f.hotelName) : null;
 
   return entries.filter(({ card, distance }) => {
     /*
@@ -783,7 +871,16 @@ function applyFilters(
     if (f.neighborhoods?.length && !f.neighborhoods.includes(zoneLabel(card.neighborhood, cityName)))
       return false;
     if (f.propertyTypes?.length && !f.propertyTypes.includes(card.propertyType)) return false;
-    if (f.maxDistanceKm != null && distance > f.maxDistanceKm) return false;
+    /*
+     * Measured from the anchor when one was chosen, and from the centre when
+     * it was not — `distance` is already the distance from the centre, so an
+     * unanchored radius costs nothing extra.
+     */
+    if (f.maxDistanceKm != null) {
+      const from = anchor ? distanceKm(anchor, card.coordinates) : distance;
+      if (from > f.maxDistanceKm) return false;
+    }
+    if (needle && !fold(card.name).includes(needle)) return false;
     if (f.dealsOnly && !card.price.strikeTotal) return false;
     if (f.accessibleOnly && !card.accessibilityHighlights.length) return false;
 
@@ -814,6 +911,27 @@ function applyFilters(
       const codes = new Set(offers.map((offer) => offer.board.code));
       const labels = new Set(offers.map((offer) => offer.board.label));
       if (!f.boards.some((b) => codes.has(b) || labels.has(b))) return false;
+    }
+    /*
+     * Both of these ask about the property's whole rate list, for the reason
+     * spelled out above this function: the lead offer is the cheapest one, and
+     * answering "does this hotel have a suite" from it says no for every hotel
+     * whose cheapest room is a double.
+     */
+    if (f.roomCategories?.length) {
+      const rooms = byHotel.get(card.slug)?.rooms ?? [];
+      const kinds = new Set(rooms.map((room) => roomCategoryOf(room.name)).filter(Boolean) as string[]);
+      if (!kinds.size) {
+        const lead = roomCategoryOf(card.offerSummary.roomSummary);
+        if (lead) kinds.add(lead);
+      }
+      if (!f.roomCategories.some((kind) => kinds.has(kind))) return false;
+    }
+    if (f.rateConditions?.length) {
+      const conditions = offers.length
+        ? new Set(offers.map((offer) => conditionOf(offer.cancellation)))
+        : new Set([card.offerSummary.refundable ? "free" : "nonRefundable"]);
+      if (!f.rateConditions.some((condition) => conditions.has(condition as never))) return false;
     }
     if (f.bounds) {
       const { north, south, east, west } = f.bounds;

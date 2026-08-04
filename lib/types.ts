@@ -400,6 +400,16 @@ export interface SearchFacets {
   boards: { code: string; label: string; count: number }[];
   propertyTypes: { value: string; count: number }[];
   paymentTiming: { value: string; count: number }[];
+  /** Room kinds present in these results, with how many properties offer one. */
+  roomCategories: { value: string; count: number }[];
+  /** Free / partial / non-refundable, counted over every rate, not the lead one. */
+  rateConditions: { value: string; count: number }[];
+  /**
+   * What a distance filter can be measured from, nearest-first after the
+   * centre. Only places we hold coordinates for appear, so a city with no
+   * landmarks in the dataset simply offers its centre.
+   */
+  distanceAnchors: { id: string; label: string; type: string }[];
 }
 
 export type SortKey =
@@ -426,6 +436,25 @@ export interface SearchFilters {
   dealsOnly?: boolean;
   maxDistanceKm?: number;
   bounds?: { north: number; south: number; east: number; west: number };
+  /**
+   * Find one property inside the results.
+   *
+   * An agent who has been asked for the Hilton does not want to narrow a
+   * hundred rows by star and board until it appears — they want to type
+   * "hilton". Matched as a fold-insensitive substring of the property name.
+   */
+  hotelName?: string;
+  /** Room kinds read out of the supplier's room names. See `RoomCategory`. */
+  roomCategories?: string[];
+  /** `free` | `partial` | `nonRefundable`. See `RateCondition`. */
+  rateConditions?: string[];
+  /**
+   * What `maxDistanceKm` is measured from: `"centre"`, or the id of a place in
+   * this destination (an airport, a landmark). A radius means nothing without
+   * saying what it is a radius around, and "near the airport" and "near the
+   * old town" are opposite ends of most cities.
+   */
+  distanceFrom?: string;
 }
 
 export interface SearchResponse {

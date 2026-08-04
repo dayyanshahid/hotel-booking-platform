@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { may, type AgencyContext } from "@/components/agency/use-agency";
@@ -31,8 +31,9 @@ import {
   todayIso,
 } from "@/lib/format";
 import { countLabel, guestLabel, roomLabel } from "@/lib/i18n";
-import { href, searchParamsFromIntent } from "@/lib/nav";
+import { href, intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import { appendResults } from "@/lib/search-append";
+import { rememberSearch } from "@/lib/agency/recent-searches";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { QUOTE_BATCH } from "@/lib/agency/rates";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -86,19 +87,37 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * its own working copy from here, and `applied` below is what the visible
    * results were actually fetched with.
    */
-  const [seed, setSeed] = useState<SearchIntent>(() => ({
-    destinationId: "",
-    destinationDisplay: "",
-    destinationType: "city",
-    checkIn: addDays(todayIso(), 21),
-    checkOut: addDays(todayIso(), 24),
-    flexibility: "exact",
-    rooms: [{ adults: 2, childrenAges: [] }],
-    locale,
-    // Trade prices settle in the agency's currency, not whatever the agent
-    // happens to be browsing the consumer site in.
-    currency: context.agency.credit.currency as SearchIntent["currency"],
-  }));
+  /*
+   * A search can arrive in the URL, and until now it could not.
+   *
+   * Every other route into this screen builds one — the home page's search bar
+   * pushes `/agency/search?destination=…`, a recent search replays one, an
+   * agent shares a link with a colleague — and this component threw the lot
+   * away and started blank. Searching from the home page therefore dropped the
+   * agent on an empty search form holding the parameters it had just ignored.
+   */
+  const fromUrl = useSearchParams();
+  const [seed, setSeed] = useState<SearchIntent>(() => {
+    const parsed = intentFromSearchParams(new URLSearchParams(fromUrl.toString()), locale);
+    if (parsed?.destinationId) {
+      // The agency's currency still wins: trade prices settle against credit,
+      // not against whatever the link was built in.
+      return { ...parsed, currency: context.agency.credit.currency as SearchIntent["currency"] };
+    }
+    return {
+      destinationId: "",
+      destinationDisplay: "",
+      destinationType: "city",
+      checkIn: addDays(todayIso(), 21),
+      checkOut: addDays(todayIso(), 24),
+      flexibility: "exact",
+      rooms: [{ adults: 2, childrenAges: [] }],
+      locale,
+      // Trade prices settle in the agency's currency, not whatever the agent
+      // happens to be browsing the consumer site in.
+      currency: context.agency.credit.currency as SearchIntent["currency"],
+    };
+  });
 
   const [data, setData] = useState<SearchResponse | null>(null);
   /**
@@ -132,6 +151,20 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * the sidebar no longer showed.
    */
   const latest = useRef(0);
+  /*
+   * Guest rating, offered only when there is a guest rating.
+   *
+   * The client asked for a review-score filter and it is a fair thing to want,
+   * but neither Hotelbeds nor TourMind returns a guest score on our contracts —
+   * every card comes back without one. A control that silently matches nothing
+   * is worse than an absent one, because an agent reads the empty result as
+   * "no availability". So it is derived from the data: the moment a supplier
+   * does send scores, the filter appears on its own.
+   */
+  const supportedFilters = useMemo(() => {
+    const hasReviews = (data?.results ?? []).some((card) => card.review?.score != null);
+    return hasReviews ? [...LIVE_SUPPLY_FILTERS, "rating" as const] : LIVE_SUPPLY_FILTERS;
+  }, [data]);
   const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -169,6 +202,22 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * data this reads, and without that this would ask again on every render.
    */
   const expandedFor = useRef<string | null>(null);
+  /**
+   * A search that arrived in the URL runs itself.
+   *
+   * Landing on a filled-in form the agent then has to press Search on is a
+   * step that buys nothing — they asked for these results on the previous
+   * screen. Guarded by a ref rather than by `applied`, so it fires once on
+   * arrival and never fights a search the agent has since changed.
+   */
+  const ranFromUrl = useRef(false);
+  useEffect(() => {
+    if (ranFromUrl.current || !seed.destinationId) return;
+    ranFromUrl.current = true;
+    void run({ intent: seed });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (view !== "map" || busy || !data || !applied) return;
     if (data.results.length >= data.totalCount) return;
@@ -260,6 +309,14 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       nextPage > 1 && data ? appendResults(data.results, body.data.results) : body.data.results;
     setData({ ...body.data, results: merged });
     setApplied(intent);
+
+    /*
+     * Recorded here rather than when the form is submitted, so the list only
+     * ever holds searches that actually returned something to come back to.
+     */
+    if (nextPage === 1) {
+      rememberSearch(context.session.agentId, intent, Date.now(), body.data.totalCount);
+    }
 
     // One quote call for the whole page rather than one per row.
     await priceRows(merged.map((r) => r.offerSummary.offerId));
@@ -503,7 +560,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 onChange={(next) => void run({ filters: next })}
                 currency={(applied?.currency ?? seed.currency) as CurrencyCode}
                 // Only what the two suppliers actually publish.
-                supported={LIVE_SUPPLY_FILTERS}
+                supported={supportedFilters}
               />
             </Card>
           )}
@@ -681,7 +738,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
             filters={filters}
             onChange={(next) => void run({ filters: next })}
             currency={(applied?.currency ?? seed.currency) as CurrencyCode}
-            supported={LIVE_SUPPLY_FILTERS}
+            supported={supportedFilters}
           />
         )}
         <div className="mt-4">

@@ -10,10 +10,11 @@ import { Money, Nothing, PageHeader, Section, Stat, StatGrid, StatSkeleton, Tabl
 import { Badge, Button, Card, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { SearchBar } from "@/components/search/search-bar";
-import { formatDate, formatDateTime, formatMoney, todayIso } from "@/lib/format";
-import { dayLabel } from "@/lib/i18n";
+import { formatDate, formatDateTime, formatMoney, nightsBetween, todayIso } from "@/lib/format";
+import { dayLabel, guestLabel, nightLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
 import { attentionItems, type AttentionItem } from "@/lib/agency/attention";
+import { forgetSearches, readRecentSearches, type RecentSearch } from "@/lib/agency/recent-searches";
 import type { AgencyBooking, AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -26,9 +27,6 @@ import { apiCredentials, apiUrl } from "@/lib/api-origin";
  * "what needs me today", so the page leads with arrivals about to happen and
  * quotes about to expire, and keeps the totals underneath where they belong.
  */
-export function AgencyDashboardView({ locale }: { locale: Locale }) {
-  return <PortalShell locale={locale}>{(context) => <Dashboard locale={locale} context={context} />}</PortalShell>;
-}
 
 /**
  * A row in "Needs you today".
@@ -109,9 +107,24 @@ function untilLabel(
   return t("agency.daysShort", { n: days, unit: dayLabel(t as never, days, locale) });
 }
 
-function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext }) {
-  const { t } = useApp();
-  const router = useRouter();
+export function AgencyDashboardView({ locale }: { locale: Locale }) {
+  return <PortalShell locale={locale}>{(context) => <DeskHome locale={locale} context={context} />}</PortalShell>;
+}
+
+export function AgencyOverviewView({ locale }: { locale: Locale }) {
+  return <PortalShell locale={locale}>{(context) => <DeskOverview locale={locale} context={context} />}</PortalShell>;
+}
+
+/**
+ * Everything both desk screens read.
+ *
+ * The home page and the dashboard ask the same two endpoints the same
+ * questions — one to decide what needs doing, the other to total it up — so
+ * the fetching, the polling and the derived figures live here once. Splitting
+ * the screens without splitting this would have meant two copies of the
+ * month-boundary arithmetic drifting apart.
+ */
+function useDesk(context: AgencyContext, reloads: number) {
   const [bookings, setBookings] = useState<AgencyBooking[] | null>(null);
   const [quotes, setQuotes] = useState<AgencyQuote[] | null>(null);
   /*
@@ -131,8 +144,6 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
    * eventually reloads; nothing ever tells them it is broken.
    */
   const [failed, setFailed] = useState(false);
-  /** Bumped by the retry button to re-run the effect. */
-  const [reloads, setReloads] = useState(0);
   /**
    * Re-read on a timer so the countdowns below are honest.
    *
@@ -258,6 +269,119 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 8);
 
+
+  return {
+    bookings,
+    quotes,
+    failed,
+    tick,
+    currency,
+    today,
+    live,
+    margin,
+    holds,
+    attention,
+    arrivals,
+    openQuotes,
+    sales,
+    activity,
+  };
+}
+
+
+/**
+ * Stays this agent has looked for, ready to run again.
+ *
+ * The most repeated action in the portal is retyping a search somebody already
+ * ran an hour ago, because the customer rang back. Each row replays the whole
+ * stay — destination, dates, party — through the same URL the search bar
+ * builds, so it lands on results rather than on a filled-in form.
+ *
+ * Read in an effect rather than during render: this comes out of local storage,
+ * which does not exist on the server, and reading it while rendering is how a
+ * page ends up with markup the client then disagrees with.
+ */
+function RecentSearches({ locale, context }: { locale: Locale; context: AgencyContext }) {
+  const { t } = useApp();
+  const [recent, setRecent] = useState<RecentSearch[] | null>(null);
+
+  useEffect(() => {
+    setRecent(readRecentSearches(context.session.agentId));
+  }, [context.session.agentId]);
+
+  // Absent rather than empty on a first visit. An empty panel promising
+  // "your recent searches" is a promise about a feature, not a help.
+  if (!recent?.length) return null;
+
+  return (
+    <Section
+      title={t("agency.recentSearches")}
+      description={t("agency.recentSearchesBody")}
+      actions={
+        <button
+          type="button"
+          className="text-muted text-xs underline"
+          onClick={() => {
+            forgetSearches(context.session.agentId);
+            setRecent([]);
+          }}
+        >
+          {t("common.clear")}
+        </button>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        {recent.map((entry) => {
+          const nights = nightsBetween(entry.intent.checkIn, entry.intent.checkOut);
+          const guests = entry.intent.rooms.reduce((sum, room) => sum + room.adults + room.childrenAges.length, 0);
+          return (
+            <Link
+              key={`${entry.intent.destinationId}-${entry.intent.checkIn}-${entry.at}`}
+              href={`${href(locale, "/agency/search")}?${searchParamsFromIntent(entry.intent).toString()}`}
+              className="surface hover:border-brand-300 group flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] border p-3 transition-colors"
+            >
+              <Icon name="search" size={16} className="text-muted shrink-0" />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">
+                  {entry.intent.destinationDisplay || entry.intent.destinationId}
+                </span>
+                <span className="text-muted block text-xs">
+                  {formatDate(entry.intent.checkIn, locale)} → {formatDate(entry.intent.checkOut, locale)} ·{" "}
+                  {t("agency.nightsGuests", {
+                    nights,
+                    nightUnit: nightLabel(t as never, nights, locale),
+                    guests,
+                    guestUnit: guestLabel(t as never, guests, locale),
+                  })}
+                  {entry.resultCount != null && ` · ${t("agency.recentFound", { n: entry.resultCount })}`}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * The screen an agent opens first, which is a search box.
+ *
+ * It used to lead with four figures and a production chart. Those answer "how
+ * did we do", a question with no urgency and no deadline, and they pushed the
+ * one thing an agent is actually here to do — find a room for the person on
+ * the phone — into the middle of the page under a row of numbers. The figures
+ * now live on their own page for whoever wants them; this one leads with the
+ * search bar and then shows the work already in flight: searches to pick back
+ * up, quotes waiting on an answer, and anything about to expire.
+ */
+function DeskHome({ locale, context }: { locale: Locale; context: AgencyContext }) {
+  const { t } = useApp();
+  const router = useRouter();
+  const [reloads, setReloads] = useState(0);
+  const desk = useDesk(context, reloads);
+  const { bookings, quotes, failed, currency, today, live, margin, holds, attention, arrivals, openQuotes, sales, activity } = desk;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -265,15 +389,7 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         // most of the day, and reading the clock during a render is both
         // impure and pointless when the sentence works without it.
         title={t("agency.welcomeBack", { name: context.session.name.split(" ")[0] })}
-        description={t("agency.dashboardBody")}
-        actions={
-          <Link href={href(locale, "/agency/search")}>
-            <Button>
-              <Icon name="search" size={16} />
-              {t("agency.searchStays")}
-            </Button>
-          </Link>
-        }
+        description={t("agency.homeBody")}
       />
 
       {/*
@@ -281,6 +397,7 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         Anything below this point renders from `bookings`, so without this the
         whole page is skeletons for ever and reads as merely slow.
       */}
+
       {failed && (
         <Card className="border-caution-300 bg-caution-50 flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
@@ -299,6 +416,23 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         panel every morning teaches an agent to stop looking at this spot,
         which is the one place something urgent will eventually appear.
       */}
+
+      {/*
+        The search bar, at the top, unmissable.
+        Everything else on this page is something the agent might do; this is
+        the thing they came to do.
+      */}
+      <Card className="p-4 sm:p-5">
+        <SearchBar
+          variant="panel"
+          currency={currency as CurrencyCode}
+          onSearch={(intent) =>
+            router.push(`${href(locale, "/agency/search")}?${searchParamsFromIntent(intent).toString()}`)
+          }
+        />
+      </Card>
+
+      <RecentSearches locale={locale} context={context} />
       {attention.length > 0 && (
         <Section title={t("agency.needsYou")} description={t("agency.needsYouBody")}>
           <Card className="divide-ink-100 divide-y">
@@ -308,6 +442,129 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
           </Card>
         </Section>
       )}
+
+
+      <div className="grid gap-5">
+        <Section
+          title={t("agency.quotesToChase")}
+          description={t("agency.quotesToChaseBody")}
+          actions={
+            <Link href={href(locale, "/agency/quotes")} className="text-brand-700 text-sm underline">
+              {t("agency.viewAll")}
+            </Link>
+          }
+        >
+          {!quotes && <TableSkeleton rows={3} />}
+          {quotes && !openQuotes.length && (
+            <Nothing
+              icon="receipt"
+              title={t("agency.noOpenQuotes")}
+              body={t("agency.noOpenQuotesBody")}
+              action={
+                <Link href={href(locale, "/agency/search")}>
+                  <Button size="sm" variant="secondary">
+                    {t("agency.newQuote")}
+                  </Button>
+                </Link>
+              }
+            />
+          )}
+          {quotes && openQuotes.length > 0 && (
+            <Card className="divide-ink-100 divide-y">
+              {openQuotes.slice(0, 5).map((quote) => {
+                const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
+                const daysLeft = Math.round(
+                  (new Date(quote.validUntil).getTime() - new Date(today).getTime()) / 86_400_000,
+                );
+                return (
+                  <Link
+                    key={quote.id}
+                    href={href(locale, `/agency/quotes/${quote.id}`)}
+                    className="hover:bg-brand-50/40 flex items-center justify-between gap-3 p-3.5 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{quote.customerName}</p>
+                      <p className="text-muted truncate text-xs">
+                        {quote.items.length} × {t("common.room")} · {quote.reference}
+                      </p>
+                    </div>
+                    <div className="text-end">
+                      <Money amount={total} currency={quote.currency} locale={locale} />
+                      <p className={cx("text-xs", daysLeft <= 1 ? "text-caution-700" : "text-muted")}>
+                        {daysLeft <= 0
+                          ? t("agency.expiresToday")
+                          : t("agency.expiresInDays", { n: daysLeft, unit: dayLabel(t as never, daysLeft, locale) })}
+                      </p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </Card>
+          )}
+        </Section>
+
+      </div>
+    </div>
+  );
+}
+
+/**
+ * How the agency is doing, for whoever came looking.
+ *
+ * Everything financial, off the working screen and onto its own page. Somebody
+ * opens this deliberately — at the end of a week, before a call with the
+ * owner — which is a different reader from the agent with a customer waiting,
+ * and it can take as much room as the numbers need.
+ */
+function DeskOverview({ locale, context }: { locale: Locale; context: AgencyContext }) {
+  const { t } = useApp();
+
+  const [reloads, setReloads] = useState(0);
+  const desk = useDesk(context, reloads);
+  const { bookings, quotes, failed, currency, today, live, margin, holds, attention, arrivals, openQuotes, sales, activity } = desk;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        // Not "good morning": a greeting fixed at build time is wrong for
+        // most of the day, and reading the clock during a render is both
+        // impure and pointless when the sentence works without it.
+        title={t("agency.dashboard")}
+        description={t("agency.overviewBody", { name: context.agency.name })}
+        actions={
+          <Link href={href(locale, "/agency/search")}>
+            <Button>
+              <Icon name="search" size={16} />
+              {t("agency.searchStays")}
+            </Button>
+          </Link>
+        }
+      />
+
+      {/*
+        The load failed, said so, and offers the way out.
+        Anything below this point renders from `bookings`, so without this the
+        whole page is skeletons for ever and reads as merely slow.
+      */}
+
+      {failed && (
+        <Card className="border-caution-300 bg-caution-50 flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">{t("agency.dashboardUnavailable")}</p>
+            <p className="text-muted text-xs">{t("agency.dashboardUnavailableBody")}</p>
+          </div>
+          <Button size="sm" variant="secondary" onClick={() => setReloads((n) => n + 1)}>
+            {t("common.retry")}
+          </Button>
+        </Card>
+      )}
+
+      {/*
+        Work that does not wait, above everything else on the page.
+        Absent entirely when there is none — an empty "nothing needs you"
+        panel every morning teaches an agent to stop looking at this spot,
+        which is the one place something urgent will eventually appear.
+      */}
 
       {!bookings && !failed && <StatSkeleton />}
       {bookings && (
@@ -388,15 +645,6 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         The first thing they do is look for a room, and making them click
         through to another screen to start is a step that buys nothing.
       */}
-      <Card className="p-4">
-        <SearchBar
-          variant="panel"
-          currency={currency as CurrencyCode}
-          onSearch={(intent) =>
-            router.push(`${href(locale, "/agency/search")}?${searchParamsFromIntent(intent).toString()}`)
-          }
-        />
-      </Card>
 
       {sales && (
         <Section title={t("agency.production")} description={t("agency.productionBody")}>
@@ -448,7 +696,8 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         </Section>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
+
+      <div className="grid gap-5">
         <Section
           title={t("agency.arrivals")}
           description={t("agency.arrivalsBody")}
@@ -500,65 +749,8 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
           )}
         </Section>
 
-        <Section
-          title={t("agency.quotesToChase")}
-          description={t("agency.quotesToChaseBody")}
-          actions={
-            <Link href={href(locale, "/agency/quotes")} className="text-brand-700 text-sm underline">
-              {t("agency.viewAll")}
-            </Link>
-          }
-        >
-          {!quotes && <TableSkeleton rows={3} />}
-          {quotes && !openQuotes.length && (
-            <Nothing
-              icon="receipt"
-              title={t("agency.noOpenQuotes")}
-              body={t("agency.noOpenQuotesBody")}
-              action={
-                <Link href={href(locale, "/agency/search")}>
-                  <Button size="sm" variant="secondary">
-                    {t("agency.newQuote")}
-                  </Button>
-                </Link>
-              }
-            />
-          )}
-          {quotes && openQuotes.length > 0 && (
-            <Card className="divide-ink-100 divide-y">
-              {openQuotes.slice(0, 5).map((quote) => {
-                const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
-                const daysLeft = Math.round(
-                  (new Date(quote.validUntil).getTime() - new Date(today).getTime()) / 86_400_000,
-                );
-                return (
-                  <Link
-                    key={quote.id}
-                    href={href(locale, `/agency/quotes/${quote.id}`)}
-                    className="hover:bg-brand-50/40 flex items-center justify-between gap-3 p-3.5 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{quote.customerName}</p>
-                      <p className="text-muted truncate text-xs">
-                        {quote.items.length} × {t("common.room")} · {quote.reference}
-                      </p>
-                    </div>
-                    <div className="text-end">
-                      <Money amount={total} currency={quote.currency} locale={locale} />
-                      <p className={cx("text-xs", daysLeft <= 1 ? "text-caution-700" : "text-muted")}>
-                        {daysLeft <= 0
-                          ? t("agency.expiresToday")
-                          : t("agency.expiresInDays", { n: daysLeft, unit: dayLabel(t as never, daysLeft, locale) })}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              })}
-            </Card>
-          )}
-        </Section>
-      </div>
 
+      </div>
       <Section title={t("agency.yourTerms")} description={t("agency.yourTermsBody")}>
         <StatGrid columns={3}>
           <Stat label={t("agency.commission")} value={`${context.agency.commissionPercent}%`} hint={t("agency.commissionShort")} />
@@ -594,6 +786,7 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
         seconds, which is a poll and not a socket, because noticing within a
         minute is enough and a connection per desk is not worth holding open.
       */}
+
       <Section title={t("agency.activity")} description={t("agency.activityBody")}>
         {!bookings && <TableSkeleton rows={3} />}
         {bookings && !activity.length && (
@@ -640,3 +833,4 @@ function Dashboard({ locale, context }: { locale: Locale; context: AgencyContext
     </div>
   );
 }
+

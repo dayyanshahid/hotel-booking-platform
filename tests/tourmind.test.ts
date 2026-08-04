@@ -437,10 +437,20 @@ describe("only what the suppliers publish", () => {
   it("offers the ones they do", () => {
     // Price, star rating, board and cancellation come from both suppliers;
     // zone, property type, facilities and promotions from Hotelbeds, and
-    // amenities now from TourMind's static list as well.
-    for (const key of ["price", "stars", "board", "refundable", "amenities"]) {
+    // amenities now from TourMind's static list as well. Room category and
+    // rate conditions are read out of the room name and the cancellation
+    // policy, which both suppliers do send.
+    for (const key of ["price", "stars", "board", "rateConditions", "roomCategory", "amenities", "hotelName", "distance"]) {
       expect(LIVE_SUPPLY_FILTERS).toContain(key);
     }
+  });
+
+  it("asks about cancellation once, with three answers rather than one", () => {
+    // `refundable` was a single checkbox and `rateConditions` replaces it:
+    // free, part-refundable and non-refundable are three different products,
+    // and shipping both controls would be two answers to one question.
+    expect(LIVE_SUPPLY_FILTERS).toContain("rateConditions");
+    expect(LIVE_SUPPLY_FILTERS).not.toContain("refundable");
   });
 });
 

@@ -218,7 +218,13 @@ export async function interpretTrip(
   /* ----------------------------------------------------- what they care about */
 
   if (/(free cancel|refundable|قابل للإلغاء|إلغاء مجاني)/.test(lower)) {
-    filters.refundableOnly = true;
+    /*
+     * The three-way condition rather than the old boolean, so the sidebar can
+     * show what the sentence asked for. Setting `refundableOnly` left the
+     * panel's rate-conditions boxes unticked while the results were narrowed —
+     * a filter the agent could see the effect of but not the state of.
+     */
+    filters.rateConditions = ["free"];
     understood.push("free cancellation");
   }
   if (/(breakfast|إفطار|افطار)/.test(lower)) {

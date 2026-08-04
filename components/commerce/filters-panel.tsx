@@ -1,7 +1,7 @@
 "use client";
 
 import { useApp } from "@/components/providers/app-provider";
-import { Badge, Button, Checkbox, Select, cx } from "@/components/ui";
+import { Badge, Button, Checkbox, Input, Select, cx } from "@/components/ui";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/types";
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
@@ -27,8 +27,19 @@ export type FilterKey =
   | "payLater"
   | "accessible"
   | "deals"
-  | "board";
+  | "board"
+  | "hotelName"
+  | "roomCategory"
+  | "rateConditions"
+  | "distance";
 
+/*
+ * `refundable` is not here, and that is not an oversight: "rate conditions"
+ * answers the same question with three answers instead of one, and offering
+ * both would put two controls on the same field. It stays in the type because
+ * a URL or the trip interpreter can still carry the old boolean, and the chip
+ * above knows how to lift it.
+ */
 const ALL_FILTERS: FilterKey[] = [
   "price",
   "stars",
@@ -36,11 +47,14 @@ const ALL_FILTERS: FilterKey[] = [
   "neighborhood",
   "propertyType",
   "amenities",
-  "refundable",
   "payLater",
   "accessible",
   "deals",
   "board",
+  "hotelName",
+  "roomCategory",
+  "rateConditions",
+  "distance",
 ];
 
 /**
@@ -50,12 +64,21 @@ const ALL_FILTERS: FilterKey[] = [
  * type, facilities and promotions come from Hotelbeds, and amenities now come
  * from TourMind's static list too. Guest rating, accessible rooms and payment
  * timing are not in either contract as data we hold, so they are not offered.
+ *
+ * Room category and rate conditions are read out of what the suppliers do send
+ * — the room's own name and its cancellation policy — so both are answerable
+ * here. `refundable` is deliberately absent: "rate conditions" asks the same
+ * question with three answers instead of one, and shipping both would be two
+ * controls competing over one field.
  */
 export const LIVE_SUPPLY_FILTERS: FilterKey[] = [
+  "hotelName",
   "price",
   "stars",
   "board",
-  "refundable",
+  "roomCategory",
+  "rateConditions",
+  "distance",
   "amenities",
   "neighborhood",
   "propertyType",
@@ -86,6 +109,27 @@ export function FiltersPanel({
 
   return (
     <div className="space-y-6">
+      {/*
+        Find one property among a hundred.
+        An agent who has been asked for the Hilton does not want to narrow by
+        star and board until it surfaces — they want to type "hilton". Cheap
+        enough to run on every keystroke now that a filter change re-reads
+        cached supply instead of calling both suppliers again.
+      */}
+      {shows("hotelName") && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.hotelName")}</legend>
+          <Input
+            className="mt-2"
+            type="search"
+            value={filters.hotelName ?? ""}
+            placeholder={t("filters.hotelNamePlaceholder")}
+            aria-label={t("filters.hotelName")}
+            onChange={(e) => set({ hotelName: e.target.value || undefined })}
+          />
+        </fieldset>
+      )}
+
       {/*
         A range needs two different ends to be a range. With nothing to price,
         the facet collapses to zero and this rendered "$0 – $0" over a slider
@@ -122,6 +166,36 @@ export function FiltersPanel({
             }}
             className="mt-1 w-full accent-[var(--focus)]"
           />
+          {/*
+            Typed bounds beside the slider.
+            A slider is quick for "roughly under two hundred" and useless for
+            "between 180 and 220", which is what a customer with a budget
+            actually says. The server has always accepted a floor; nothing
+            offered one.
+          */}
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              className="!min-h-9"
+              aria-label={t("filters.priceMin")}
+              placeholder={t("filters.priceMin")}
+              value={filters.minPrice == null ? "" : String(filters.minPrice)}
+              onChange={(e) => set({ minPrice: e.target.value ? Number(e.target.value) : undefined })}
+            />
+            <span className="text-muted text-xs">–</span>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              className="!min-h-9"
+              aria-label={t("filters.priceMax")}
+              placeholder={t("filters.priceMax")}
+              value={filters.maxPrice == null ? "" : String(filters.maxPrice)}
+              onChange={(e) => set({ maxPrice: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </div>
         </div>
       </fieldset>
       )}
@@ -144,7 +218,7 @@ export function FiltersPanel({
                   : "surface hover:border-brand-300",
               )}
             >
-              {cat.value}★ ({cat.count})
+              {cat.value > 0 ? `${cat.value}★` : t("filters.unrated")} ({cat.count})
             </button>
           ))}
         </div>
@@ -236,6 +310,102 @@ export function FiltersPanel({
               />
             ))}
           </div>
+        </fieldset>
+      )}
+
+      {/*
+        Room category, read out of the room's own name.
+        No supplier publishes one, so this is derived — which is why the list is
+        built from the facet rather than hard-coded: a category nobody in these
+        results offers is not a choice, it is a dead end that returns nothing.
+      */}
+      {shows("roomCategory") && facets.roomCategories.length > 1 && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.roomCategory")}</legend>
+          <div className="mt-2 space-y-1">
+            {facets.roomCategories.map((kind) => (
+              <Checkbox
+                key={kind.value}
+                checked={filters.roomCategories?.includes(kind.value) ?? false}
+                onChange={() => set({ roomCategories: toggleIn(filters.roomCategories, kind.value) })}
+                label={
+                  <span className="flex items-center gap-2">
+                    {t(`room.category.${kind.value}`)} <Badge tone="neutral">{kind.count}</Badge>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {/*
+        Three answers, not one checkbox.
+        A rate that can be cancelled for the price of a night is neither free
+        nor non-refundable, and an agent quoting a family who may move their
+        dates has to be able to see the difference before they quote.
+      */}
+      {shows("rateConditions") && facets.rateConditions.length > 1 && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.rateConditions")}</legend>
+          <div className="mt-2 space-y-1">
+            {facets.rateConditions.map((condition) => (
+              <Checkbox
+                key={condition.value}
+                checked={filters.rateConditions?.includes(condition.value) ?? false}
+                onChange={() => set({ rateConditions: toggleIn(filters.rateConditions, condition.value) })}
+                label={
+                  <span className="flex items-center gap-2">
+                    {t(`filters.rate.${condition.value}`)} <Badge tone="neutral">{condition.count}</Badge>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {/*
+        A radius is not a filter until it says what it is a radius around.
+        A transit guest wants the airport and a pilgrim wants the Haram, and in
+        most cities those are nowhere near each other or the centre — so the
+        anchor comes first and the distance reads off it.
+      */}
+      {shows("distance") && facets.distanceAnchors.length > 0 && (
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.distanceFrom")}</legend>
+          <Select
+            className="mt-2"
+            value={filters.distanceFrom ?? "centre"}
+            aria-label={t("filters.distanceFrom")}
+            onChange={(e) => set({ distanceFrom: e.target.value === "centre" ? undefined : e.target.value })}
+          >
+            {facets.distanceAnchors.map((anchor) => (
+              <option key={anchor.id} value={anchor.id}>
+                {anchor.type === "centre" ? t("filters.cityCentre", { city: anchor.label }) : anchor.label}
+              </option>
+            ))}
+          </Select>
+          <label htmlFor="max-distance" className="text-muted mt-2 block text-xs">
+            {filters.maxDistanceKm == null
+              ? t("filters.anyDistance")
+              : t("filters.withinKm", { n: filters.maxDistanceKm })}
+          </label>
+          <input
+            id="max-distance"
+            type="range"
+            min={1}
+            max={30}
+            step={1}
+            value={filters.maxDistanceKm ?? 30}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              // The last stop is "anywhere", not thirty kilometres — a radius
+              // filter must never hide results beyond its own top end.
+              set({ maxDistanceKm: value >= 30 ? undefined : value });
+            }}
+            className="mt-1 w-full accent-[var(--focus)]"
+          />
         </fieldset>
       )}
 
@@ -434,6 +604,42 @@ export function ActiveFilterChips({
   }
   if (filters.bounds) {
     chips.push({ key: "bounds", label: t("results.searchArea"), clear: () => onChange({ ...filters, bounds: undefined }) });
+  }
+  /*
+   * The new filters need chips for the same reason the old ones do: a filter
+   * you cannot see is a filter you cannot remove, and these are the ones most
+   * likely to be left on by accident — a hotel name typed to check something,
+   * a radius dragged and forgotten.
+   */
+  if (filters.hotelName?.trim()) {
+    chips.push({
+      key: "hotelName",
+      label: `"${filters.hotelName.trim()}"`,
+      clear: () => onChange({ ...filters, hotelName: undefined }),
+    });
+  }
+  for (const kind of filters.roomCategories ?? []) {
+    chips.push({
+      key: `room-${kind}`,
+      label: t(`room.category.${kind}`),
+      clear: () => onChange({ ...filters, roomCategories: filters.roomCategories?.filter((k) => k !== kind) }),
+    });
+  }
+  for (const condition of filters.rateConditions ?? []) {
+    chips.push({
+      key: `rate-${condition}`,
+      label: t(`filters.rate.${condition}`),
+      clear: () => onChange({ ...filters, rateConditions: filters.rateConditions?.filter((c) => c !== condition) }),
+    });
+  }
+  if (filters.maxDistanceKm != null) {
+    chips.push({
+      key: "distance",
+      label: t("filters.withinKm", { n: filters.maxDistanceKm }),
+      // The anchor goes with it: a radius is the only thing it qualifies, so
+      // leaving "from the airport" set with no radius says nothing.
+      clear: () => onChange({ ...filters, maxDistanceKm: undefined, distanceFrom: undefined }),
+    });
   }
 
   if (!chips.length) return null;
