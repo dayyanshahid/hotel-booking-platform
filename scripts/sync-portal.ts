@@ -73,10 +73,27 @@ async function main(): Promise<void> {
         continue;
       }
       const to = path.join(target, rel);
-      // Only what the portal already carries. Everything else is a route it
-      // does not have, and copying the lot turns the portal into a broken copy
-      // of the consumer app — a hundred files of it, when that was tried.
-      if (!(await fs.stat(to).catch(() => null))) continue;
+      const present = Boolean(await fs.stat(to).catch(() => null));
+
+      if (!present) {
+        /*
+         * Only what the portal already carries — except a new agency route,
+         * which is the portal's whole reason to exist.
+         *
+         * Copying every route turns the portal into a broken copy of the
+         * consumer app, a hundred files of it, which is what happened when
+         * that was tried. But the opposite rule was silently wrong too: a page
+         * added under /agency was never copied, so the portal kept building
+         * happily with a sidebar link to a route it did not have. Found when
+         * the dashboard was split onto its own page and the portal's copy
+         * 404ed while the platform's worked.
+         */
+        if (!rel.startsWith(path.join("app", "[locale]", "agency") + path.sep)) continue;
+        await fs.mkdir(path.dirname(to), { recursive: true });
+        await fs.writeFile(to, await fs.readFile(rel));
+        added.push(rel);
+        continue;
+      }
 
       const [source, existing] = await Promise.all([fs.readFile(rel), fs.readFile(to)]);
       if (source.equals(existing)) continue;

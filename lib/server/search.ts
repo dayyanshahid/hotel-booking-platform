@@ -44,7 +44,7 @@ import { fold, foldedIncludes as matches } from "../text";
 import { readSupply, supplyKey, writeSupply, type LiveStatus as CachedLiveStatus } from "./supply-cache";
 import { anchorPoint, anchorsFor } from "@/lib/geo/anchors";
 import { roomCategoryOf, ROOM_CATEGORY_ORDER } from "@/lib/search/room-category";
-import { conditionOf, RATE_CONDITIONS } from "@/lib/search/rate-conditions";
+import { conditionsOf, RATE_CONDITIONS } from "@/lib/search/rate-conditions";
 
 /* ------------------------------------------------------- suggestions */
 
@@ -770,7 +770,7 @@ function buildFacets(
     for (const kind of kinds) roomKindCount.set(kind, (roomKindCount.get(kind) ?? 0) + 1);
 
     const conditions = offers.length
-      ? new Set(offers.map((offer) => conditionOf(offer.cancellation)))
+      ? new Set(offers.flatMap((offer) => conditionsOf(offer.cancellation, comparableTotal(offer.price))))
       : new Set([card.offerSummary.refundable ? "free" : "nonRefundable"]);
     for (const condition of conditions) conditionCount.set(condition, (conditionCount.get(condition) ?? 0) + 1);
   }
@@ -929,7 +929,7 @@ function applyFilters(
     }
     if (f.rateConditions?.length) {
       const conditions = offers.length
-        ? new Set(offers.map((offer) => conditionOf(offer.cancellation)))
+        ? new Set(offers.flatMap((offer) => conditionsOf(offer.cancellation, comparableTotal(offer.price))))
         : new Set([card.offerSummary.refundable ? "free" : "nonRefundable"]);
       if (!f.rateConditions.some((condition) => conditions.has(condition as never))) return false;
     }

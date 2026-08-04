@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Checkbox, Input, Select, cx } from "@/components/ui";
 import { formatMoney } from "@/lib/format";
@@ -85,6 +86,59 @@ export const LIVE_SUPPLY_FILTERS: FilterKey[] = [
   "deals",
 ];
 
+/**
+ * The type-ahead, which types faster than it searches.
+ *
+ * Every other control here changes one thing per click, so committing on
+ * change is right for them. This one changes on every keystroke, and each
+ * commit re-reads the page — so "hilton" fired six of them, the result count
+ * flickered through six values, and the six answers raced each other home.
+ *
+ * The box therefore keeps its own value and hands it over once the agent stops
+ * typing. Two hundred milliseconds is below the threshold where a pause
+ * registers as waiting and well above the gap between keystrokes.
+ *
+ * The prop still wins when it changes from outside — clearing the chip above,
+ * or resetting the panel, has to empty the box — but not while the agent is
+ * mid-word, which is what a naive sync would do.
+ */
+function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next: string | undefined) => void }) {
+  const { t } = useApp();
+  const [typed, setTyped] = useState(value ?? "");
+  const committed = useRef(value ?? "");
+
+  useEffect(() => {
+    if ((value ?? "") === committed.current) return;
+    committed.current = value ?? "";
+    setTyped(value ?? "");
+  }, [value]);
+
+  useEffect(() => {
+    if (typed === committed.current) return;
+    const id = window.setTimeout(() => {
+      committed.current = typed;
+      onCommit(typed.trim() || undefined);
+    }, 200);
+    return () => window.clearTimeout(id);
+    // `onCommit` is rebuilt every render by the caller and is not worth chasing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typed]);
+
+  return (
+    <fieldset>
+      <legend className="text-sm font-semibold">{t("filters.hotelName")}</legend>
+      <Input
+        className="mt-2"
+        type="search"
+        value={typed}
+        placeholder={t("filters.hotelNamePlaceholder")}
+        aria-label={t("filters.hotelName")}
+        onChange={(e) => setTyped(e.target.value)}
+      />
+    </fieldset>
+  );
+}
+
 export function FiltersPanel({
   facets,
   filters,
@@ -117,17 +171,7 @@ export function FiltersPanel({
         cached supply instead of calling both suppliers again.
       */}
       {shows("hotelName") && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.hotelName")}</legend>
-          <Input
-            className="mt-2"
-            type="search"
-            value={filters.hotelName ?? ""}
-            placeholder={t("filters.hotelNamePlaceholder")}
-            aria-label={t("filters.hotelName")}
-            onChange={(e) => set({ hotelName: e.target.value || undefined })}
-          />
-        </fieldset>
+        <HotelNameFilter value={filters.hotelName} onCommit={(hotelName) => set({ hotelName })} />
       )}
 
       {/*

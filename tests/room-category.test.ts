@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { roomCategoryOf } from "@/lib/search/room-category";
-import { conditionOf } from "@/lib/search/rate-conditions";
+import { conditionsOf } from "@/lib/search/rate-conditions";
 import type { CancellationPolicy } from "@/lib/types";
 
 describe("reading a room category out of a supplier's room name", () => {
@@ -49,32 +49,79 @@ const policy = (over: Partial<CancellationPolicy>): CancellationPolicy => ({
   ...over,
 });
 
-describe("which of the three conditions a rate is", () => {
-  it("calls a rate with a free window free", () => {
-    expect(conditionOf(policy({ freeUntil: "2026-09-01T12:00:00" }))).toBe("free");
-    expect(
-      conditionOf(policy({ freeUntil: "2026-09-01T12:00:00", steps: [{ until: "2026-09-01T12:00:00", fee: 0, label: "" }] })),
-    ).toBe("free");
+describe("which conditions a rate carries", () => {
+  /*
+   * The shapes below are the ones the live suppliers actually send, counted
+   * over 195 rates in four cities: 90 were free-until-a-deadline and then a
+   * part-charge, 67 non-refundable, 38 free and then the full stay. The first
+   * group is what the client means by "partial cancellation", and the first
+   * version of this classifier filed every one of them as plain "free".
+   */
+  it("calls a free window free", () => {
+    const p = policy({ freeUntil: "2026-09-01T12:00:00", steps: [{ until: "2026-09-01T12:00:00", fee: 0, label: "" }] });
+    expect(conditionsOf(p, 300)).toContain("free");
   });
 
-  it("calls a cancellable rate that always costs something partial", () => {
-    expect(conditionOf(policy({}))).toBe("partial");
-    // A deadline with a fee already attached is a partial rate wearing a free
-    // rate's shape, and the steps are what settle it.
-    expect(
-      conditionOf(policy({ freeUntil: "2026-09-01T12:00:00", steps: [{ until: "2026-09-01T12:00:00", fee: 120, label: "" }] })),
-    ).toBe("partial");
+  it("also calls it partial when missing the deadline costs less than the stay", () => {
+    // Free until the 1st, then 106 on a 300 stay: cancellable late for a third
+    // of the booking, which is the rate an agent is looking for.
+    const p = policy({
+      freeUntil: "2026-09-01T12:00:00",
+      steps: [
+        { until: "2026-09-01T12:00:00", fee: 0, label: "Free cancellation" },
+        { until: "2026-09-04T12:00:00", fee: 106, label: "One night" },
+      ],
+    });
+    expect(conditionsOf(p, 300)).toEqual(["free", "partial"]);
   });
 
-  it("calls a rate that cannot be cancelled non-refundable", () => {
-    expect(conditionOf(policy({ refundable: false }))).toBe("nonRefundable");
-    expect(conditionOf(policy({ refundable: false, freeUntil: "2026-09-01T12:00:00" }))).toBe("nonRefundable");
+  it("does not call it partial when missing the deadline costs the lot", () => {
+    const p = policy({
+      freeUntil: "2026-09-01T12:00:00",
+      steps: [
+        { until: "2026-09-01T12:00:00", fee: 0, label: "Free cancellation" },
+        { until: "2026-09-04T12:00:00", fee: 300, label: "No refund" },
+      ],
+    });
+    expect(conditionsOf(p, 300)).toEqual(["free"]);
+  });
+
+  it("forgives a supplier rounding the full charge", () => {
+    // Penalties are rounded to nights and to the supplier's currency, so an
+    // exact comparison would file half the market as partial.
+    const p = policy({
+      freeUntil: "2026-09-01T12:00:00",
+      steps: [
+        { until: "2026-09-01T12:00:00", fee: 0, label: "" },
+        { until: "2026-09-04T12:00:00", fee: 299, label: "" },
+      ],
+    });
+    expect(conditionsOf(p, 300)).toEqual(["free"]);
+  });
+
+  it("calls a rate that costs something from the outset partial, not free", () => {
+    expect(conditionsOf(policy({}), 300)).toEqual(["partial"]);
+    expect(
+      conditionsOf(policy({ freeUntil: "2026-09-01T12:00:00", steps: [{ until: "2026-09-01T12:00:00", fee: 120, label: "" }] }), 300),
+    ).toEqual(["partial"]);
+  });
+
+  it("calls a rate that cannot be cancelled non-refundable, and only that", () => {
+    expect(conditionsOf(policy({ refundable: false }), 300)).toEqual(["nonRefundable"]);
+    expect(conditionsOf(policy({ refundable: false, freeUntil: "2026-09-01T12:00:00" }), 300)).toEqual(["nonRefundable"]);
   });
 
   it("gives the same answer whatever time it is asked", () => {
     // A filter that reclassified rates as the day wore on would give two
     // different answers to the same search an hour apart.
-    const past = policy({ freeUntil: "2020-01-01T00:00:00" });
-    expect(conditionOf(past)).toBe("free");
+    expect(conditionsOf(policy({ freeUntil: "2020-01-01T00:00:00" }), 300)).toContain("free");
+  });
+
+  it("does not fall over when the stay total is unknown", () => {
+    const p = policy({ freeUntil: "2026-09-01T12:00:00", steps: [
+      { until: "2026-09-01T12:00:00", fee: 0, label: "" },
+      { until: "2026-09-04T12:00:00", fee: 106, label: "" },
+    ] });
+    expect(conditionsOf(p, 0)).toEqual(["free", "partial"]);
   });
 });
