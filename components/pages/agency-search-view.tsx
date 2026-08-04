@@ -32,6 +32,7 @@ import {
 } from "@/lib/format";
 import { countLabel, guestLabel, roomLabel } from "@/lib/i18n";
 import { href, searchParamsFromIntent } from "@/lib/nav";
+import { appendResults } from "@/lib/search-append";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { QUOTE_BATCH } from "@/lib/agency/rates";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -124,6 +125,13 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [filters, setFilters] = useState<SearchFilters>({});
   const [sort, setSort] = useState<TradeSort>("recommended");
   const [page, setPage] = useState(1);
+  /*
+   * Which search this screen is waiting for. Live supply takes seconds, and
+   * nothing cancelled the previous call when an agent adjusted a filter — so
+   * the slower of the two won, and the rows on screen belonged to a filter
+   * the sidebar no longer showed.
+   */
+  const latest = useRef(0);
   const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -198,6 +206,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     // asks for a later one.
     const nextPage = next.page ?? 1;
 
+    const ticket = ++latest.current;
     setBusy(true);
     setError(null);
     if (nextPage === 1) setData(null);
@@ -234,16 +243,26 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       data?: SearchResponse;
       error?: { message: string };
     };
+    // Superseded by a newer search; this answer is stale.
+    if (ticket !== latest.current) return;
     setBusy(false);
     if (!body.ok || !body.data) {
       setError(body.error?.message ?? t("error.temporaryService"));
       return;
     }
-    setData(body.data);
+    /*
+     * "Show 12 more" adds rows; it does not re-lay the page. The server ranks
+     * by a price percentile taken across the whole result set, so any supply
+     * change between the two calls re-scores every row — and an agent who was
+     * reading row nine would find something else there.
+     */
+    const merged =
+      nextPage > 1 && data ? appendResults(data.results, body.data.results) : body.data.results;
+    setData({ ...body.data, results: merged });
     setApplied(intent);
 
     // One quote call for the whole page rather than one per row.
-    await priceRows(body.data.results.map((r) => r.offerSummary.offerId));
+    await priceRows(merged.map((r) => r.offerSummary.offerId));
   }
 
   /**

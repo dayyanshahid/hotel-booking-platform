@@ -839,28 +839,42 @@ function sortPrice(card: HotelResultCard): number {
   return comparableTotal(card.price);
 }
 
+/*
+ * The last word in every comparison.
+ *
+ * Ties are common — a city block of identically priced three-star rooms scores
+ * identically — and a tie left to the merge order is decided by whichever
+ * supplier answered first, which is not the same twice. That put two calls for
+ * the same search in different orders, and a cumulative page makes it visible:
+ * the agent asks for twelve more rows and the tied rows above them swap.
+ */
+function byId(a: Entry, b: Entry): number {
+  return a.card.canonicalHotelId < b.card.canonicalHotelId ? -1 : a.card.canonicalHotelId > b.card.canonicalHotelId ? 1 : 0;
+}
+
 function applySort(entries: Entry[], sort: SortKey): Entry[] {
   const copy = [...entries];
   switch (sort) {
     case "priceAsc":
-      return copy.sort((a, b) => sortPrice(a.card) - sortPrice(b.card));
+      return copy.sort((a, b) => sortPrice(a.card) - sortPrice(b.card) || byId(a, b));
     case "priceDesc":
-      return copy.sort((a, b) => sortPrice(b.card) - sortPrice(a.card));
+      return copy.sort((a, b) => sortPrice(b.card) - sortPrice(a.card) || byId(a, b));
     case "rating":
-      return copy.sort((a, b) => (b.card.review?.score ?? 0) - (a.card.review?.score ?? 0));
+      return copy.sort((a, b) => (b.card.review?.score ?? 0) - (a.card.review?.score ?? 0) || byId(a, b));
     case "distance":
-      return copy.sort((a, b) => a.distance - b.distance);
+      return copy.sort((a, b) => a.distance - b.distance || byId(a, b));
     case "flexible":
       return copy.sort(
         (a, b) =>
           Number(b.card.offerSummary.refundable) - Number(a.card.offerSummary.refundable) ||
-          sortPrice(a.card) - sortPrice(b.card),
+          sortPrice(a.card) - sortPrice(b.card) ||
+          byId(a, b),
       );
     case "bestValue":
-      return copy.sort((a, b) => valueOf(b.card) - valueOf(a.card));
+      return copy.sort((a, b) => valueOf(b.card) - valueOf(a.card) || byId(a, b));
     case "recommended":
     default:
-      return copy.sort((a, b) => recommendOf(b) - recommendOf(a));
+      return copy.sort((a, b) => recommendOf(b) - recommendOf(a) || byId(a, b));
   }
 }
 

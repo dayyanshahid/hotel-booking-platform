@@ -12,6 +12,7 @@ import { NoResultsArt } from "@/components/ui/illustrations";
 import { formatDate, formatMoney, guestCount } from "@/lib/format";
 import { countLabel, guestLabel, nightLabel, roomLabel } from "@/lib/i18n";
 import { href, searchHref } from "@/lib/nav";
+import { appendResults } from "@/lib/search-append";
 import type { ApiError, Locale, SearchFilters, SearchIntent, SearchResponse, SortKey } from "@/lib/types";
 
 /**
@@ -55,9 +56,20 @@ export function SearchResultsView({
   const [selected, setSelected] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const firstLoad = useRef(true);
+  /*
+   * Which search the page is actually waiting for.
+   *
+   * A search can take the better part of fifteen seconds, and changing the sort
+   * or a filter starts another one without cancelling the first. Whichever
+   * server answered last won, so a slow "recommended" landing after a quick
+   * "cheapest first" left the page showing one order with the other selected in
+   * the controls — and the agent had no way to know which they were reading.
+   */
+  const latest = useRef(0);
 
   const run = useCallback(
     async (nextPage = page) => {
+      const ticket = ++latest.current;
       setLoading(true);
       setError(null);
       const started = performance.now();
@@ -65,6 +77,9 @@ export function SearchResultsView({
         method: "POST",
         body: JSON.stringify({ intent, filters, sort, page: nextPage, pageSize: 12 }),
       });
+      // Superseded: a newer search is in flight, and this answer is to a
+      // question nobody is asking any more.
+      if (ticket !== latest.current) return;
       setLoading(false);
       if (!res.ok) {
         setError(res.error);
@@ -72,7 +87,15 @@ export function SearchResultsView({
         track("search_results_failed", { category: res.error.category, correlationId: res.error.correlationId });
         return;
       }
-      setData(res.data);
+      /*
+       * A later page keeps the order already on screen; a first page replaces
+       * it outright, because that is a new search and nothing has been read.
+       */
+      setData((prev) =>
+        prev && nextPage > 1
+          ? { ...res.data, results: appendResults(prev.results, res.data.results) }
+          : res.data,
+      );
       setPage(nextPage);
       track("search_results_loaded", {
         count: res.data.totalCount,

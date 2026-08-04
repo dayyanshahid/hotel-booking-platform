@@ -63,6 +63,7 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [total, setTotal] = useState(0);
+  const [listFailed, setListFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -70,8 +71,17 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
       const params = new URLSearchParams({ status, channel, q: query, from, to });
       const body = await apiFetch<{ bookings: Row[]; total: number }>(`/api/admin/bookings?${params.toString()}`);
       if (!alive) return;
-      setRows(body.ok && body.data ? body.data.bookings : []);
-      setTotal(body.ok && body.data ? body.data.total : 0);
+      /*
+       * On the console's busiest screen, a failed read used to render as "no
+       * bookings match" — an operator searching for a customer's reference is
+       * told the booking is not there, and the next thing they do is take the
+       * call as though nothing was sold.
+       */
+      setListFailed(!body.ok);
+      if (body.ok && body.data) {
+        setRows(body.data.bookings);
+        setTotal(body.data.total);
+      }
     }, 200);
     return () => {
       alive = false;
@@ -129,8 +139,13 @@ function BookingBrowser({ locale, initialStatus }: { locale: Locale; initialStat
         </Field>
       </Card>
 
-      {!rows && <Skeleton className="h-64 w-full" />}
-      {rows && !rows.length && <Alert tone="info">{t("admin.noBookings")}</Alert>}
+      {!rows && !listFailed && <Skeleton className="h-64 w-full" />}
+      {listFailed && (
+        <Alert tone="warning" title={t("admin.bookingsUnavailable")}>
+          {t("admin.bookingsUnavailableBody")}
+        </Alert>
+      )}
+      {rows && !listFailed && !rows.length && <Alert tone="info">{t("admin.noBookings")}</Alert>}
 
       {rows && rows.length > 0 && (
         <>
@@ -499,13 +514,19 @@ function CaseQueue({ locale }: { locale: Locale }) {
   const [busy, setBusy] = useState(false);
   /** A case update that did not take. The queue will not show it otherwise. */
   const [patchError, setPatchError] = useState<string | null>(null);
+  const [queueFailed, setQueueFailed] = useState(false);
 
   async function load(nextStatus = status, nextOwner = owner) {
     const body = await apiFetch<{ cases: QueuedCase[]; you: string }>(`/api/admin/cases?status=${nextStatus}&owner=${nextOwner}`, {
 
     });
-    setCases(body.ok && body.data ? body.data.cases : []);
-    if (body.ok && body.data) setYou(body.data.you);
+    // An empty queue means the team is on top of it; an unreadable one means
+    // nobody knows. They must not look the same.
+    setQueueFailed(!body.ok);
+    if (body.ok && body.data) {
+      setCases(body.data.cases);
+      setYou(body.data.you);
+    }
   }
 
   useEffect(() => {
@@ -566,8 +587,13 @@ function CaseQueue({ locale }: { locale: Locale }) {
         </Field>
       </Card>
 
-      {!cases && <Skeleton className="h-48 w-full" />}
-      {cases && !cases.length && <Alert tone="info">{t("admin.noCases")}</Alert>}
+      {!cases && !queueFailed && <Skeleton className="h-48 w-full" />}
+      {queueFailed && (
+        <Alert tone="warning" title={t("admin.casesUnavailable")}>
+          {t("admin.casesUnavailableBody")}
+        </Alert>
+      )}
+      {cases && !queueFailed && !cases.length && <Alert tone="info">{t("admin.noCases")}</Alert>}
 
       <ul className="space-y-2">
         {(cases ?? []).map((item) => (

@@ -42,11 +42,14 @@ export function AdminAgenciesView({ locale }: { locale: Locale }) {
 function AgencyList({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [listFailed, setListFailed] = useState(false);
   const [open, setOpen] = useState(false);
 
   async function load() {
     const body = await apiFetch<{ agencies: Row[] }>("/api/admin/agencies");
-    setRows(body.ok && body.data ? body.data.agencies : []);
+    // No agencies and an unreadable list are opposite facts about the estate.
+    setListFailed(!body.ok);
+    if (body.ok && body.data) setRows(body.data.agencies);
   }
 
   useEffect(() => {
@@ -65,8 +68,13 @@ function AgencyList({ locale }: { locale: Locale }) {
         }
       />
 
-      {!rows && <Skeleton className="h-48 w-full" />}
-      {rows && !rows.length && <Alert tone="info">{t("admin.noAgencies")}</Alert>}
+      {!rows && !listFailed && <Skeleton className="h-48 w-full" />}
+      {listFailed && (
+        <Alert tone="warning" title={t("admin.agenciesUnavailable")}>
+          {t("admin.agenciesUnavailableBody")}
+        </Alert>
+      )}
+      {rows && !listFailed && !rows.length && <Alert tone="info">{t("admin.noAgencies")}</Alert>}
 
       {rows && rows.length > 0 && (
         <Card className="overflow-x-auto">

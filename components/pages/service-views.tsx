@@ -316,6 +316,8 @@ export function AlertsView({ locale }: { locale: Locale }) {
   const api = useApi();
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [alertsFailed, setAlertsFailed] = useState(false);
+  /** An unsubscribe that did not take. The list alone will not say so. */
+  const [unsubscribeError, setUnsubscribeError] = useState<string | null>(null);
   const [target, setTarget] = useState("");
   const [consent, setConsent] = useState(false);
   const [selected, setSelected] = useState(0);
@@ -410,6 +412,7 @@ export function AlertsView({ locale }: { locale: Locale }) {
         {alertsFailed && (
           <Alert tone="warning" title={t("alerts.unavailable")}>{t("alerts.unavailableBody")}</Alert>
         )}
+        {unsubscribeError && <Alert tone="critical">{unsubscribeError}</Alert>}
         {!alertsFailed && !alerts.length && <EmptyState title={t("alerts.empty")} />}
         <ul className="space-y-2">
           {alerts.map((alert) => (
@@ -427,7 +430,18 @@ export function AlertsView({ locale }: { locale: Locale }) {
                     size="sm"
                     variant="quiet"
                     onClick={async () => {
-                      await api(`/api/price-alerts?id=${alert.id}`, { method: "DELETE" });
+                      /*
+                       * The result was thrown away, so a refused delete
+                       * reloaded a list with the alert still on it — which
+                       * reads as a misclick. They press it again, and keep
+                       * getting the emails either way.
+                       */
+                      setUnsubscribeError(null);
+                      const res = await api(`/api/price-alerts?id=${alert.id}`, { method: "DELETE" });
+                      if (!res.ok) {
+                        setUnsubscribeError(res.error?.message ?? t("error.temporaryService"));
+                        return;
+                      }
                       void load();
                     }}
                   >

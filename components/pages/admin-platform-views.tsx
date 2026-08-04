@@ -226,14 +226,22 @@ export function AdminSuppliersView({ locale }: { locale: Locale }) {
 function Suppliers() {
   const { t } = useApp();
   const [suppliers, setSuppliers] = useState<Supplier[] | null>(null);
+  const [suppliersFailed, setSuppliersFailed] = useState(false);
 
   useEffect(() => {
     void (async () => {
       const body = await apiFetch<{ suppliers: Supplier[] }>("/api/admin/suppliers");
-      setSuppliers(body.ok && body.data ? body.data.suppliers : []);
+      // "No suppliers configured" is a very different thing from "we could
+      // not ask", on the screen an operator opens to find out why a city
+      // returns nothing.
+      setSuppliersFailed(!body.ok);
+      if (body.ok && body.data) setSuppliers(body.data.suppliers);
     })();
   }, []);
 
+  // An early return on `!suppliers` alone left the page on a skeleton for
+  // ever once the read failed, since nothing would ever set the list.
+  if (suppliersFailed) return <Alert tone="warning">{t("admin.suppliersUnavailable")}</Alert>;
   if (!suppliers) return <Skeleton className="h-48 w-full" />;
 
   return (

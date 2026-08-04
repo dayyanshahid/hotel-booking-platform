@@ -122,14 +122,20 @@ export function AgencyQuoteView({ locale, id }: { locale: Locale; id: string }) 
 
 function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; context: AgencyContext }) {
   const { t } = useApp();
-  const [quote, setQuote] = useState<AgencyQuote | null | "missing">(null);
+  const [quote, setQuote] = useState<AgencyQuote | null | "missing" | "unreachable">(null);
   const [busy, setBusy] = useState(false);
   /** A status change that did not take. Shown, because the badge will not say. */
   const [markError, setMarkError] = useState<string | null>(null);
 
   async function load() {
     const body = await apiFetch<{ quote: AgencyQuote }>(`/api/agency/quotes/${encodeURIComponent(id)}`);
-    setQuote(body.ok && body.data ? body.data.quote : "missing");
+    /*
+     * "missing" is a claim that the quote is not there, and a failed read is
+     * not entitled to make it. An agent told a customer's quotation does not
+     * exist will rebuild it; the original is still sitting on the account.
+     */
+    if (body.ok && body.data) setQuote(body.data.quote);
+    else setQuote(body.error?.correlationId === "cid_offline" ? "unreachable" : "missing");
   }
 
   useEffect(() => {
@@ -138,6 +144,7 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   }, [id]);
 
   if (quote === null) return <Skeleton className="h-64 w-full" />;
+  if (quote === "unreachable") return <Alert tone="warning">{t("agency.quoteUnreachable")}</Alert>;
   if (quote === "missing") return <Alert tone="critical">{t("error.notFound")}</Alert>;
 
   async function mark(status: AgencyQuote["status"]) {

@@ -34,10 +34,14 @@ function Customers({ locale }: { locale: Locale }) {
   const [editing, setEditing] = useState<typeof BLANK | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   async function load() {
     const body = await apiFetch<{ customers: AgencyCustomer[] }>("/api/agency/customers");
-    setCustomers(body.ok && body.data ? body.data.customers : []);
+    // An unreadable address book showed as an empty one, and the obvious next
+    // move is to re-enter people who are already on it.
+    setLoadFailed(!body.ok);
+    if (body.ok && body.data) setCustomers(body.data.customers);
   }
 
   useEffect(() => {
@@ -108,8 +112,13 @@ function Customers({ locale }: { locale: Locale }) {
         </Card>
       )}
 
-      {!customers && <TableSkeleton rows={4} />}
-      {customers && !customers.length && (
+      {!customers && !loadFailed && <TableSkeleton rows={4} />}
+      {loadFailed && (
+        <Alert tone="warning" title={t("agency.customersUnavailable")}>
+          {t("agency.customersUnavailableBody")}
+        </Alert>
+      )}
+      {customers && !loadFailed && !customers.length && (
         <Nothing
           icon="users"
           title={t("agency.noCustomers")}

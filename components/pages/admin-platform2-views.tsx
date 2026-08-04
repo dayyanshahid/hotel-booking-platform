@@ -775,6 +775,7 @@ export function AdminAuditView({ locale }: { locale: Locale }) {
 function Audit({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [auditFailed, setAuditFailed] = useState(false);
   const [actions, setActions] = useState<string[]>([]);
   const [actor, setActor] = useState("");
   const [action, setAction] = useState("");
@@ -785,8 +786,17 @@ function Audit({ locale }: { locale: Locale }) {
       const params = new URLSearchParams({ actor, action });
       const body = await apiFetch<{ entries: AuditEntry[]; actions: string[] }>(`/api/admin/audit?${params.toString()}`);
       if (!alive) return;
-      setEntries(body.ok && body.data ? body.data.entries : []);
-      if (body.ok && body.data) setActions(body.data.actions);
+      /*
+       * An empty audit log and an unreadable one look identical and mean
+       * opposite things. This is the record of who cancelled a stranger's
+       * booking and who moved an agency's credit; "nothing happened" is the
+       * one answer it must never give by accident.
+       */
+      setAuditFailed(!body.ok);
+      if (body.ok && body.data) {
+        setEntries(body.data.entries);
+        setActions(body.data.actions);
+      }
     }, 200);
     return () => {
       alive = false;
@@ -824,8 +834,9 @@ function Audit({ locale }: { locale: Locale }) {
         </Field>
       </Card>
 
-      {!entries && <Skeleton className="h-64 w-full" />}
-      {entries && !entries.length && <p className="text-muted text-sm">{t("admin.noAudit")}</p>}
+      {!entries && !auditFailed && <Skeleton className="h-64 w-full" />}
+      {auditFailed && <Alert tone="warning">{t("admin.auditUnavailable")}</Alert>}
+      {entries && !auditFailed && !entries.length && <p className="text-muted text-sm">{t("admin.noAudit")}</p>}
       {entries && entries.length > 0 && (
         <Card className="divide-ink-100 divide-y">
           {entries.map((entry) => (

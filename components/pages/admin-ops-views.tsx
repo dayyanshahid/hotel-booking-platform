@@ -249,13 +249,17 @@ export function AdminCustomersView({ locale }: { locale: Locale }) {
 function Customers({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [rows, setRows] = useState<CustomerRow[] | null>(null);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
     let alive = true;
     const id = window.setTimeout(async () => {
       const body = await apiFetch<{ customers: CustomerRow[] }>(`/api/admin/customers?q=${encodeURIComponent(query)}`);
-      if (alive) setRows(body.ok && body.data ? body.data.customers : []);
+      if (!alive) return;
+      // "No customers match" is an answer; a failed search is not one.
+      setSearchFailed(!body.ok);
+      if (body.ok && body.data) setRows(body.data.customers);
     }, 200);
     return () => {
       alive = false;
@@ -273,8 +277,13 @@ function Customers({ locale }: { locale: Locale }) {
         </Field>
       </Card>
 
-      {!rows && <Skeleton className="h-48 w-full" />}
-      {rows && !rows.length && <Alert tone="info">{t("admin.noCustomers")}</Alert>}
+      {!rows && !searchFailed && <Skeleton className="h-48 w-full" />}
+      {searchFailed && (
+        <Alert tone="warning" title={t("admin.customersUnavailable")}>
+          {t("admin.customersUnavailableBody")}
+        </Alert>
+      )}
+      {rows && !searchFailed && !rows.length && <Alert tone="info">{t("admin.noCustomers")}</Alert>}
 
       {rows && rows.length > 0 && (
         <Card className="overflow-x-auto">

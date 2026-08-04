@@ -45,11 +45,22 @@ export function TripsView({ locale }: { locale: Locale }) {
   // rather than written into state.
   const bookings = account ? loaded : [];
 
+  /** The read failed. Not the same as having no trips, and never shown as it. */
+  const [failed, setFailed] = useState(false);
+
   useEffect(() => {
     if (!account) return;
     void (async () => {
       const res = await api<{ bookings: Booking[] }>(`/api/trips?email=${encodeURIComponent(account.email)}`);
-      setLoaded(res.ok ? res.data.bookings : []);
+      /*
+       * `res.ok ? bookings : []` told a traveller they had no trips whenever
+       * the list could not be fetched — the worst version of this mistake,
+       * because the reader is looking for a stay they have already paid for
+       * and the page states they have none. A lapsed session, a bad gateway,
+       * a dropped connection: all rendered as "no trips yet".
+       */
+      setFailed(!res.ok);
+      if (res.ok) setLoaded(res.data.bookings);
     })();
   }, [account, api]);
 
@@ -108,9 +119,14 @@ export function TripsView({ locale }: { locale: Locale }) {
         ]}
       />
 
-      {!bookings && <Skeleton className="h-32 w-full" />}
+      {!bookings && !failed && <Skeleton className="h-32 w-full" />}
+      {failed && (
+        <Alert tone="warning" title={t("trips.unavailable")}>
+          {t("trips.unavailableBody")}
+        </Alert>
+      )}
 
-      {bookings && !list.length && <EmptyState art={<EmptyTripsArt />} title={t("trips.empty")} />}
+      {bookings && !failed && !list.length && <EmptyState art={<EmptyTripsArt />} title={t("trips.empty")} />}
 
       <ul className="space-y-3">
         {list.map((booking) => (

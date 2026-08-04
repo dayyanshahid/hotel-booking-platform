@@ -5,6 +5,7 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 
 import { isConfident, matchDestination } from "@/lib/destination-match";
+import { appendResults } from "@/lib/search-append";
 
 /**
  * The search-a-stay flow, end to end, against a running server.
@@ -687,11 +688,34 @@ async function run(): Promise<void> {
     if (after.length <= before.length) {
       throw new Error(`page 2 returned ${after.length} rows, page 1 returned ${before.length}`);
     }
-    if (after.slice(0, before.length).join(",") !== before.join(",")) {
+    if (new Set(after).size !== after.length) throw new Error("the extended page repeats a property");
+
+    /*
+     * The raw prefix is not the assertion, because it cannot be one.
+     *
+     * Two calls are two live searches, and the price score is a percentile
+     * across whatever came back — so a property selling out between them
+     * re-scores every row and the server hands back a different order. That is
+     * supply moving, not the server misbehaving, and it used to fail here.
+     *
+     * What must hold is what the agent sees, so this asserts the merge the
+     * screen actually performs: rows already read stay where they were, and
+     * only genuinely new rows arrive under them.
+     */
+    const shown = appendResults(firstPage.results, two.results);
+    const merged = shown.map((c) => c.canonicalHotelId);
+    const survivors = before.filter((id) => after.includes(id));
+    if (merged.slice(0, survivors.length).join(",") !== survivors.join(",")) {
       throw new Error("the rows already read changed underneath the agent when they asked for more");
     }
-    if (new Set(after).size !== after.length) throw new Error("the extended page repeats a property");
-    return `${before.length} → ${after.length} rows, the first ${before.length} unchanged`;
+    if (new Set(merged).size !== merged.length) throw new Error("the merged page repeats a property");
+    for (const id of after) {
+      if (!merged.includes(id)) throw new Error(`the merge dropped ${id}, a room the agent never sees`);
+    }
+    const drift = before.length - survivors.length;
+    return `${before.length} → ${merged.length} rows on screen, the first ${survivors.length} unmoved${
+      drift ? ` · ${drift} left supply between the two calls` : ""
+    }`;
   });
 
   await check("an absurd page cannot pull the whole city in one request", async () => {
