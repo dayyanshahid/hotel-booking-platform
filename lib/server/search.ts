@@ -44,6 +44,7 @@ import { fold, foldedIncludes as matches } from "../text";
 import { readSupply, supplyKey, writeSupply, type LiveStatus as CachedLiveStatus } from "./supply-cache";
 import { newOfferBatch, publishOffers, rebatchOffers } from "./store";
 import { anchorPoint, anchorsFor } from "@/lib/geo/anchors";
+import { GENERATED_AIRPORTS } from "@/lib/data/airports.generated";
 import { roomCategoryOf, ROOM_CATEGORY_ORDER } from "@/lib/search/room-category";
 import { conditionsOf, RATE_CONDITIONS } from "@/lib/search/rate-conditions";
 
@@ -115,6 +116,26 @@ export function suggest(query: string, locale: Locale, limit = 8): Suggestion[] 
         coordinates: p.coordinates,
       });
     }
+  }
+
+  /*
+   * Airports from the generated list, so typing "Heathrow" or "LHR" finds
+   * London. The label carries the code in brackets, which is what makes a
+   * three-letter query match at all — agents type the code far more often than
+   * the name.
+   */
+  for (const airport of GENERATED_AIRPORTS) {
+    if (!matches(airport.name, q)) continue;
+    const d = getDestination(airport.destinationId);
+    if (!d) continue;
+    out.push({
+      id: airport.id,
+      type: "airport",
+      label: airport.name,
+      context: `${localized(d.name, locale)}, ${localized(d.country, locale)}`,
+      countryCode: d.countryCode,
+      coordinates: airport.coordinates,
+    });
   }
 
   // Hotels rank below every place type, so there is no point collecting more
@@ -196,6 +217,8 @@ export function resolveDestination(intent: SearchIntent): {
     const [destId, hood] = raw.split("::");
     return { destinationId: destId, neighborhoodKey: hood };
   }
+  const airport = GENERATED_AIRPORTS.find((a) => a.id === raw);
+  if (airport) return { destinationId: airport.destinationId };
   const place = EXTRA_PLACES.find((p) => p.id === raw);
   if (place) return { destinationId: place.destinationId };
   return { destinationId: raw };

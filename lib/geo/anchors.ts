@@ -1,5 +1,6 @@
 import { EXTRA_PLACES, getDestination } from "@/lib/data/destinations";
 import { localized } from "@/lib/data/catalog";
+import { GENERATED_AIRPORTS } from "@/lib/data/airports.generated";
 import type { Locale } from "@/lib/types";
 
 type Coordinates = { lat: number; lng: number };
@@ -38,7 +39,7 @@ export function anchorsFor(destinationId: string, locale: Locale): DistanceAncho
     coordinates: destination.coordinates,
   };
 
-  const places = EXTRA_PLACES.filter(
+  const curated = EXTRA_PLACES.filter(
     (place) => place.destinationId === destinationId && place.coordinates,
   ).map((place) => ({
     id: place.id,
@@ -47,11 +48,43 @@ export function anchorsFor(destinationId: string, locale: Locale): DistanceAncho
     coordinates: place.coordinates,
   }));
 
-  // Airports before landmarks: there is at most one or two of them and it is
-  // the anchor most often asked for by name.
-  places.sort((a, b) => (a.type === b.type ? a.label.localeCompare(b.label) : a.type === "airport" ? -1 : 1));
+  /*
+   * Which airports a curated entry has already spoken for.
+   *
+   * The two lists name the same airport differently — `poi-dxb-airport` here,
+   * `air-dxb` in the generated file — so identity is the IATA code, which the
+   * curated labels carry in brackets precisely so a reader can see it. Without
+   * this, Dubai would offer Dubai International twice, once in Arabic and once
+   * not.
+   */
+  const spokenFor = new Set(
+    curated
+      .filter((place) => place.type === "airport")
+      .map((place) => place.label.match(/\(([A-Z]{3})\)/)?.[1])
+      .filter(Boolean) as string[],
+  );
 
-  return [centre, ...places];
+  /*
+   * Everything else comes from OurAirports. English-only, because that is how
+   * the source publishes airport names — a curated entry is where a translated
+   * or locally-corrected name belongs, and it wins over this.
+   */
+  const generated = GENERATED_AIRPORTS.filter(
+    (airport) => airport.destinationId === destinationId && !spokenFor.has(airport.iata),
+  ).map((airport) => ({
+    id: airport.id,
+    label: airport.name,
+    type: "airport",
+    coordinates: airport.coordinates,
+  }));
+
+  const airports = [...curated.filter((place) => place.type === "airport"), ...generated];
+  const landmarks = curated.filter((place) => place.type !== "airport");
+  landmarks.sort((a, b) => a.label.localeCompare(b.label));
+
+  // Airports before landmarks: it is the anchor asked for most often, and the
+  // generated list already has them in the order travellers use them.
+  return [centre, ...airports, ...landmarks];
 }
 
 /** The coordinates a filter's `distanceFrom` refers to, if we know them. */
