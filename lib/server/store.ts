@@ -18,12 +18,17 @@ import type { SourceCode } from "./suppliers";
 /**
  * Where a booking lives between requests.
  *
- * The volatile half — offers, checkout sessions, cancellation quotes — is
- * deliberately process-local: it is short-lived working state tied to one
- * conversation with the guest, and re-quoting is the correct behaviour when it
- * is gone. Bookings and their supplier references are not: they are the record
- * of money taken and a room held, so they go through the shared persistence
- * driver and survive whichever instance happened to create them.
+ * Bookings and their supplier references are the record of money taken and a
+ * room held, so they go through the shared persistence driver and survive
+ * whichever instance happened to create them.
+ *
+ * Offers used to be filed under "short-lived working state, process-local, and
+ * re-quoting is the right answer when it is gone". The first half is true and
+ * the conclusion was not: on a serverless platform the click after the search
+ * is a different instance, not a later moment, so "expired" was being reported
+ * seconds into a conversation the guest had not left. They now go through the
+ * driver too — see the offers section below. Checkout sessions and cancellation
+ * quotes remain process-local, and are next in line for the same treatment.
  */
 
 /**
@@ -285,6 +290,84 @@ export async function loadPersisted(): Promise<void> {
 
 /* ------------------------------------------------------------- offers */
 
+/**
+ * Offers, and the instance problem they used to have.
+ *
+ * These were held in this process and nowhere else, on the reasoning that they
+ * are short-lived working state and re-quoting is the right answer when they
+ * expire. That reasoning is sound for expiry and wrong for serverless: the
+ * request that runs the search and the request that handles the click a few
+ * seconds later are routinely different instances, so the second one found
+ * nothing and told the customer their rate was gone while it was sitting in
+ * another lambda's memory. Measured on production: two of twelve rows priced
+ * on a trade page, and four of six checkouts refused with "no longer
+ * available" for properties that were fine.
+ *
+ * So an offer belongs to a **batch** — one search, or one availability call —
+ * and the batch id is carried in the offer id. That is what lets any instance
+ * find an offer it never created from the id alone, without the caller having
+ * to remember which search it came from.
+ *
+ * One document per batch, holding only the offers the response actually
+ * exposed. One write per search rather than per rate: a city search builds
+ * something like sixteen hundred rates and puts fewer than a hundred of them
+ * on the page, and only the ones on the page can be clicked.
+ */
+
+/** How long a batch document outlives the offers in it. */
+const OFFER_TTL_SECONDS = 45 * 60;
+
+/**
+ * A ceiling on one document, so a very large result set cannot write a
+ * multi-megabyte value. At roughly 1.4 KB an offer this is about half a
+ * megabyte; anything dropped is reported rather than silently lost.
+ */
+const MAX_OFFERS_PER_BATCH = 400;
+
+/** Separates the batch from the supplier's own id. Absent from both halves. */
+const BATCH_SEPARATOR = "~";
+
+/** Mints the batch every offer from one search or availability call shares. */
+export function newOfferBatch(): string {
+  return `ob${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
+}
+
+/** The public id for an offer, carrying the batch that can find it again. */
+export function batchedOfferId(batch: string, local: string): string {
+  return `${batch}${BATCH_SEPARATOR}${local}`;
+}
+
+function batchOf(offerId: string): string | null {
+  const at = offerId.indexOf(BATCH_SEPARATOR);
+  return at > 0 ? offerId.slice(0, at) : null;
+}
+
+/**
+ * The document name for a batch.
+ *
+ * A hyphen rather than a slash: the filesystem driver refuses any key outside
+ * `[a-z0-9-]`, deliberately, so that a key can never escape the data directory.
+ * Batch ids are base-36 and satisfy it on their own.
+ */
+function batchKey(batch: string): string {
+  return `offers-${batch}`;
+}
+
+type OfferDocument = { offers: Record<string, StoredOffer> };
+
+/** Batches this process has already fetched, so a page of lookups reads once. */
+const fetchedBatches = new Set<string>();
+
+/**
+ * Offers this process has already put in the shared store.
+ *
+ * Filtering re-reads cached supply and re-publishes the same page, which after
+ * the first time has nothing new to say. Without this every tick of a checkbox
+ * spent a round trip discovering that — on the path whose whole point is being
+ * fast.
+ */
+const publishedIds = new Set<string>();
+
 export function rememberOffer(id: string, offer: StoredOffer): void {
   store.offers.set(id, offer);
   if (store.offers.size > 6000) {
@@ -295,8 +378,142 @@ export function rememberOffer(id: string, offer: StoredOffer): void {
   }
 }
 
+/**
+ * What this process holds. Callers that can tolerate a miss use it directly;
+ * everything on the booking path uses `loadOffer` instead.
+ */
 export function getOffer(id: string): StoredOffer | undefined {
   return store.offers.get(id);
+}
+
+/**
+ * The offer, from this process or from the shared store.
+ *
+ * A miss reads the whole batch rather than the single offer, because a page
+ * prices up to sixty offers from one search and sixty round trips to answer
+ * one question is not a trade worth making.
+ */
+export async function loadOffer(id: string): Promise<StoredOffer | undefined> {
+  const local = store.offers.get(id);
+  if (local) return local;
+
+  const batch = batchOf(id);
+  if (!batch || fetchedBatches.has(batch)) return undefined;
+  fetchedBatches.add(batch);
+
+  const doc = await driver().read<OfferDocument>(batchKey(batch));
+  if (!doc?.offers) return undefined;
+  for (const [offerId, offer] of Object.entries(doc.offers)) {
+    // Never over an offer this process already has: a recheck may have moved
+    // the price, and the fresher copy is the one in memory.
+    if (!store.offers.has(offerId)) store.offers.set(offerId, offer);
+  }
+  return store.offers.get(id);
+}
+
+/**
+ * Publishes offers so other instances can see them.
+ *
+ * Grouped by the batch each id already carries rather than by a batch handed
+ * in, because those are not always the same thing: a filter change re-reads
+ * cached supply, so the offers on the second page belong to the batch the
+ * *first* search minted. Keying off the ids means a re-read merges into the
+ * document that already exists instead of writing a second one under a name
+ * nothing will ever look up.
+ *
+ * `ids` is what the response actually handed out. Everything else built along
+ * the way stays in this process, where it costs nothing: a city search builds
+ * something like sixteen hundred rates and puts fewer than a hundred on the
+ * page, and only the ones on the page can be clicked.
+ */
+export async function publishOffers(ids: Iterable<string>): Promise<void> {
+  const byBatch = new Map<string, string[]>();
+  for (const id of ids) {
+    const batch = batchOf(id);
+    if (!batch || !store.offers.has(id) || publishedIds.has(id)) continue;
+    const list = byBatch.get(batch);
+    if (list) list.push(id);
+    else byBatch.set(batch, [id]);
+  }
+  if (!byBatch.size) return;
+
+  await Promise.all(
+    [...byBatch].map(async ([batch, offerIds]) => {
+      const existing = (await driver().read<OfferDocument>(batchKey(batch))) ?? { offers: {} };
+      let added = 0;
+      let dropped = 0;
+      for (const id of offerIds) {
+        if (existing.offers[id]) continue;
+        if (Object.keys(existing.offers).length >= MAX_OFFERS_PER_BATCH) {
+          dropped += 1;
+          continue;
+        }
+        existing.offers[id] = store.offers.get(id)!;
+        publishedIds.add(id);
+        added += 1;
+      }
+      if (dropped) {
+        // Silence here would read as "everything was saved" on exactly the
+        // page where a missing offer looks like lost availability.
+        console.warn(`[offers] batch ${batch}: ${dropped} offer(s) over the per-batch ceiling were not published`);
+      }
+      // A re-read that adds nothing should not spend a write.
+      if (!added) return;
+      fetchedBatches.add(batch);
+      await driver().write(batchKey(batch), existing, OFFER_TTL_SECONDS);
+    }),
+  );
+}
+
+/**
+ * Re-publishes one offer whose stored copy has changed.
+ *
+ * A recheck moves the price and a TourMind prebook replaces the rate code, and
+ * both happen on the request before the one that spends the money — which may
+ * be a different instance again. Read-modify-write is fine here: this is one
+ * offer at a time, on a path that is already talking to a supplier.
+ */
+export async function republishOffer(id: string): Promise<void> {
+  const batch = batchOf(id);
+  const offer = store.offers.get(id);
+  if (!batch || !offer) return;
+  const doc = (await driver().read<OfferDocument>(batchKey(batch))) ?? { offers: {} };
+  doc.offers[id] = offer;
+  publishedIds.add(id);
+  await driver().write(batchKey(batch), doc, OFFER_TTL_SECONDS);
+}
+
+/**
+ * Stamps a batch onto every offer an adapter produced.
+ *
+ * The supplier adapters mint their own ids — `tm-752649::o0`, and Hotelbeds'
+ * equivalent — and both hand back a parallel map of supplier bindings keyed by
+ * those ids. Renaming an offer therefore means rekeying the map in the same
+ * breath, which is exactly the sort of thing that gets half-done. Doing it here,
+ * once, at the boundary where supply arrives, means everything downstream —
+ * cards, quotes, checkout — sees the batched id and nothing else has to know
+ * this happened.
+ */
+export function rebatchOffers<T>(
+  batch: string,
+  adapted: { offers: { offerId: string }[]; contexts: Map<string, T> },
+): void {
+  const rekeyed = new Map<string, T>();
+  for (const offer of adapted.offers) {
+    const next = batchedOfferId(batch, offer.offerId);
+    const context = adapted.contexts.get(offer.offerId);
+    if (context !== undefined) rekeyed.set(next, context);
+    offer.offerId = next;
+  }
+  adapted.contexts.clear();
+  for (const [key, value] of rekeyed) adapted.contexts.set(key, value);
+}
+
+/** Test seam: behave like an instance that has never run a search. */
+export function __forgetOffers(): void {
+  store.offers.clear();
+  fetchedBatches.clear();
+  publishedIds.clear();
 }
 
 /* ----------------------------------------------------------- sessions */

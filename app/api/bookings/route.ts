@@ -5,12 +5,13 @@ import { hash01 } from "@/lib/server/pricing";
 import { scenarioFromRequest } from "@/lib/server/scenarios";
 import {
   getBooking,
-  getOffer,
+  loadOffer,
   getSession,
   linkSupplierReference,
   peekIdempotency,
   pushNotification,
   rememberOffer,
+  republishOffer,
   saveBooking,
   saveSession,
   setIdempotency,
@@ -191,7 +192,9 @@ export async function POST(req: Request) {
    * charged. Booking the rooms that survived would leave a party split across a
    * reservation and a gap, which is the outcome E-17 exists to prevent.
    */
-  const lineOffers = session.lines.map((line) => ({ line, offer: getOffer(line.offerId) }));
+  const lineOffers = await Promise.all(
+    session.lines.map(async (line) => ({ line, offer: await loadOffer(line.offerId) })),
+  );
   const lostLine = lineOffers.find((entry) => !entry.offer);
 
   /*
@@ -424,6 +427,10 @@ export async function POST(req: Request) {
       // will accept; the availability code is already dead by this point.
       binding = { ...binding, rateCode: confirmed.rateCode, net: confirmed.net };
       rememberOffer(offer.offerId, { ...offer, tourmind: binding });
+      // TourMind's prebook replaces the rate code, and CreateOrder must use
+      // the confirmed one. It is committed on the very next line here, but
+      // publishing keeps the stored copy honest if the order is retried.
+      await republishOffer(offer.offerId);
     } catch (error) {
       logTourmindError("bookings.prebook", error, ref);
       const mapped = mapTourmindError(error, locale);

@@ -6,7 +6,7 @@ import { getDestination } from "@/lib/data/destinations";
 import { getCachedDestinations, getHotelBySlug, getIndex, getTypes, warmContent } from "./content";
 import { adaptAvailability, buildCanonicalHotelFromContent, type AdaptedHotel } from "./adapter";
 import type { HbAvailabilityResponse } from "./types";
-import { rememberOffer } from "../store";
+import { rebatchOffers, rememberOffer } from "../store";
 
 /**
  * Live availability search.
@@ -71,6 +71,7 @@ async function runAvailability(
   body: Record<string, unknown>,
   intent: SearchIntent,
   locale: Locale,
+  batch?: string,
 ): Promise<HotelbedsSearchResult> {
   try {
     const response = await hotelbeds.availability<HbAvailabilityResponse>(body);
@@ -92,6 +93,7 @@ async function runAvailability(
     for (const hbHotel of hbHotels) {
       const result = await adaptAvailability(hbHotel, intent, locale, { allowLiveContent: false });
       if (!result) continue;
+      if (batch) rebatchOffers(batch, result);
 
       // Bind each offer to its rateKey, server-side only.
       for (const [offerId, context] of result.contexts) {
@@ -170,6 +172,8 @@ export async function searchHotelbedsDestination(
   where: { code: string } | { lat: number; lng: number },
   intent: SearchIntent,
   locale: Locale,
+  /** The batch every offer from this call is filed under. See store.ts. */
+  batch?: string,
 ): Promise<HotelbedsSearchResult> {
   if (!isHotelbedsEnabled()) return { hotels: [], status: "unavailable", reason: "not configured" };
   return runAvailability(
@@ -191,6 +195,7 @@ export async function searchHotelbedsDestination(
     },
     intent,
     locale,
+    batch,
   );
 }
 
@@ -198,6 +203,8 @@ export async function searchHotelbedsHotel(
   slug: string,
   intent: SearchIntent,
   locale: Locale,
+  /** The batch every offer from this call is filed under. See store.ts. */
+  batch?: string,
 ): Promise<AdaptedHotel | null> {
   if (!isHotelbedsEnabled()) return null;
   const index = await getIndex();
@@ -208,6 +215,7 @@ export async function searchHotelbedsHotel(
     { ...baseRequest(intent), hotels: { hotel: [code] }, filter: { maxRatesPerRoom: 12 } },
     intent,
     locale,
+    batch,
   );
   return result.hotels[0] ?? null;
 }

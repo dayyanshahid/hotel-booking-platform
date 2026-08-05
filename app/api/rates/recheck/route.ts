@@ -6,7 +6,7 @@ import { computePrice } from "@/lib/server/pricing";
 import { buildCancellation } from "@/lib/server/normalize";
 import { runHotelAvailability } from "@/lib/server/search";
 import { scenarioFromRequest } from "@/lib/server/scenarios";
-import { getOffer, getSession, rememberOffer, saveSession } from "@/lib/server/store";
+import { loadOffer, getSession, rememberOffer, republishOffer, saveSession } from "@/lib/server/store";
 import { nightsBetween } from "@/lib/format";
 import { checkRate } from "@/lib/server/hotelbeds/operations";
 import { mapSupplierError } from "@/lib/server/hotelbeds/errors";
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   const body = await readJson<Body>(req);
   if (!body?.offerId) return fail("validation", "error.validation", locale, { status: 400 });
 
-  const stored = getOffer(body.offerId);
+  const stored = await loadOffer(body.offerId);
   if (!stored) {
     return fail("availabilityChanged", "error.availabilityChanged", locale, {
       status: 409,
@@ -229,6 +229,9 @@ export async function POST(req: Request) {
       cancellation: currentCancellation,
       expiresAt: newExpiresAt,
     });
+    // The recheck moved the price; the instance that takes the money next may
+    // not be this one, and it must not commit the old number.
+    await republishOffer(stored.offerId);
     if (body.checkoutSessionId) {
       const session = getSession(body.checkoutSessionId);
       if (session) {
@@ -283,7 +286,7 @@ type LiveRefresh = () => Promise<
  * when the customer has accepted, so an unaccepted change can never be booked.
  */
 async function recheckLiveOffer(input: {
-  stored: NonNullable<ReturnType<typeof getOffer>>;
+  stored: StoredOffer;
   previous: { price: PriceStack; cancellation: CancellationPolicy; boardLabel: string };
   locale: Locale;
   accept: boolean;
@@ -378,6 +381,8 @@ async function recheckLiveOffer(input: {
         expiresAt: newExpiresAt,
       }),
     );
+    // As above: the supplier's fresh price and rate binding have to travel.
+    await republishOffer(stored.offerId);
     if (input.checkoutSessionId) {
       const session = getSession(input.checkoutSessionId);
       if (session) {

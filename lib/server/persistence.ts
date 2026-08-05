@@ -36,7 +36,16 @@ export type DriverKind = "filesystem" | "kv";
 interface Driver {
   kind: DriverKind;
   read<T>(key: string): Promise<T | null>;
-  write<T>(key: string, value: T): Promise<void>;
+  /**
+   * `ttlSeconds` marks a document as working state rather than a record.
+   *
+   * Bookings are kept forever; the offers behind a search are worth minutes and
+   * there are a great many of them. Without an expiry every search a customer
+   * ever ran would sit in the store for good, and nothing in this codebase
+   * sweeps it. Ignored by the filesystem driver, which is a development
+   * convenience where the directory is thrown away anyway.
+   */
+  write<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
   /**
    * A token that changes when the document changes.
    *
@@ -64,7 +73,10 @@ const filesystemDriver: Driver = {
     }
   },
 
-  async write<T>(key: string, value: T): Promise<void> {
+  async write<T>(key: string, value: T, _ttlSeconds?: number): Promise<void> {
+    // No expiry on disk: this driver is the single-machine case, where the data
+    // directory is disposable and a sweep would be ceremony for nothing.
+    void _ttlSeconds;
     const file = filePath(key);
     try {
       await fs.mkdir(dataDir(), { recursive: true });
@@ -141,11 +153,14 @@ const kvDriver: Driver = {
     }
   },
 
-  async write<T>(key: string, value: T): Promise<void> {
-    await kvCommand(["SET", documentKey(key), JSON.stringify(value)]);
+  async write<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    const set = ["SET", documentKey(key), JSON.stringify(value)];
+    if (ttlSeconds && ttlSeconds > 0) set.push("EX", String(Math.floor(ttlSeconds)));
+    await kvCommand(set);
     // A counter beside the document, so instances can tell it moved without
-    // reading it back.
+    // reading it back. It expires with the document rather than outliving it.
     await kvCommand(["INCR", versionKey(key)]);
+    if (ttlSeconds && ttlSeconds > 0) await kvCommand(["EXPIRE", versionKey(key), String(Math.floor(ttlSeconds))]);
   },
 
   async version(key: string): Promise<string | null> {

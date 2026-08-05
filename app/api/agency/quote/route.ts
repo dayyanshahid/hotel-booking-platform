@@ -2,7 +2,7 @@ import { fail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import { getAgency } from "@/lib/agency/store";
 import { QUOTE_BATCH, viewOffer } from "@/lib/agency/rates";
-import { getOffer } from "@/lib/server/store";
+import { loadOffer } from "@/lib/server/store";
 import { countryForOffer } from "@/lib/agency/context";
 
 /**
@@ -29,13 +29,25 @@ export async function POST(req: Request) {
   const agency = await getAgency(session.agencyId);
   if (!agency) return fail("validation", "error.notFound", locale, { status: 404 });
 
-  const quotes = body.offerIds.slice(0, QUOTE_BATCH).flatMap((offerId) => {
-    const offer = getOffer(offerId);
-    // A missing offer means the quote expired, not that pricing failed; the
-    // caller sees which ids came back and re-searches for the rest.
-    if (!offer) return [];
-    return [viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer))];
-  });
+  /*
+   * Awaited, and therefore able to reach the shared store.
+   *
+   * A missing offer still means "no price for this row", but until the offers
+   * were published anywhere an instance that had not run the search missed
+   * every one of them — measured at two rows priced out of twelve, with the
+   * other ten showing an empty cost and sell rail on the one screen whose
+   * whole purpose is those numbers.
+   */
+  const priced = await Promise.all(
+    body.offerIds.slice(0, QUOTE_BATCH).map(async (offerId) => {
+      const offer = await loadOffer(offerId);
+      // A genuinely expired offer is not a pricing failure; the caller sees
+      // which ids came back and re-searches for the rest.
+      if (!offer) return null;
+      return viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer));
+    }),
+  );
+  const quotes = priced.filter((quote) => quote !== null);
 
   return ok({ quotes, commissionPercent: agency.commissionPercent, markup: agency.markup });
 }

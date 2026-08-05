@@ -4,7 +4,7 @@ import { getAgency, listQuotes, saveQuote } from "@/lib/agency/store";
 import { withExpiry } from "@/lib/agency/quotes";
 import { viewOffer } from "@/lib/agency/rates";
 import { countryForOffer } from "@/lib/agency/context";
-import { getOffer } from "@/lib/server/store";
+import { loadOffer } from "@/lib/server/store";
 import { nightsBetween } from "@/lib/format";
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 import type { AgencyQuote, AgencyQuoteItem } from "@/lib/agency/types";
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 
   const items: AgencyQuoteItem[] = [];
   for (const offerId of body.offerIds.slice(0, 12)) {
-    const offer = getOffer(offerId);
+    const offer = await loadOffer(offerId);
     // An offer that has already expired cannot be quoted: the agent would be
     // promising a price we can no longer hold.
     if (!offer) continue;

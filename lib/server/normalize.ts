@@ -16,7 +16,7 @@ import { addDays, comparableTotal, nightsBetween } from "../format";
 import { computePrice, hash01, type BoardCode, type RateClass } from "./pricing";
 import type { RawOffer } from "./suppliers";
 import type { ScenarioId } from "./scenarios";
-import { rememberOffer } from "./store";
+import { batchedOfferId, rememberOffer } from "./store";
 
 /**
  * Supplier → canonical normalization (scope §5.7, §8.4, §9.1).
@@ -171,7 +171,7 @@ export function normalizeHotel(
   intent: SearchIntent,
   locale: Locale,
   scenario: ScenarioId,
-  options: { persistOffers?: boolean; priceAdjust?: number; policyShiftDays?: number } = {},
+  options: { persistOffers?: boolean; priceAdjust?: number; policyShiftDays?: number; batch?: string } = {},
 ): NormalizedHotel | null {
   if (!rawOffers.length) return null;
   const dest = getDestination(seed.destinationId)!;
@@ -233,7 +233,9 @@ export function normalizeHotel(
 
     const board = BOARD_CATALOG[raw.board];
     const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
-    const offerId = `of_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+    const localId = `of_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
+    // Batched so any instance can find this offer again from the id alone.
+    const offerId = options.batch ? batchedOfferId(options.batch, localId) : localId;
 
     const scores = {
       price: 1 - Math.min(1, winner.price.total / (seed.baseNightlySar * 3 * nights)),

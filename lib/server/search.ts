@@ -42,6 +42,7 @@ import type { ScenarioId } from "./scenarios";
 import { hash01 } from "./pricing";
 import { fold, foldedIncludes as matches } from "../text";
 import { readSupply, supplyKey, writeSupply, type LiveStatus as CachedLiveStatus } from "./supply-cache";
+import { newOfferBatch, publishOffers, rebatchOffers } from "./store";
 import { anchorPoint, anchorsFor } from "@/lib/geo/anchors";
 import { roomCategoryOf, ROOM_CATEGORY_ORDER } from "@/lib/search/room-category";
 import { conditionsOf, RATE_CONDITIONS } from "@/lib/search/rate-conditions";
@@ -372,6 +373,12 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    */
   const cacheKey = supplyKey(effectiveIntent, locale, options.supply ?? "all", scenario);
   const cachedSupply = readSupply(cacheKey);
+  /*
+   * One batch for everything this search builds, so any instance can find an
+   * offer again from its id. A cache hit reuses the supply — and therefore the
+   * ids, and therefore the batch — that the original run published.
+   */
+  const batch = newOfferBatch();
 
   let normalized: NormalizedHotel[];
   let liveStatuses: LiveStatus[];
@@ -385,7 +392,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
       const seed = getHotelSeed(slug);
       if (!seed) continue;
       if (resolved.neighborhoodKey && seed.neighborhood !== resolved.neighborhoodKey) continue;
-      const n = normalizeHotel(seed, offers, effectiveIntent, locale, scenario);
+      const n = normalizeHotel(seed, offers, effectiveIntent, locale, scenario, { batch });
       if (n && n.offers.length) gathered.push(n);
     }
 
@@ -430,6 +437,12 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
           const hotels = results
             .map((result) => normalizeTourmind(result, effectiveIntent, locale))
             .filter((adapted) => adapted.offers.length)
+            // Before anything reads an id: the cards, the bindings map and the
+            // stored offers all have to agree on what this offer is called.
+            .map((adapted) => {
+              rebatchOffers(batch, adapted);
+              return adapted;
+            })
             .map((adapted) => {
               /*
                * Remember every rate, exactly as the Hotelbeds path does.
@@ -491,7 +504,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
         // A coordinate for every city, or a supplier destination code on a deep link.
         const where = await resolveHotelbedsDestination(resolved.destinationId);
         if (!where) return { status: "skipped", hotels: [] };
-        const live = await searchHotelbedsDestination(where, effectiveIntent, locale);
+        const live = await searchHotelbedsDestination(where, effectiveIntent, locale, batch);
         return {
           status: live.status,
           hotels: live.hotels.map((adapted) => ({
@@ -575,6 +588,15 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
   const pageSize = Math.min(Math.max(Math.floor(options.pageSize ?? 12), 1), 48);
   const page = Math.min(Math.max(Math.floor(options.page ?? 1), 1), 40);
   const pageItems = sorted.slice(0, page * pageSize).map((x) => x.card);
+
+  /*
+   * The offers this response hands out, put somewhere the next request can
+   * find them — which may well be a different instance. Only the lead offer
+   * per card: that is the id on the page, the id the quote endpoint prices and
+   * the id checkout is given. Everything deeper is reached through the
+   * property's own availability call, which publishes its own.
+   */
+  await publishOffers(pageItems.map((card) => card.offerSummary.offerId));
 
   // Every live supplier that was asked counts as a source, and each one that
   // could not answer counts as a failure — otherwise a page missing a
@@ -1067,18 +1089,28 @@ export async function runHotelAvailability(
   // The detail page prices independently of search, so it primes too.
   await primeMarkup();
 
+  /*
+   * A batch of its own. Every rate on a property page is one the guest can
+   * click, so unlike a search — which builds far more than it shows — all of
+   * them are published.
+   */
+  const batch = newOfferBatch();
+
   // Live properties resolve through the supplier adapter; demo properties keep
   // using the simulated sources. Both return the same canonical shape.
   if (isTourmindSlug(slug)) {
     const result = await searchTourmindHotel(slug, intent, locale);
     if (!result) return null;
     const adapted = normalizeTourmind(result, intent, locale);
+    rebatchOffers(batch, adapted);
+    await publishOffers(adapted.offers.map((offer) => offer.offerId));
     return { hotel: adapted.hotel, rooms: adapted.rooms, offers: adapted.offers, sourceCount: 1 };
   }
 
   if (slug.startsWith("hb-") && isHotelbedsEnabled()) {
-    const adapted = await searchHotelbedsHotel(slug, intent, locale);
+    const adapted = await searchHotelbedsHotel(slug, intent, locale, batch);
     if (!adapted) return null;
+    await publishOffers(adapted.offers.map((offer) => offer.offerId));
     return { hotel: adapted.hotel, rooms: adapted.rooms, offers: adapted.offers, sourceCount: 1 };
   }
 

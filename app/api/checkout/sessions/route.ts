@@ -6,7 +6,7 @@ import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 import { buildRequirements } from "@/lib/server/requirements";
 import { commentsFor } from "@/lib/server/normalize";
 import { getHotelContent } from "@/lib/server/hotelbeds/content";
-import { getOffer, getSession, saveSession } from "@/lib/server/store";
+import { loadOffer, getSession, saveSession } from "@/lib/server/store";
 import { countryForOffer } from "@/lib/agency/context";
 import type { CheckoutSession, SessionLine } from "@/lib/types";
 import type { StoredOffer } from "@/lib/server/store";
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
    */
   const offers: StoredOffer[] = [];
   for (const offerId of requested.slice(0, 12)) {
-    const offer = getOffer(offerId);
+    const offer = await loadOffer(offerId);
     if (!offer) {
       return fail("availabilityChanged", "error.availabilityChanged", locale, {
         status: 409,
