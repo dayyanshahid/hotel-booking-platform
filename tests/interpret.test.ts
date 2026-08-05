@@ -86,6 +86,40 @@ describe("interpreting a described trip", () => {
     expect(stayLength(result.intent!)).toBe(3);
   });
 
+  it("fills each room, rather than spreading one party across them", async () => {
+    /*
+     * "2 rooms in Dubai" used to come back as two rooms holding one adult each,
+     * because the default party was two and it was then divided. Nobody asking
+     * a counter for two rooms means two people sleeping apart — they mean four
+     * — and single occupancy is a different rate, sometimes an unavailable one,
+     * so the whole page was priced for a stay the caller never asked for.
+     */
+    const two = await interpretTrip("2 rooms in Dubai for 3 nights", "en", "USD", TODAY);
+    expect(two.intent!.rooms).toHaveLength(2);
+    expect(two.intent!.rooms.every((room) => room.adults === 2)).toBe(true);
+
+    const three = await interpretTrip("3 rooms in Dubai", "en", "USD", TODAY);
+    expect(three.intent!.rooms.reduce((sum, room) => sum + room.adults, 0)).toBe(6);
+
+    // And the assumption says what was actually assumed, so the line on screen
+    // and the search behind it are the same number.
+    expect(two.assumed.join(" ")).toContain("per room");
+  });
+
+  it("divides a party the sentence did state", async () => {
+    // Stated beats assumed: four adults across two rooms is two each, not two
+    // per room on top of what they said.
+    const result = await interpretTrip("2 rooms for 4 adults in Dubai", "en", "USD", TODAY);
+    expect(result.intent!.rooms.map((room) => room.adults)).toEqual([2, 2]);
+    expect(result.assumed.join(" ")).not.toContain("adults");
+  });
+
+  it("leaves a single room at two adults", async () => {
+    const result = await interpretTrip("Dubai for 3 nights", "en", "USD", TODAY);
+    expect(result.intent!.rooms).toEqual([{ adults: 2, childrenAges: [] }]);
+    expect(result.assumed).toContain("2 adults");
+  });
+
   it("takes children out of a stated party rather than adding to it", async () => {
     const result = await interpretTrip("Family of 4 in Lisbon with 2 children", "en", "USD", TODAY);
     const rooms = result.intent!.rooms;

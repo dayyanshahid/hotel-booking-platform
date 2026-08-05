@@ -194,14 +194,30 @@ export async function interpretTrip(
   const rooms = roomCount || 1;
   if (roomCount > 1) understood.push(`${roomCount} rooms`);
 
-  const perRoomAdults = Math.max(1, Math.round((adults || 2) / rooms));
+  /*
+   * A stated party is divided between the rooms; an unstated one is two adults
+   * *per room*, not two adults in total.
+   *
+   * "2 rooms in Dubai" used to come back as two rooms holding one adult each,
+   * because the default party was two and it was then split. Nobody asking a
+   * counter for two rooms means two people sleeping apart — they mean four —
+   * and single occupancy is a different rate, sometimes an unavailable one, so
+   * the whole page was priced for a stay the caller had not asked for. The
+   * assumption line said "2 adults" while the search ran on one per room, which
+   * is how it survived being read.
+   */
+  const perRoomAdults = adults ? Math.max(1, Math.round(adults / rooms)) : 2;
   const allocation = Array.from({ length: rooms }, (_, index) => ({
     adults: perRoomAdults,
     // Children ride in the first room unless the sentence said otherwise, which
     // it almost never does.
     childrenAges: index === 0 ? childrenAges : [],
   }));
-  if (!adults) assumed.push("2 adults");
+  if (!adults) {
+    // Say what was actually assumed, per room, so the number on screen and the
+    // number searched are the same number.
+    assumed.push(rooms > 1 ? `2 adults per room` : "2 adults");
+  }
 
   /* ----------------------------------------------------------------- dates */
 

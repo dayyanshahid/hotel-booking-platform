@@ -5,6 +5,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Button, Card, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { formatDate } from "@/lib/format";
+import { guestLabel, roomLabel } from "@/lib/i18n";
 import type { CurrencyCode, Interpretation, SearchFilters, SearchIntent } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 
@@ -44,28 +45,50 @@ export function TripPrompt({
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Interpretation | null>(null);
+  /** The interpretation could not be fetched. Not the same as "no destination". */
+  const [failed, setFailed] = useState(false);
 
   async function interpret() {
     setBusy(true);
-    const res = await fetch(apiUrl("/api/search/interpret"), {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-locale": locale },
-      credentials: apiCredentials(),
-      body: JSON.stringify({ text: prompt, currency: currency ?? browsingCurrency }),
-    });
-    const body = (await res.json()) as { ok: boolean; data?: Interpretation };
-    setBusy(false);
-    if (!body.ok || !body.data) return;
-    setResult(body.data);
-    track("ai_prompt_interpreted", {
-      resolved: body.data.intent ? "yes" : "no",
-      assumed: body.data.assumed.length,
-    });
+    setFailed(false);
+    /*
+     * Every failure used to be `return`.
+     *
+     * A refusal, a dropped connection, a response that was not JSON — all three
+     * set nothing, said nothing, and left the agent looking at a button they
+     * had just pressed. The one thing they could conclude is that the feature
+     * does not work, and they would be right, because a control that does
+     * nothing and explains nothing is broken whatever the server did.
+     */
+    try {
+      const res = await fetch(apiUrl("/api/search/interpret"), {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-locale": locale },
+        credentials: apiCredentials(),
+        body: JSON.stringify({ text: prompt, currency: currency ?? browsingCurrency }),
+      });
+      const body = (await res.json()) as { ok: boolean; data?: Interpretation };
+      if (!body.ok || !body.data) {
+        setFailed(true);
+        return;
+      }
+      setResult(body.data);
+      track("ai_prompt_interpreted", {
+        resolved: body.data.intent ? "yes" : "no",
+        assumed: body.data.assumed.length,
+      });
+    } catch {
+      setFailed(true);
+    } finally {
+      // In `finally`, or a thrown fetch leaves the button spinning for ever.
+      setBusy(false);
+    }
   }
 
   function run() {
     if (!result?.intent) return;
     track("ai_prompt_searched", {});
+    setResult(null);
     // The currency the caller asked for wins: the interpreter only ever sees
     // one, and a trade quote priced in the browsing currency would be wrong.
     onRun(currency ? { ...result.intent, currency } : result.intent, result.filters);
@@ -106,6 +129,10 @@ export function TripPrompt({
         </Button>
       </div>
 
+      {failed && (
+        <p className="text-caution-700 mt-2 text-xs">{t("home.aiFailed")}</p>
+      )}
+
       {result && (
         <Card className="rise mt-3 space-y-2 p-4 text-sm">
           {result.intent ? (
@@ -114,7 +141,8 @@ export function TripPrompt({
               <p className="wrap-anywhere">
                 <strong>{result.intent.destinationDisplay}</strong> ·{" "}
                 {formatDate(result.intent.checkIn, locale)} → {formatDate(result.intent.checkOut, locale)} ·{" "}
-                {result.intent.rooms.length} {t("common.rooms")} · {guests} {t("common.guests")}
+                {result.intent.rooms.length} {roomLabel(t, result.intent.rooms.length, locale)} · {guests}{" "}
+                {guestLabel(t, guests, locale)}
               </p>
               {result.understood.length > 0 && (
                 <p className="text-muted text-xs">{result.understood.join(" · ")}</p>
