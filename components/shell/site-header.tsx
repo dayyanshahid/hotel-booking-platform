@@ -68,7 +68,16 @@ export function SiteHeader() {
           <Wordmark tone="inverse" typeFrom="sm" />
         </Link>
 
-        <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 lg:flex">
+        {/*
+          The desktop/mobile switch is one decision, made at one width.
+          It used to happen at 1024, where the full row — wordmark, five nav
+          links, compare, assistant, notifications, currency, language, theme
+          and account — is 25px wider than the viewport, so the page scrolled
+          sideways at exactly the width an iPad landscape and a 1280 screen at
+          125% both land on. Moved to 1280, where it fits. The drawer below
+          carries the same links, so nothing becomes unreachable in between.
+        */}
+        <nav aria-label="Primary" className="ms-4 hidden items-center gap-1 xl:flex">
           {links.map((link) => {
             const target = href(locale, link.href);
             const active = pathname === target;
@@ -159,13 +168,13 @@ export function SiteHeader() {
           </Button>
 
           {account ? (
-            <Link href={href(locale, "/account")} className="hidden lg:block">
+            <Link href={href(locale, "/account")} className="hidden xl:block">
               <Button variant="chrome" size="sm">
                 {account.email.split("@")[0]}
               </Button>
             </Link>
           ) : (
-            <Link href={href(locale, "/signin")} className="hidden lg:block">
+            <Link href={href(locale, "/signin")} className="hidden xl:block">
               <Button variant="chrome" size="sm">
                 {t("nav.signIn")}
               </Button>
@@ -175,7 +184,7 @@ export function SiteHeader() {
           <Button
             variant="chrome"
             size="sm"
-            className="lg:hidden"
+            className="xl:hidden"
             onClick={() => setMenuOpen(true)}
             aria-label={t("a11y.openMenu")}
           >

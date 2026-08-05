@@ -394,7 +394,15 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       : cards;
 
   return (
-    <div className="space-y-5">
+    /*
+     * One measuring stick for the whole screen.
+     *
+     * The toolbar's Filters button and the filter rail below it are two halves
+     * of the same decision — show the rail, or offer the button — so both have
+     * to read the same width. Declared on the root because a container cannot
+     * measure itself.
+     */
+    <div className="@container space-y-5">
       <PageHeader title={t("agency.searchStays")} description={t("agency.searchBody")} />
 
       {/*
@@ -490,7 +498,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" size="sm" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
+              <Button variant="secondary" size="sm" className="@min-[900px]:hidden" onClick={() => setFiltersOpen(true)}>
                 {t("common.filters")}
               </Button>
               <SortControl<TradeSort>
@@ -550,8 +558,21 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       )}
 
 
-      <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-        <aside className="hidden lg:block">
+      <div
+        className={cx(
+          "grid gap-6",
+          /*
+           * The filter rail and the results share the content column, and a
+           * 280px rail beside a card needs about 900px of it to leave the card
+           * room to breathe. Keyed to the viewport this split happened at
+           * 1024px of *window*, which inside the portal is roughly 710px of
+           * column — a 400px results card with the price rail crushed against
+           * the photograph.
+           */
+          "@min-[900px]:grid-cols-[280px_1fr]",
+        )}
+      >
+        <aside className="hidden @min-[900px]:block">
           {data && (
             <Card className="sticky top-4 max-h-[calc(100vh-8rem)] overflow-y-auto p-4">
               <FiltersPanel
@@ -747,7 +768,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           </Button>
         </div>
       </Drawer>
-
     </div>
   );
 }

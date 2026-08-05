@@ -269,7 +269,15 @@ export function PortalShell({
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 space-y-5">
+      {/*
+        Everything inside measures against this column, not the window.
+        The rail is 272px wide, so a 1024px window gives the content about 710px
+        — and a layout keyed to the *viewport* laid out four search fields and a
+        button as though it had the full 1024, pushing Search off the edge. Zoom
+        makes it worse in exactly the same way, because zoom is a narrower
+        viewport wearing a different name.
+      */}
+      <div className="@container min-w-0 flex-1 space-y-5">
         <header className="hairline flex items-center justify-between gap-3 border-b pb-3">
           <div className="flex min-w-0 items-center gap-2">
             <Button

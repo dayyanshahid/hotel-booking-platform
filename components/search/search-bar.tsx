@@ -148,6 +148,11 @@ export function SearchBar({
     <form
       onSubmit={(e) => void submit(e)}
       className={cx(
+        // Measures itself. The bar sits on the public site, inside the portal's
+        // content column and inside a console card, and those are three
+        // different widths at the same window size — so the breakpoint below
+        // has to be its own box, and the box has to be declared here.
+        "@container",
         // The hero form is framed by the yellow outline its parent draws, so it
         // carries no border of its own — two edges 3px apart reads as a mistake.
         "rounded-[6px]",
@@ -159,7 +164,18 @@ export function SearchBar({
       role="search"
       aria-label={t("common.searchHotels")}
     >
-      <div className={cx("grid gap-1.5", "lg:grid-cols-[2fr_1.6fr_1.2fr_auto]")}>
+      <div
+        className={cx(
+          "grid gap-1.5",
+          /*
+           * On the bar's own width, not the window's. Four fields and a button
+           * need about 820px; below that they stack. Keyed to the viewport,
+           * the portal — whose content column is ~270px narrower than the
+           * window — clipped the Search button clean off at 1024px.
+           */
+          "@min-[820px]:grid-cols-[2fr_1.6fr_1.2fr_auto]",
+        )}
+      >
         <DestinationAutocomplete
           value={destination}
           onSelect={(next) => setDestination(next)}
@@ -185,7 +201,7 @@ export function SearchBar({
             variant="primary"
             size={variant === "hero" ? "lg" : "md"}
             loading={busy || resolving}
-            className="h-full w-full lg:w-auto lg:px-8"
+            className="h-full w-full @min-[820px]:w-auto @min-[820px]:px-8"
           >
             {submitLabel ?? t("common.search")}
           </Button>
