@@ -1087,8 +1087,27 @@ async function portalCases(): Promise<void> {
     return "200";
   });
 
+  await check("an old search link still lands on the search, stay intact", async () => {
+    /*
+     * Home and Search stays merged into one screen at `/agency`, and quotes,
+     * saved links and agents' own bookmarks all point at the old path. The
+     * query string *is* the search — dropping it on the way through would land
+     * them on an empty form holding nothing, which is worse than a 404 because
+     * it looks like it worked.
+     */
+    const stay = "destination=dest-dubai&label=Dubai&type=city&checkIn=2026-11-02&checkOut=2026-11-05&flex=exact&rooms=2&currency=USD";
+    const res = await fetch(`${PORTAL}/en/agency/search?${stay}`, { redirect: "manual" });
+    if (res.status !== 307 && res.status !== 308) throw new Error(`expected a redirect, got ${res.status}`);
+    const to = res.headers.get("location") ?? "";
+    if (!to.includes("/en/agency")) throw new Error(`redirected to ${to}`);
+    for (const pair of stay.split("&")) {
+      if (!to.includes(pair)) throw new Error(`the redirect dropped ${pair.split("=")[0]}`);
+    }
+    return `${res.status} → ${to.slice(0, 60)}…`;
+  });
+
   await check("the search screen renders", async () => {
-    const res = await fetch(`${PORTAL}/en/agency/search`);
+    const res = await fetch(`${PORTAL}/en/agency`);
     if (!res.ok) throw new Error(`→ ${res.status}`);
     const html = await res.text();
     // Server-rendered shell, not a blank page waiting on JavaScript.
@@ -1107,7 +1126,6 @@ async function portalCases(): Promise<void> {
      */
     const pages = [
       `${PORTAL}/en/agency`,
-      `${PORTAL}/en/agency/search`,
       `${BASE}/en`,
       `${BASE}/en/destinations`,
     ];

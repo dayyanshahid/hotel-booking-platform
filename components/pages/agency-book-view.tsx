@@ -242,7 +242,7 @@ function TradeCheckout({
   if (session === "gone") {
     return (
       <Alert tone="warning" title={blocked ?? t("checkout.expired")}>
-        <Button size="sm" variant="secondary" onClick={() => router.push(href(locale, "/agency/search"))}>
+        <Button size="sm" variant="secondary" onClick={() => router.push(href(locale, "/agency"))}>
           {t("agency.searchStays")}
         </Button>
       </Alert>

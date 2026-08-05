@@ -266,7 +266,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
           title={t("agency.noBookings")}
           body={t("agency.noBookingsBody")}
           action={
-            <Link href={href(locale, "/agency/search")}>
+            <Link href={href(locale, "/agency")}>
               <Button>{t("agency.searchStays")}</Button>
             </Link>
           }

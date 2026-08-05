@@ -225,7 +225,7 @@ function HotelDetail({
   const lowestQuote = lowest ? quotes[lowest.offerId] : undefined;
 
   const heroImages = hotel.images.filter((i) => !i.roomId);
-  const searchBack = `${href(locale, "/agency/search")}?${searchParamsFromIntent(intent).toString()}`;
+  const searchBack = `${href(locale, "/agency")}?${searchParamsFromIntent(intent).toString()}`;
 
   /**
    * A rate can fill more than one room, so the basket counts rather than toggles.

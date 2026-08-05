@@ -50,7 +50,7 @@ function QuoteList({ locale }: { locale: Locale }) {
         title={t("agency.quotes")}
         description={t("agency.quotesBody")}
         actions={
-          <Link href={href(locale, "/agency/search")}>
+          <Link href={href(locale, "/agency")}>
             <Button variant="secondary" size="sm">
               {t("agency.searchStays")}
             </Button>
@@ -68,7 +68,7 @@ function QuoteList({ locale }: { locale: Locale }) {
           title={t("agency.noQuotes")}
           body={t("agency.noQuotesBody")}
           action={
-            <Link href={href(locale, "/agency/search")}>
+            <Link href={href(locale, "/agency")}>
               <Button>{t("agency.searchStays")}</Button>
             </Link>
           }

@@ -107,10 +107,6 @@ function untilLabel(
   return t("agency.daysShort", { n: days, unit: dayLabel(t as never, days, locale) });
 }
 
-export function AgencyDashboardView({ locale }: { locale: Locale }) {
-  return <PortalShell locale={locale}>{(context) => <DeskHome locale={locale} context={context} />}</PortalShell>;
-}
-
 export function AgencyOverviewView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <DeskOverview locale={locale} context={context} />}</PortalShell>;
 }
@@ -337,7 +333,7 @@ function RecentSearches({ locale, context }: { locale: Locale; context: AgencyCo
           return (
             <Link
               key={`${entry.intent.destinationId}-${entry.intent.checkIn}-${entry.at}`}
-              href={`${href(locale, "/agency/search")}?${searchParamsFromIntent(entry.intent).toString()}`}
+              href={`${href(locale, "/agency")}?${searchParamsFromIntent(entry.intent).toString()}`}
               className="surface hover:border-brand-300 group flex min-w-0 items-center gap-3 rounded-[var(--radius-lg)] border p-3 transition-colors"
             >
               <Icon name="search" size={16} className="text-muted shrink-0" />
@@ -375,29 +371,24 @@ function RecentSearches({ locale, context }: { locale: Locale; context: AgencyCo
  * search bar and then shows the work already in flight: searches to pick back
  * up, quotes waiting on an answer, and anything about to expire.
  */
-function DeskHome({ locale, context }: { locale: Locale; context: AgencyContext }) {
+/**
+ * What an agent sees on the search screen before they have searched.
+ *
+ * Home and Search stays had converged: both led with the same bar, and the
+ * only difference left was what sat underneath it. So there is one screen now,
+ * and this is the half of it that answers "what was I doing" — searches to pick
+ * back up, quotes waiting on a customer, and anything about to expire. It gives
+ * way to the results the moment a search runs, because at that point the answer
+ * to "what was I doing" is on the screen already.
+ */
+export function DeskPrelude({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
-  const router = useRouter();
   const [reloads, setReloads] = useState(0);
   const desk = useDesk(context, reloads);
-  const { bookings, quotes, failed, currency, today, live, margin, holds, attention, arrivals, openQuotes, sales, activity } = desk;
+  const { bookings, quotes, failed, currency, today, attention, openQuotes } = desk;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        // Not "good morning": a greeting fixed at build time is wrong for
-        // most of the day, and reading the clock during a render is both
-        // impure and pointless when the sentence works without it.
-        title={t("agency.welcomeBack", { name: context.session.name.split(" ")[0] })}
-        description={t("agency.homeBody")}
-      />
-
-      {/*
-        The load failed, said so, and offers the way out.
-        Anything below this point renders from `bookings`, so without this the
-        whole page is skeletons for ever and reads as merely slow.
-      */}
-
       {failed && (
         <Card className="border-caution-300 bg-caution-50 flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
@@ -422,16 +413,6 @@ function DeskHome({ locale, context }: { locale: Locale; context: AgencyContext 
         Everything else on this page is something the agent might do; this is
         the thing they came to do.
       */}
-      <Card className="p-4 sm:p-5">
-        <SearchBar
-          variant="panel"
-          currency={currency as CurrencyCode}
-          onSearch={(intent) =>
-            router.push(`${href(locale, "/agency/search")}?${searchParamsFromIntent(intent).toString()}`)
-          }
-        />
-      </Card>
-
       <RecentSearches locale={locale} context={context} />
       {attention.length > 0 && (
         <Section title={t("agency.needsYou")} description={t("agency.needsYouBody")}>
@@ -456,18 +437,14 @@ function DeskHome({ locale, context }: { locale: Locale; context: AgencyContext 
         >
           {!quotes && <TableSkeleton rows={3} />}
           {quotes && !openQuotes.length && (
-            <Nothing
-              icon="receipt"
-              title={t("agency.noOpenQuotes")}
-              body={t("agency.noOpenQuotesBody")}
-              action={
-                <Link href={href(locale, "/agency/search")}>
-                  <Button size="sm" variant="secondary">
-                    {t("agency.newQuote")}
-                  </Button>
-                </Link>
-              }
-            />
+            /*
+             * No button. It used to offer "New quote", which linked to the
+             * search — and the search is now the page this panel is sitting on,
+             * so the button navigated to itself. A quote is built from rates,
+             * the bar to find them is directly above, and an empty panel that
+             * says so plainly is more use than a control that goes nowhere.
+             */
+            <Nothing icon="receipt" title={t("agency.noOpenQuotes")} body={t("agency.noOpenQuotesBody")} />
           )}
           {quotes && openQuotes.length > 0 && (
             <Card className="divide-ink-100 divide-y">
@@ -532,7 +509,7 @@ function DeskOverview({ locale, context }: { locale: Locale; context: AgencyCont
         title={t("agency.dashboard")}
         description={t("agency.overviewBody", { name: context.agency.name })}
         actions={
-          <Link href={href(locale, "/agency/search")}>
+          <Link href={href(locale, "/agency")}>
             <Button>
               <Icon name="search" size={16} />
               {t("agency.searchStays")}
@@ -714,7 +691,7 @@ function DeskOverview({ locale, context }: { locale: Locale; context: AgencyCont
               title={t("agency.noArrivals")}
               body={t("agency.noArrivalsBody")}
               action={
-                <Link href={href(locale, "/agency/search")}>
+                <Link href={href(locale, "/agency")}>
                   <Button size="sm">{t("agency.searchStays")}</Button>
                 </Link>
               }

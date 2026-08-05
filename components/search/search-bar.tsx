@@ -35,6 +35,7 @@ export function SearchBar({
   onSubmitted,
   onSearch,
   busy,
+  autoFocus,
 }: {
   initial?: SearchIntent | null;
   variant?: "hero" | "compact" | "panel";
@@ -48,6 +49,16 @@ export function SearchBar({
   /** Run the search here instead of navigating to the consumer results page. */
   onSearch?: (intent: SearchIntent) => void;
   busy?: boolean;
+  /**
+   * Put the cursor in the destination field on arrival.
+   *
+   * Only for a screen whose whole purpose is the search and that arrived with
+   * nothing to show — an agent landing there is about to type a place name, and
+   * making them click first is a step for nothing. Never when a search is
+   * already on screen: stealing focus from results somebody is reading, and
+   * scrolling them back to the top to do it, is worse than the click.
+   */
+  autoFocus?: boolean;
 }) {
   const { t, locale, currency: browsingCurrency, rememberSearch, track } = useApp();
   const currency = currencyOverride ?? browsingCurrency;
@@ -181,6 +192,7 @@ export function SearchBar({
           onSelect={(next) => setDestination(next)}
           error={errors.destinationId}
           resolverRef={resolver}
+          autoFocus={autoFocus}
         />
         <DateRangePicker
           checkIn={dates.checkIn}

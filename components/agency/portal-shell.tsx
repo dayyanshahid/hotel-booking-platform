@@ -112,14 +112,14 @@ export function PortalShell({
       label: t("agency.navSell"),
       items: [
         /*
-         * Home is where the searching happens, so it is named for that.
-         * It used to be called Overview and hold the month's figures, which is
-         * a question nobody has at nine in the morning — those moved to their
-         * own page under Manage, where somebody goes looking for them on
-         * purpose.
+         * One entry, because there is one screen.
+         * Home and Search stays had converged — the same bar at the top of
+         * both, differing only in what sat underneath — and two nav items for
+         * that is a choice an agent has to make before they can start. The
+         * month's figures are under Manage, where somebody goes looking for
+         * them on purpose.
          */
-        { path: "/agency", label: t("agency.home"), icon: "search" },
-        { path: "/agency/search", label: t("agency.searchStays"), icon: "search" },
+        { path: "/agency", label: t("agency.searchStays"), icon: "search" },
         { path: "/agency/quotes", label: t("agency.quotes"), icon: "receipt" },
         { path: "/agency/customers", label: t("agency.customers"), icon: "users" },
       ],

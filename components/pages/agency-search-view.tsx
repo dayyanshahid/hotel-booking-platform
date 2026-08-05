@@ -19,6 +19,7 @@ import {
   SortControl,
 } from "@/components/commerce/filters-panel";
 import { PageHeader, TradePrices } from "@/components/agency/ui";
+import { DeskPrelude } from "@/components/pages/agency-dashboard-view";
 import { RateShelf } from "@/components/agency/rate-shelf";
 import Link from "next/link";
 import {
@@ -428,6 +429,9 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           initial={seed}
           currency={seed.currency}
           busy={busy}
+          // A cold landing only. Arriving from a recent search or a shared link
+          // means the results are the point, and the cursor belongs elsewhere.
+          autoFocus={!seed.destinationId && !data}
           onSearch={(intent) => void run({ intent, filters: {} })}
         />
         <div className="hairline flex flex-wrap items-center justify-between gap-3 border-t pt-3">
@@ -457,6 +461,16 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       </Card>
 
       {error && <Alert tone="critical">{error}</Alert>}
+
+      {/*
+        Before a search: what the agent was already doing.
+        This screen used to be blank below the bar until somebody searched, and
+        the work in flight — a stay looked at an hour ago, a quote waiting on a
+        customer, a hold about to release — lived on a separate Home page that
+        led with the same bar. One screen, and the panels give way to the
+        results the moment there are results to give way to.
+      */}
+      {!data && !busy && <DeskPrelude locale={locale} context={context} />}
 
       {/*
         The rates are fine; our own pricing call is not. Said once at the top
