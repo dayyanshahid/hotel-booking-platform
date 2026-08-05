@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Checkbox, Input, Select, cx } from "@/components/ui";
+import { Icon } from "@/components/ui/icons";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/types";
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
@@ -125,8 +126,7 @@ function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next:
   }, [typed]);
 
   return (
-    <fieldset>
-      <legend className="text-sm font-semibold">{t("filters.hotelName")}</legend>
+    <FilterSection title={t("filters.hotelName")} active={value?.trim() ? 1 : 0} defaultOpen>
       <Input
         className="mt-2"
         type="search"
@@ -135,7 +135,7 @@ function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next:
         aria-label={t("filters.hotelName")}
         onChange={(e) => setTyped(e.target.value)}
       />
-    </fieldset>
+    </FilterSection>
   );
 }
 
@@ -147,6 +147,65 @@ function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next:
  * star. A supplier that publishes no rating is not saying the hotel is bad.
  */
 const STAR_CLASSES = [5, 4, 3, 2, 1, 0];
+
+/**
+ * A filter group that can be put away.
+ *
+ * The rail is ten sections deep and every one of them was open, so an agent
+ * looking for "board" scrolled past star, area and property type to reach it,
+ * and could not see at a glance which of the ten were doing anything. The four
+ * that get used on nearly every search stay open; the rest state how many
+ * choices they are holding and stay shut until wanted.
+ */
+function FilterSection({
+  title,
+  active = 0,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  /** How many choices this group currently holds, shown when it is closed. */
+  active?: number;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen || active > 0);
+  /*
+   * Still a fieldset with a legend.
+   *
+   * Collapsing these into buttons and divs would have taken the grouping away
+   * from anyone using a screen reader — eleven loose checkboxes with no idea
+   * which question each belongs to. The disclosure lives *inside* the legend,
+   * which is valid and keeps both.
+   */
+  return (
+    <fieldset className="hairline border-b pb-3 last:border-b-0">
+      <legend className="w-full">
+        <button
+          type="button"
+          onClick={() => setOpen((was) => !was)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 text-start"
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold">
+            {title}
+            {active > 0 && (
+              <span className="bg-brand-600 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white">
+                {active}
+              </span>
+            )}
+          </span>
+          <Icon
+            name="chevronDown"
+            size={16}
+            className={cx("text-muted shrink-0 transition-transform", open && "rotate-180")}
+          />
+        </button>
+      </legend>
+      {open && <div className="mt-2">{children}</div>}
+    </fieldset>
+  );
+}
 
 export function FiltersPanel({
   facets,
@@ -170,8 +229,52 @@ export function FiltersPanel({
     return current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
   };
 
+  /**
+   * How many choices are currently narrowing the page.
+   *
+   * The rail could be holding six of them three sections down and look, from
+   * the top, exactly like a rail holding none — which is how an agent ends up
+   * asking why a city has eleven hotels in it.
+   */
+  const activeCount =
+    (filters.hotelName?.trim() ? 1 : 0) +
+    (filters.minPrice != null ? 1 : 0) +
+    (filters.maxPrice != null ? 1 : 0) +
+    (filters.minRating ? 1 : 0) +
+    (filters.maxDistanceKm != null ? 1 : 0) +
+    (filters.dealsOnly ? 1 : 0) +
+    (filters.payLaterOnly ? 1 : 0) +
+    (filters.accessibleOnly ? 1 : 0) +
+    (filters.categories?.length ?? 0) +
+    (filters.neighborhoods?.length ?? 0) +
+    (filters.propertyTypes?.length ?? 0) +
+    (filters.boards?.length ?? 0) +
+    (filters.roomCategories?.length ?? 0) +
+    (filters.rateConditions?.length ?? 0) +
+    (filters.amenities?.length ?? 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-2">
+      <div className="hairline flex items-center justify-between gap-2 border-b pb-2">
+        <p className="flex items-center gap-2 text-sm font-bold">
+          {t("common.filters")}
+          {activeCount > 0 && (
+            <span className="bg-brand-600 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white">
+              {activeCount}
+            </span>
+          )}
+        </p>
+        {activeCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange({})}
+            className="text-muted hover:text-ink-900 text-xs underline underline-offset-2 transition-colors"
+          >
+            {t("common.clear")}
+          </button>
+        )}
+      </div>
+
       {/*
         Find one property among a hundred.
         An agent who has been asked for the Hilton does not want to narrow by
@@ -190,8 +293,7 @@ export function FiltersPanel({
         empty, on the one screen where the reason matters and is stated above.
       */}
       {shows("price") && facets.priceRange.typicalMax > facets.priceRange.min && (
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.price")}</legend>
+      <FilterSection title={t("filters.price")} active={(filters.minPrice != null ? 1 : 0) + (filters.maxPrice != null ? 1 : 0)} defaultOpen>
         <div className="mt-2">
           <label htmlFor="max-price" className="text-muted text-xs">
             {formatMoney(facets.priceRange.min, currency, locale)} –{" "}
@@ -250,7 +352,7 @@ export function FiltersPanel({
             />
           </div>
         </div>
-      </fieldset>
+      </FilterSection>
       )}
 
       {/*
@@ -262,8 +364,7 @@ export function FiltersPanel({
         ticking, and an empty one cannot be ticked at all.
       */}
       {shows("stars") && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.stars")}</legend>
+        <FilterSection title={t("filters.stars")} active={filters.categories?.length ?? 0} defaultOpen>
           <div className="mt-2 space-y-1">
             {STAR_CLASSES.map((value) => {
               const count = facets.categories.find((cat) => cat.value === value)?.count ?? 0;
@@ -283,12 +384,11 @@ export function FiltersPanel({
               );
             })}
           </div>
-        </fieldset>
+        </FilterSection>
       )}
 
       {shows("rating") && (
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.rating")}</legend>
+      <FilterSection title={t("filters.rating")} active={filters.minRating ? 1 : 0} >
         <Select
           className="mt-2"
           value={String(filters.minRating ?? "")}
@@ -300,12 +400,11 @@ export function FiltersPanel({
           <option value="8">8+</option>
           <option value="7">7+</option>
         </Select>
-      </fieldset>
+      </FilterSection>
       )}
 
       {shows("neighborhood") && (
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.neighborhood")}</legend>
+      <FilterSection title={t("filters.neighborhood")} active={filters.neighborhoods?.length ?? 0} >
         <div className="mt-2 space-y-1">
           {facets.neighborhoods.map((hood) => (
             <Checkbox
@@ -320,7 +419,7 @@ export function FiltersPanel({
             />
           ))}
         </div>
-      </fieldset>
+      </FilterSection>
       )}
 
       {/*
@@ -330,8 +429,7 @@ export function FiltersPanel({
         it while the catalogue was six cities of hotels.
       */}
       {shows("propertyType") && facets.propertyTypes.length > 1 && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.propertyType")}</legend>
+        <FilterSection title={t("filters.propertyType")} active={filters.propertyTypes?.length ?? 0} >
           <div className="mt-2 space-y-1">
             {facets.propertyTypes.map((type) => (
               <Checkbox
@@ -346,7 +444,7 @@ export function FiltersPanel({
               />
             ))}
           </div>
-        </fieldset>
+        </FilterSection>
       )}
 
       {/*
@@ -355,8 +453,7 @@ export function FiltersPanel({
         screen it is among the first questions a customer asks.
       */}
       {shows("board") && facets.boards.length > 1 && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.board")}</legend>
+        <FilterSection title={t("filters.board")} active={filters.boards?.length ?? 0} defaultOpen>
           <div className="mt-2 space-y-1">
             {facets.boards.map((board) => (
               <Checkbox
@@ -371,7 +468,7 @@ export function FiltersPanel({
               />
             ))}
           </div>
-        </fieldset>
+        </FilterSection>
       )}
 
       {/*
@@ -381,8 +478,7 @@ export function FiltersPanel({
         results offers is not a choice, it is a dead end that returns nothing.
       */}
       {shows("roomCategory") && facets.roomCategories.length > 1 && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.roomCategory")}</legend>
+        <FilterSection title={t("filters.roomCategory")} active={filters.roomCategories?.length ?? 0} >
           <div className="mt-2 space-y-1">
             {facets.roomCategories.map((kind) => (
               <Checkbox
@@ -397,7 +493,7 @@ export function FiltersPanel({
               />
             ))}
           </div>
-        </fieldset>
+        </FilterSection>
       )}
 
       {/*
@@ -407,8 +503,7 @@ export function FiltersPanel({
         dates has to be able to see the difference before they quote.
       */}
       {shows("rateConditions") && facets.rateConditions.length > 1 && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.rateConditions")}</legend>
+        <FilterSection title={t("filters.rateConditions")} active={filters.rateConditions?.length ?? 0} >
           <div className="mt-2 space-y-1">
             {facets.rateConditions.map((condition) => (
               <Checkbox
@@ -423,7 +518,7 @@ export function FiltersPanel({
               />
             ))}
           </div>
-        </fieldset>
+        </FilterSection>
       )}
 
       {/*
@@ -433,8 +528,7 @@ export function FiltersPanel({
         anchor comes first and the distance reads off it.
       */}
       {shows("distance") && facets.distanceAnchors.length > 0 && (
-        <fieldset>
-          <legend className="text-sm font-semibold">{t("filters.distanceFrom")}</legend>
+        <FilterSection title={t("filters.distanceFrom")} active={filters.maxDistanceKm != null ? 1 : 0} >
           <Select
             className="mt-2"
             value={filters.distanceFrom ?? "centre"}
@@ -467,12 +561,11 @@ export function FiltersPanel({
             }}
             className="mt-1 w-full accent-[var(--focus)]"
           />
-        </fieldset>
+        </FilterSection>
       )}
 
       {shows("amenities") && (
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.amenities")}</legend>
+      <FilterSection title={t("filters.amenities")} active={filters.amenities?.length ?? 0} >
         <div className="mt-2 space-y-1">
           {facets.amenities.map((amenity) => (
             <Checkbox
@@ -487,7 +580,7 @@ export function FiltersPanel({
             />
           ))}
         </div>
-      </fieldset>
+      </FilterSection>
       )}
 
       <fieldset className="space-y-2">
@@ -525,9 +618,7 @@ export function FiltersPanel({
       {/* Property type is rendered once, above. This block was a second copy
           of the same control that shipped with the panel. */}
 
-      <Button variant="secondary" className="w-full" onClick={() => onChange({})}>
-        {t("common.reset")}
-      </Button>
+      {/* Clearing lives in the header now, where the count that justifies it is. */}
     </div>
   );
 }

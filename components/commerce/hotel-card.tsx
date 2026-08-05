@@ -33,6 +33,7 @@ export function HotelCard({
   priceRail,
   actions,
   below,
+  density = "comfortable",
 }: {
   card: HotelResultCard;
   intent: SearchIntent;
@@ -53,12 +54,54 @@ export function HotelCard({
    * list, which is what keeps the agent's place while they read it.
    */
   below?: ReactNode;
+  /**
+   * How much room a row is given.
+   *
+   * The shop shows a handful of results to somebody choosing a holiday, and the
+   * photograph is doing real work there. A counter is a different job: an agent
+   * runs a search that returns seventy properties and reads down them against
+   * what a caller just said, so a row that stands 530px tall means two and a
+   * half on screen and twenty-seven screens of scrolling. `compact` keeps every
+   * word and shrinks the space around it.
+   */
+  density?: "comfortable" | "compact";
 }) {
   const { t, locale, isSaved, toggleSaved, compare, toggleCompare, toast, track } = useApp();
   const [whyOpen, setWhyOpen] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
   const impressed = useRef(false);
   const saved = isSaved(card.slug);
+  const tight = density === "compact";
+
+  /** What this rate actually is: the room, the board, and what cancelling costs. */
+  const stay = (
+    <div className={cx(tight && "flex flex-wrap items-center gap-x-2 gap-y-0.5 text-start")}>
+      <p className="text-muted text-xs wrap-anywhere">{card.offerSummary.roomSummary}</p>
+      <p className="text-muted text-xs">
+        {tight && <span aria-hidden className="me-2">·</span>}
+        {card.offerSummary.boardSummary}
+      </p>
+      <p
+        className={cx(
+          "text-xs font-bold wrap-anywhere",
+          tight ? "basis-full" : "mt-1",
+          card.offerSummary.refundable ? "text-positive-700" : "text-critical-700",
+        )}
+      >
+        {card.offerSummary.refundable
+          ? card.offerSummary.freeCancellationUntil
+            ? t("rate.freeUntil", {
+                date: formatDeadline(card.offerSummary.freeCancellationUntil, "UTC", locale),
+                tz: locale === "ar" ? "توقيت الفندق" : "hotel local time",
+              })
+            : t("rate.refundable")
+          : t("rate.nonRefundable")}
+        {card.remainingLabel && (
+          <span className="text-critical-700 ms-2 font-bold">{card.remainingLabel}</span>
+        )}
+      </p>
+    </div>
+  );
 
   /** Impression rule (§13.1): counted once, when the card is actually visible. */
   useEffect(() => {
@@ -108,16 +151,19 @@ export function HotelCard({
         Measured against its own width, the same card simply stacks when the
         column is narrow and spreads when it is not, whatever else is on screen.
       */}
-      <div className="grid gap-3 @lg:grid-cols-[minmax(0,240px)_1fr]">
+      <div className={cx("grid", tight ? "gap-2.5 @lg:grid-cols-[minmax(0,168px)_1fr]" : "gap-3 @lg:grid-cols-[minmax(0,240px)_1fr]")}>
         <Link
           href={href}
-          className="block aspect-[4/3] overflow-hidden rounded-[6px] sm:aspect-auto sm:h-full sm:min-h-[190px]"
+          className={cx(
+            "block aspect-[4/3] overflow-hidden rounded-[6px] sm:aspect-auto sm:h-full",
+            tight ? "sm:min-h-[132px]" : "sm:min-h-[190px]",
+          )}
           onClick={() => track("hotel_card_clicked", { hotel: card.slug, rank, total: card.price.total, refundable: card.offerSummary.refundable })}
         >
           <Photo
             src={card.heroImage}
             srcSet={card.heroImageSrcSet}
-            sizes="(min-width: 640px) 240px, 100vw"
+            sizes={tight ? "(min-width: 640px) 168px, 100vw" : "(min-width: 640px) 240px, 100vw"}
             fallbackSrc={card.heroImageFallback}
             alt={card.heroAlt}
             fill
@@ -131,8 +177,8 @@ export function HotelCard({
           column: left as siblings of the price rail they were laid out as
           separate cells, which is what left a void down the middle of the row.
         */}
-        <div className="grid items-start gap-3 py-1 pe-1 @3xl:grid-cols-[1fr_minmax(0,210px)]">
-          <div className="flex flex-col gap-2">
+        <div className={cx("grid items-start pe-1", tight ? "gap-2 py-0.5 @3xl:grid-cols-[1fr_minmax(0,208px)]" : "gap-3 py-1 @3xl:grid-cols-[1fr_minmax(0,210px)]")}>
+          <div className={cx("flex flex-col", tight ? "gap-1.5" : "gap-2")}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -147,7 +193,7 @@ export function HotelCard({
                   </Badge>
                 )}
               </div>
-              <h3 className="text-brand-700 mt-0.5 text-[18px] font-bold tracking-[-0.015em] wrap-anywhere">
+              <h3 className={cx("text-brand-700 mt-0.5 font-bold tracking-[-0.015em] wrap-anywhere", tight ? "text-[16px] leading-snug" : "text-[18px]")}>
                 <Link href={href} className="hover:underline">
                   {card.name}
                 </Link>
@@ -260,40 +306,39 @@ export function HotelCard({
             ))}
           </div>
 
+          {/*
+            Three at a counter, four in the shop.
+            The fourth reliably wraps to a second line at trade widths, and a
+            row that grows a line for "MasterCard" has spent height on the least
+            useful thing the property publishes.
+          */}
           <div className="text-muted flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            {card.topAmenities.map((a) => (
+            {(tight ? card.topAmenities.slice(0, 3) : card.topAmenities).map((a) => (
               <span key={a.code} className="inline-flex items-center gap-1">
                 <Icon name={amenityIcon(a.code)} size={14} />
                 {a.label}
               </span>
             ))}
           </div>
+
+          {/*
+            The stay reads down the left; the money reads down the right.
+
+            Room, board and cancellation used to sit in the money rail, right
+            aligned — so the row had a ragged left edge, a column of six stacked
+            items setting the height, and a void beside it where the detail
+            column had already run out. They belong with the property they
+            describe, and a reader going down a page of rows gets one edge to
+            follow for what the rate *is* and another for what it costs.
+          */}
+          {tight && <div className="hairline mt-0.5 border-t pt-1.5">{stay}</div>}
           </div>
 
-          <div className="flex flex-col justify-end gap-3 lg:items-end lg:text-end">
+          <div className={cx("flex flex-col justify-end lg:items-end lg:text-end", tight ? "gap-2" : "gap-3")}>
             <div className="lg:text-end">
-              <p className="text-muted text-xs wrap-anywhere">{card.offerSummary.roomSummary}</p>
-              <p className="text-muted text-xs">{card.offerSummary.boardSummary}</p>
-              <p
-                className={cx(
-                  "mt-1 text-xs font-bold wrap-anywhere",
-                  card.offerSummary.refundable ? "text-positive-700" : "text-critical-700",
-                )}
-              >
-                {card.offerSummary.refundable
-                  ? card.offerSummary.freeCancellationUntil
-                    ? t("rate.freeUntil", {
-                        date: formatDeadline(card.offerSummary.freeCancellationUntil, "UTC", locale),
-                        tz: locale === "ar" ? "توقيت الفندق" : "hotel local time",
-                      })
-                    : t("rate.refundable")
-                  : t("rate.nonRefundable")}
-              </p>
-              {card.remainingLabel && (
-                <p className="text-critical-700 mt-0.5 text-xs font-bold">{card.remainingLabel}</p>
-              )}
+              {!tight && stay}
 
-              <div className="mt-2">{priceRail ?? <PriceBlock price={card.price} size="sm" />}</div>
+              <div className={tight ? undefined : "mt-2"}>{priceRail ?? <PriceBlock price={card.price} size="sm" />}</div>
 
               {actions ?? (
                 <>

@@ -603,7 +603,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
         <div>
           {busy && !data && (
-            <ul className="@container space-y-4">
+            <ul className="@container space-y-3">
               {Array.from({ length: 3 }, (_, i) => (
                 <HotelCardSkeleton key={i} />
               ))}
@@ -636,6 +636,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                       intent={applied}
                       rank={index + 1}
                       href={property}
+                      density="compact"
                       priceRail={
                         quote ? (
                           <TradePrices
@@ -644,6 +645,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             margin={quote.margin}
                             currency={currency}
                             locale={locale}
+                            compact
                             publicPrice={card.price.total}
                             perRoomOf={
                               isPerRoomTotal(card.price) ? card.price.roomsRequested : undefined
@@ -675,11 +677,25 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                           "See property details" is for the things a page is
                           for — the photographs, the facilities, the address.
                         */
-                        <div className="mt-2 flex flex-col gap-2 lg:items-end">
+                        /*
+                          One button and a link, not two stacked buttons.
+                          Both were full width and equally loud, which cost
+                          about a hundred pixels a row and made the page ask
+                          twice. Opening the rates is the work — comparing
+                          boards and cancellation across properties — so it
+                          keeps the button; the property page is a detour and
+                          reads as one.
+                        */
+                        <div className="mt-1.5 flex items-center justify-end gap-3">
+                          <Link
+                            href={property}
+                            className="text-muted hover:text-ink-900 text-xs underline underline-offset-2 transition-colors"
+                          >
+                            {t("agency.seePropertyDetails")}
+                          </Link>
                           <Button
                             variant="action"
-                            size="md"
-                            className="w-full"
+                            size="sm"
                             aria-expanded={openShelf === card.slug}
                             onClick={() => setOpenShelf((prev) => (prev === card.slug ? null : card.slug))}
                           >
@@ -690,11 +706,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                               className={cx("transition-transform", openShelf === card.slug && "rotate-180")}
                             />
                           </Button>
-                          <Link href={property} className="block w-full">
-                            <Button variant="secondary" size="sm" className="w-full">
-                              {t("agency.seePropertyDetails")}
-                            </Button>
-                          </Link>
                         </div>
                       }
                       below={

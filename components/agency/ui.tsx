@@ -441,25 +441,61 @@ export function TradePrices({
 }) {
   const { t } = useApp();
   const rooms = perRoomOf && perRoomOf > 1 ? perRoomOf : 0;
+  /*
+   * The order of these three is the order an agent needs them.
+   *
+   * They were a stack of same-weight lines with the margin last, smallest and
+   * grey — the one number the agency is in business for, set below the public
+   * price, which is a figure an agent never quotes and cannot change. Reading a
+   * page of rates meant reading the least useful number first every time.
+   *
+   * So: what you charge, large, because that is what goes to the customer. Then
+   * the margin, given a shape of its own so it can be found by eye down a
+   * column of rows rather than read. Cost sits with it because the two are one
+   * thought, and the public price goes last and quiet — useful for justifying a
+   * quote, never the thing being decided.
+   */
   return (
-    <div className={cx("text-end", compact ? "space-y-0.5" : "space-y-1")}>
-      {publicPrice !== undefined && (
-        <p className="text-xs">
-          <span className="text-muted me-1">{t("agency.public")}</span>
+    <div className={cx("text-end", compact ? "space-y-1" : "space-y-1.5")}>
+      <div className={cx(compact ? "flex items-baseline justify-end gap-2" : undefined)}>
+        <p className="text-muted text-[11px] font-medium uppercase tracking-wide">{t("agency.sell")}</p>
+        <Money amount={sell} currency={currency} locale={locale} size="lg" className="text-xl leading-tight" />
+      </div>
+
+      {/*
+        One line for the three supporting figures when space is tight.
+        Stacked, they were three of the five rows setting the height of every
+        row on the page; side by side they are one, and they are read together
+        anyway — what it costs, what is left, and what the public would pay.
+      */}
+      <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
+        <span
+          className={cx(
+            "inline-flex items-baseline gap-1 rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold",
+            margin > 0 ? "bg-positive-50 text-positive-700" : "surface-sunken text-muted",
+          )}
+        >
+          <span className="font-medium opacity-80">{t("agency.margin")}</span>
+          <Money amount={margin} currency={currency} locale={locale} size="sm" />
+        </span>
+        <span className="text-muted text-xs">
+          {t("agency.cost")}{" "}
+          <Money amount={cost} currency={currency} locale={locale} size="sm" className="text-ink-900" />
+        </span>
+        {compact && publicPrice !== undefined && (
+          <span className="text-muted text-[11px]">
+            {t("agency.public")}{" "}
+            <Money amount={publicPrice} currency={currency} locale={locale} tone="strike" size="sm" />
+          </span>
+        )}
+      </div>
+
+      {!compact && publicPrice !== undefined && (
+        <p className="text-muted text-[11px]">
+          {t("agency.public")}{" "}
           <Money amount={publicPrice} currency={currency} locale={locale} tone="strike" size="sm" />
         </p>
       )}
-      <p className="flex items-baseline justify-end gap-1.5">
-        <span className="text-muted text-xs">{t("agency.sell")}</span>
-        <Money amount={sell} currency={currency} locale={locale} size="lg" />
-      </p>
-      <p className="text-muted flex items-baseline justify-end gap-1.5 text-xs">
-        <span>{t("agency.cost")}</span>
-        <Money amount={cost} currency={currency} locale={locale} size="sm" className="text-ink-900" />
-        <span aria-hidden>·</span>
-        <span>{t("agency.margin")}</span>
-        <Money amount={margin} currency={currency} locale={locale} size="sm" tone="positive" />
-      </p>
       {rooms > 0 && (
         <>
           <p className="text-caution-700 text-xs font-medium">{t("rate.perRoomOf", { rooms })}</p>
