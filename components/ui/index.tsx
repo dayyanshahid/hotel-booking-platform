@@ -450,9 +450,17 @@ export function Checkbox({
         {...props}
         id={props.id ?? id}
         type="checkbox"
-        className="mt-1 size-5 shrink-0 accent-[var(--focus)]"
+        className={cx(
+          "mt-1 size-5 shrink-0 accent-[var(--focus)]",
+          // A box that cannot be ticked has to look like one, or the click that
+          // does nothing reads as a bug rather than as "there are none of these".
+          props.disabled && "cursor-not-allowed opacity-45",
+        )}
       />
-      <label htmlFor={props.id ?? id} className="text-sm leading-6">
+      <label
+        htmlFor={props.id ?? id}
+        className={cx("text-sm leading-6", props.disabled && "cursor-not-allowed opacity-60")}
+      >
         {label}
         {description && <span className="text-muted block text-xs">{description}</span>}
       </label>

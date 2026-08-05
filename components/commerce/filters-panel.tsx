@@ -139,6 +139,15 @@ function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next:
   );
 }
 
+/**
+ * Five down to one, then the properties nobody rated.
+ *
+ * Descending because that is how a customer says it — "four star or better" —
+ * and unrated last because it is the exception rather than a step below one
+ * star. A supplier that publishes no rating is not saying the hotel is bad.
+ */
+const STAR_CLASSES = [5, 4, 3, 2, 1, 0];
+
 export function FiltersPanel({
   facets,
   filters,
@@ -244,29 +253,37 @@ export function FiltersPanel({
       </fieldset>
       )}
 
+      {/*
+        Every class, not only the ones that came back.
+        These were pills built from the facet, so a search with nothing above
+        three stars simply had no four- or five-star control — and an agent
+        cannot tell "there are none" from "the filter is missing". Showing the
+        full range answers the question; the count says which are worth
+        ticking, and an empty one cannot be ticked at all.
+      */}
       {shows("stars") && (
-      <fieldset>
-        <legend className="text-sm font-semibold">{t("filters.stars")}</legend>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {facets.categories.map((cat) => (
-            <button
-              key={cat.value}
-              type="button"
-              aria-pressed={filters.categories?.includes(cat.value) ?? false}
-              onClick={() => set({ categories: toggleIn(filters.categories, cat.value) })}
-              className={cx(
-                "min-h-9 rounded-[var(--radius-pill)] border px-3.5 text-xs font-medium",
-                "transition-[background-color,border-color,color] duration-200 ease-[var(--ease-out)]",
-                filters.categories?.includes(cat.value)
-                  ? "bg-brand-600 border-brand-600 text-white"
-                  : "surface hover:border-brand-300",
-              )}
-            >
-              {cat.value > 0 ? `${cat.value}★` : t("filters.unrated")} ({cat.count})
-            </button>
-          ))}
-        </div>
-      </fieldset>
+        <fieldset>
+          <legend className="text-sm font-semibold">{t("filters.stars")}</legend>
+          <div className="mt-2 space-y-1">
+            {STAR_CLASSES.map((value) => {
+              const count = facets.categories.find((cat) => cat.value === value)?.count ?? 0;
+              return (
+                <Checkbox
+                  key={value}
+                  checked={filters.categories?.includes(value) ?? false}
+                  disabled={count === 0}
+                  onChange={() => set({ categories: toggleIn(filters.categories, value) })}
+                  label={
+                    <span className={cx("flex items-center gap-2", count === 0 && "text-muted")}>
+                      {value > 0 ? `${value}★` : t("filters.unrated")}
+                      <Badge tone="neutral">{count}</Badge>
+                    </span>
+                  }
+                />
+              );
+            })}
+          </div>
+        </fieldset>
       )}
 
       {shows("rating") && (
