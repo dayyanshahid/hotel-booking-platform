@@ -19,12 +19,33 @@
  * no host prefix, or more than one `*`, is discarded rather than honoured.
  */
 
+/**
+ * Our own front ends, allowed whether or not anybody remembered the variable.
+ *
+ * `PORTAL_ORIGINS` held the per-deploy vercel.app URL and not the portal's real
+ * domain, so the API answered its preflight with no CORS headers at all and the
+ * portal could not even sign in on the address the client had been given. It
+ * failed silently and only on that host, which is the worst shape a
+ * configuration bug can take: correct on every URL a developer tests.
+ *
+ * These are domains we own, so baking them in costs nothing and removes a way
+ * for the portal to be deployed and dead at the same time. The variable still
+ * works and is still the place to add anything else.
+ */
+const FIRST_PARTY = [
+  "https://travel-agent.tracking.me",
+  "https://travel-agent-portal-delta.vercel.app",
+  // Every push mints a new hash; see the wildcard rule below.
+  "https://travel-agent-portal-*.vercel.app",
+];
+
 /** Parsed from `PORTAL_ORIGINS`: a comma-separated list of origins or patterns. */
 export function portalOriginList(raw: string | undefined): string[] {
-  return (raw ?? "")
+  const configured = (raw ?? "")
     .split(",")
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean);
+  return [...new Set([...FIRST_PARTY, ...configured])];
 }
 
 function patternToRegExp(pattern: string): RegExp | null {

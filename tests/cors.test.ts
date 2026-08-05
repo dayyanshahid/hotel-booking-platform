@@ -23,14 +23,28 @@ function request(origin?: string, method = "GET"): Request {
 }
 
 describe("allowed origins", () => {
-  it("is empty until configured, which keeps the combined app same-origin", () => {
-    expect(allowedOrigins()).toEqual([]);
+  it("answers to our own front ends, but stays same-site until told otherwise", () => {
+    /*
+     * Two separate questions that used to share one answer.
+     *
+     * Who may read a response is now always at least our own portal domains —
+     * the real one was missing from the variable and the portal could not sign
+     * in on the address the client had been given. Whether session cookies go
+     * `SameSite=None` is a different and weaker promise, and it stays keyed to
+     * someone having configured a second origin on purpose.
+     */
+    expect(allowedOrigins()).toContain("https://travel-agent.tracking.me");
     expect(crossSiteSessions()).toBe(false);
+  });
+
+  it("turns cross-site sessions on once a portal origin is configured", () => {
+    process.env.PORTAL_ORIGINS = "https://agents.example";
+    expect(crossSiteSessions()).toBe(true);
   });
 
   it("reads the configured list and tolerates spacing and trailing slashes", () => {
     process.env.PORTAL_ORIGINS = " https://agents.example/ , https://admin.example ";
-    expect(allowedOrigins()).toEqual(["https://agents.example", "https://admin.example"]);
+    expect(allowedOrigins()).toEqual(expect.arrayContaining(["https://agents.example", "https://admin.example"]));
   });
 });
 

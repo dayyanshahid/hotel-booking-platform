@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { anchorPoint, anchorsFor, CITY_CENTRE } from "@/lib/geo/anchors";
 import { GENERATED_AIRPORTS } from "@/lib/data/airports.generated";
+import { GENERATED_LANDMARKS } from "@/lib/data/landmarks.generated";
 import { DESTINATIONS } from "@/lib/data/destinations";
 
 describe("what a radius can be measured from", () => {
@@ -19,6 +20,43 @@ describe("what a radius can be measured from", () => {
     // seventeen cities out of a hundred and eighty-three.
     const lisbon = anchorsFor("dest-lisbon", "en");
     expect(lisbon.some((a) => a.type === "airport")).toBe(true);
+  });
+
+  it("gives the busiest markets something to measure from besides the airport", () => {
+    // "Distance from a key landmark" was seventeen hand-written cities. Lisbon
+    // is the case that showed it up: a tier-one destination offering the city
+    // centre and nothing else.
+    for (const id of ["dest-lisbon", "dest-florence", "dest-bangkok", "dest-cairo"]) {
+      const landmarks = anchorsFor(id, "en").filter((a) => a.type === "landmark");
+      expect(landmarks.length, id).toBeGreaterThan(0);
+    }
+  });
+
+  it("does not offer a city as a landmark inside itself", () => {
+    // The city's own article outranks everything in its radius, and "Heian-kyō"
+    // is Kyoto. A radius around a city, centred on that city, is the centre
+    // anchor wearing a different name.
+    for (const d of DESTINATIONS) {
+      for (const a of anchorsFor(d.id, "en").filter((x) => x.type === "landmark")) {
+        expect(a.label.toLowerCase(), `${d.id}: ${a.label}`).not.toBe(d.name.en.toLowerCase());
+      }
+    }
+  });
+
+  it("keeps landmarks off things that are not landmarks", () => {
+    // A hotel is what this site sells; offering one as an anchor is circular.
+    // An airport already has its own entry.
+    for (const landmark of GENERATED_LANDMARKS) {
+      expect(landmark.name.en, landmark.id).not.toMatch(/hotel|casino|resort|airport/i);
+    }
+  });
+
+  it("holds landmark coordinates that are actually on Earth", () => {
+    for (const landmark of GENERATED_LANDMARKS) {
+      expect(Math.abs(landmark.coordinates.lat), landmark.id).toBeLessThanOrEqual(90);
+      expect(Math.abs(landmark.coordinates.lng), landmark.id).toBeLessThanOrEqual(180);
+      expect(landmark.coordinates.lat === 0 && landmark.coordinates.lng === 0).toBe(false);
+    }
   });
 
   it("covers every destination with at least one airport", () => {

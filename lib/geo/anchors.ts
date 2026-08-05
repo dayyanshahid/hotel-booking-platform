@@ -1,6 +1,7 @@
 import { EXTRA_PLACES, getDestination } from "@/lib/data/destinations";
 import { localized } from "@/lib/data/catalog";
 import { GENERATED_AIRPORTS } from "@/lib/data/airports.generated";
+import { GENERATED_LANDMARKS } from "@/lib/data/landmarks.generated";
 import type { Locale } from "@/lib/types";
 
 type Coordinates = { lat: number; lng: number };
@@ -79,8 +80,25 @@ export function anchorsFor(destinationId: string, locale: Locale): DistanceAncho
   }));
 
   const airports = [...curated.filter((place) => place.type === "airport"), ...generated];
-  const landmarks = curated.filter((place) => place.type !== "airport");
-  landmarks.sort((a, b) => a.label.localeCompare(b.label));
+
+  /*
+   * Landmarks the same way: hand-written first, then the generated ones for
+   * the cities nobody has got to. Matched on the label rather than the id,
+   * since the two lists name the same place differently — `poi-burj-khalifa`
+   * here and `lm-burj-khalifa` there.
+   */
+  const curatedLandmarks = curated.filter((place) => place.type !== "airport");
+  const named = new Set(curatedLandmarks.map((place) => place.label.toLowerCase()));
+  const generatedLandmarks = GENERATED_LANDMARKS.filter(
+    (landmark) => landmark.destinationId === destinationId && !named.has(localized(landmark.name, locale).toLowerCase()),
+  ).map((landmark) => ({
+    id: landmark.id,
+    label: localized(landmark.name, locale),
+    type: "landmark",
+    coordinates: landmark.coordinates,
+  }));
+
+  const landmarks = [...curatedLandmarks, ...generatedLandmarks];
 
   // Airports before landmarks: it is the anchor asked for most often, and the
   // generated list already has them in the order travellers use them.

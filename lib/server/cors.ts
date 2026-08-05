@@ -71,7 +71,14 @@ export function preflight(req: Request): Response | null {
  * browser only accepts that over HTTPS. So this is not a preference: configure
  * separate portal origins and the cookies must change with them, or every
  * sign-in silently fails to stick.
+ *
+ * Deliberately reads the variable rather than `allowedOrigins()`, which now
+ * carries our own front ends whether or not anything is configured. Deriving
+ * it from that list would have quietly turned every session cookie into
+ * `SameSite=None` on a deployment that never intended a second origin —
+ * loosening a cookie policy as a side effect of a CORS convenience, which is
+ * exactly the sort of change nobody goes looking for afterwards.
  */
 export function crossSiteSessions(): boolean {
-  return allowedOrigins().length > 0;
+  return portalOriginList(process.env.PORTAL_ORIGINS).length > portalOriginList(undefined).length;
 }

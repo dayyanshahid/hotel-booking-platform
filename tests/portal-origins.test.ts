@@ -67,8 +67,10 @@ describe("origins we answer to", () => {
   });
 
   it("refuses a pattern with more than one wildcard", () => {
-    const two = portalOriginList("https://travel-*-portal-*.vercel.app");
-    expect(isAllowedOrigin("https://travel-agent-portal-x.vercel.app", two)).toBe(false);
+    // Deliberately not a travel-agent-portal host: those are first-party and
+    // allowed by default now, which would mask what this is checking.
+    const two = portalOriginList("https://other-*-thing-*.example.com");
+    expect(isAllowedOrigin("https://other-a-thing-b.example.com", two)).toBe(false);
   });
 
   it("refuses http where the pattern says https", () => {
@@ -77,9 +79,19 @@ describe("origins we answer to", () => {
     ).toBe(false);
   });
 
-  it("allows nothing at all when nothing is configured", () => {
+  it("still answers to our own front ends when nothing is configured", () => {
+    /*
+     * The contract used to be "configure it or nothing is allowed", and what
+     * that bought was a portal deployed and dead at the same time: the real
+     * domain was missing from the variable, so the API refused its preflight
+     * and the client could not sign in on the address they had been given.
+     * Domains we own are baked in; everything else is still opt-in.
+     */
     const none = portalOriginList(undefined);
-    expect(none).toEqual([]);
-    expect(isAllowedOrigin("https://travel-agent-portal-delta.vercel.app", none)).toBe(false);
+    expect(isAllowedOrigin("https://travel-agent.tracking.me", none)).toBe(true);
+    expect(isAllowedOrigin("https://travel-agent-portal-delta.vercel.app", none)).toBe(true);
+    expect(isAllowedOrigin("https://travel-agent-portal-abc123.vercel.app", none)).toBe(true);
+    expect(isAllowedOrigin("https://not-ours.example.com", none)).toBe(false);
+    expect(isAllowedOrigin("https://travel-agent.attacker.me", none)).toBe(false);
   });
 });
