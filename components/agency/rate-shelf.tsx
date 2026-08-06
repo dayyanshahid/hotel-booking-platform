@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useApp } from "@/components/providers/app-provider";
 import { Alert, Badge, Button, Skeleton, cx } from "@/components/ui";
@@ -12,6 +12,7 @@ import { formatDeadline, formatMoney, nightsBetween } from "@/lib/format";
 import { guestLabel, roomLabel } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { AgencyOfferView } from "@/lib/agency/types";
+import { claimShelf, type AvailabilityPayload } from "@/lib/agency/shelf-prefetch";
 import type { CanonicalRoom, CurrencyCode, Locale, Offer, SearchIntent } from "@/lib/types";
 
 /**
@@ -33,12 +34,6 @@ import type { CanonicalRoom, CurrencyCode, Locale, Offer, SearchIntent } from "@
  * supplier allowance, to answer a question nobody asked.
  */
 
-interface AvailabilityPayload {
-  hotel: { name: string; slug: string } | null;
-  rooms: CanonicalRoom[];
-  offers: Offer[];
-}
-
 export function RateShelf({
   slug,
   hotelName,
@@ -58,6 +53,20 @@ export function RateShelf({
   const [payload, setPayload] = useState<AvailabilityPayload | null>(null);
   const [quotes, setQuotes] = useState<Record<string, AgencyOfferView>>({});
   const [loading, setLoading] = useState(true);
+  /**
+   * The rates are here; what they cost the agency is not, yet.
+   *
+   * Two supplier round-trips stand between "View rooms" and a bookable line —
+   * availability, then our own pricing of it — and they used to be one wait
+   * with one skeleton over the whole sheet. Measured three seconds after
+   * opening, the sheet still had zero rate rows on it: the rooms had arrived
+   * and were being held back until their prices caught up.
+   *
+   * Kept apart from `failed` because they mean different things to an agent. A
+   * price still arriving is worth a second; a price that failed is worth
+   * pressing retry, and the sheet said the second when it meant the first.
+   */
+  const [pricing, setPricing] = useState(true);
   const [failed, setFailed] = useState(false);
   const [openRooms, setOpenRooms] = useState<Set<string>>(new Set());
   /**
@@ -75,30 +84,59 @@ export function RateShelf({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setPricing(true);
     setFailed(false);
+    let rooms: AvailabilityPayload | null = null;
     try {
-      const res = await fetch(apiUrl(`/api/hotels/${encodeURIComponent(slug)}/availability`), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: apiCredentials(),
-        body: JSON.stringify({ intent }),
-      });
-      const body = (await res.json()) as { ok: boolean; data?: AvailabilityPayload };
-      if (!body.ok || !body.data) {
+      /*
+       * If the agent hovered the button before pressing it, this request is
+       * already in flight and we join it rather than starting a second one.
+       */
+      const warm = claimShelf(slug, intent);
+      if (warm) {
+        rooms = await warm;
+      } else {
+        const res = await fetch(apiUrl(`/api/hotels/${encodeURIComponent(slug)}/availability`), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: apiCredentials(),
+          body: JSON.stringify({ intent }),
+        });
+        const body = (await res.json()) as { ok: boolean; data?: AvailabilityPayload };
+        rooms = body.ok && body.data ? body.data : null;
+      }
+      if (!rooms) {
         setFailed(true);
         return;
       }
-      setPayload(body.data);
-
+      setPayload(rooms);
+    } catch {
+      setFailed(true);
+      return;
+    } finally {
       /*
-       * One pricing call for the whole sheet.
-       *
-       * A rate without the agency's cost beside it is the public price, which
-       * is the one number an agent must never quote — so the sheet is priced
-       * in a single request rather than a request per line.
+       * The rooms go up the moment they exist, rather than waiting on the
+       * pricing call behind them. An agent reading a room name and a
+       * cancellation deadline is already doing something useful, and the
+       * numbers land underneath a second later.
        */
-      const offerIds = body.data.offers.map((o) => o.offerId);
-      if (!offerIds.length) return;
+      setLoading(false);
+      if (!rooms) setPricing(false);
+    }
+
+    /*
+     * One pricing call for the whole sheet.
+     *
+     * A rate without the agency's cost beside it is the public price, which
+     * is the one number an agent must never quote — so the sheet is priced
+     * in a single request rather than a request per line.
+     */
+    const offerIds = rooms.offers.map((o) => o.offerId);
+    if (!offerIds.length) {
+      setPricing(false);
+      return;
+    }
+    try {
       const priced = await fetch(apiUrl("/api/agency/quote"), {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -110,9 +148,13 @@ export function RateShelf({
         setQuotes(Object.fromEntries(pricedBody.data.quotes.map((q) => [q.offerId, q])));
       }
     } catch {
-      setFailed(true);
+      /*
+       * Not `failed`: the rooms are on screen and are real. Only the money is
+       * missing, and each line says so for itself rather than the whole sheet
+       * being replaced by an error over rates that arrived perfectly well.
+       */
     } finally {
-      setLoading(false);
+      setPricing(false);
     }
   }, [slug, intent]);
 
@@ -136,6 +178,27 @@ export function RateShelf({
       }))
       .filter((entry) => entry.offers.length > 0);
   }, [payload]);
+
+  /**
+   * The first room opens itself.
+   *
+   * Measured three seconds after pressing "View rooms", the sheet had zero rate
+   * rows on it — and part of that was never loading at all: every room arrived
+   * collapsed, so the agent who had just asked to see the rates was shown a
+   * list of room names and had to ask again. On a fifteen-room property that is
+   * a second click to reach the thing the first click was for.
+   *
+   * Only the first, and only once. Opening all fifteen would put four hundred
+   * rates between the agent and the next property in the list, and re-applying
+   * it on every render would fight an agent who has deliberately closed it.
+   */
+  const opened = useRef<string | null>(null);
+  useEffect(() => {
+    const first = rooms[0]?.room.canonicalRoomId;
+    if (!first || opened.current === first) return;
+    opened.current = first;
+    setOpenRooms(new Set([first]));
+  }, [rooms]);
 
   const allOpen = rooms.length > 0 && openRooms.size === rooms.length;
 
@@ -232,10 +295,25 @@ export function RateShelf({
 
                 <span className="flex shrink-0 items-center gap-2">
                   <span className="text-end">
+                    {/*
+                      The agency's number or none at all.
+
+                      This fell back to `cheapest.price.total` — the public
+                      price — under a "from, per stay" label, in the slot where
+                      every other row on this screen puts the agency's sell.
+                      For the second the pricing call is out, an agent reading
+                      down the sheet would have read someone else's price as
+                      theirs and quoted it. Waiting is honest; a dash is
+                      honest; the wrong number wearing the right label is not.
+                    */}
                     <span className="block text-sm font-bold">
-                      {cheapestQuote
-                        ? formatMoney(cheapestQuote.sell, cheapestQuote.currency as CurrencyCode, locale)
-                        : formatMoney(cheapest.price.total, cheapest.price.currency as CurrencyCode, locale)}
+                      {cheapestQuote ? (
+                        formatMoney(cheapestQuote.sell, cheapestQuote.currency as CurrencyCode, locale)
+                      ) : pricing ? (
+                        <Skeleton className="h-4 w-16" />
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
                     </span>
                     <span className="text-muted block text-[11px]">{t("agency.fromPerStay")}</span>
                   </span>
@@ -258,6 +336,7 @@ export function RateShelf({
                 <BoardGroups
                   offers={offers}
                   quotes={quotes}
+                  pricing={pricing}
                   locale={locale}
                   canIssue={canIssue}
                   onPriceDetails={setPriceFor}
@@ -328,6 +407,7 @@ export function RateShelf({
 function BoardGroups({
   offers,
   quotes,
+  pricing,
   locale,
   canIssue,
   onAdd,
@@ -335,6 +415,8 @@ function BoardGroups({
 }: {
   offers: Offer[];
   quotes: Record<string, AgencyOfferView>;
+  /** The pricing call is still out, so a missing quote is not a failed one. */
+  pricing: boolean;
   locale: Locale;
   canIssue: boolean;
   onAdd: (offer: Offer, quote?: AgencyOfferView) => void;
@@ -442,6 +524,14 @@ function BoardGroups({
                           })}
                         </p>
                       </>
+                    ) : pricing ? (
+                      // On its way. Saying "price unavailable" for the second
+                      // it takes to arrive is a fault reported where there is
+                      // none, on the number the agent is waiting for.
+                      <span className="ms-auto flex flex-col items-end gap-1">
+                        <Skeleton className="h-5 w-20" />
+                        <Skeleton className="h-3 w-24" />
+                      </span>
                     ) : (
                       // Never the public price dressed as the agency's. If the
                       // quote did not arrive, the line says so.
@@ -457,7 +547,7 @@ function BoardGroups({
                   </div>
 
                   {canIssue && (
-                    <AddControl offer={offer} quote={quote} onAdd={onAdd} />
+                    <AddControl offer={offer} quote={quote} pricing={pricing} onAdd={onAdd} />
                   )}
                 </li>
               );
@@ -485,10 +575,13 @@ function BoardGroups({
 function AddControl({
   offer,
   quote,
+  pricing,
   onAdd,
 }: {
   offer: Offer;
   quote?: AgencyOfferView;
+  /** Waiting on the cost, which is not the same as not having one. */
+  pricing: boolean;
   onAdd: (offer: Offer, quote?: AgencyOfferView) => void;
 }) {
   const { t } = useApp();
@@ -498,7 +591,19 @@ function AddControl({
 
   if (held === 0) {
     return (
-      <Button size="sm" className="w-full sm:w-auto" onClick={() => onAdd(offer, quote)}>
+      <Button
+        size="sm"
+        className="w-full sm:w-auto"
+        /*
+         * Present but not yet pressable while the cost is in flight. A rate
+         * added without one goes into the basket with no margin behind it,
+         * which is the number the whole screen exists to protect — and a
+         * button that appears a second late is a button an agent reaches for
+         * and misses.
+         */
+        disabled={pricing && !quote}
+        onClick={() => onAdd(offer, quote)}
+      >
         <Icon name="cart" size={14} />
         {t("agency.add")}
       </Button>

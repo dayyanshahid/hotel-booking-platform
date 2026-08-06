@@ -304,11 +304,25 @@ export function PortalShell({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* The figure follows the agent everywhere, not only on the rail. */}
+            {/*
+              The figure follows the agent everywhere, but it is only ever in
+              one place at a time.
+
+              The rail already carries available credit, the limit under it and
+              a utilisation bar, and this pill was carrying the same number two
+              inches away — the same $23,698 twice on one screen, which reads
+              as two figures that happen to agree rather than as one fact. So
+              the pill appears exactly where the rail cannot: on a laptop with
+              the nav collapsed, and on anything narrower than `lg`, where the
+              rail is behind the menu button.
+            */}
             {context.balance && (
               <Link
                 href={href(locale, "/agency/credit")}
-                className="hairline hover:border-brand-300 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors"
+                className={cx(
+                  "hairline hover:border-brand-300 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors",
+                  !railClosed && "lg:hidden",
+                )}
               >
                 {/* The label is the first thing to go when space is short; the
                     figure is what an agent is actually looking for. */}

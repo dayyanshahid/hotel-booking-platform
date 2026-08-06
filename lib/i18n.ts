@@ -1029,6 +1029,19 @@ const en: Dict = {
   "agency.noResultsBody": "Nothing available for those dates. Try shifting them, or widening the occupancy.",
   "agency.priceUnavailable": "Price unavailable",
   "agency.pricingFailed": "These rooms are live and bookable, but we could not work out your cost and selling price for them just now.",
+  /*
+   * What is happening during the wait.
+   *
+   * A trade search against both live suppliers was measured at 11.6 seconds and
+   * said nothing for any of them. These are counts rather than supplier names:
+   * which one is slow this afternoon is not something an agent can act on, and
+   * naming a supplier in a client response is what §9.4 exists to prevent.
+   */
+  "agency.searchAsking": "Asking our supply sources for live availability",
+  "agency.searchMore": "Still adding results",
+  "agency.searchAnswered": "{answered} of {asked} answered",
+  "agency.searchElapsed": "{seconds}s",
+  "agency.searchPartialAnnounce": "First results are in. More are still arriving.",
   "agency.retryPricing": "Price them again",
   "agency.pricedIn": "Priced in {currency}",
   "agency.describeTrip": "Describe the trip",
@@ -2376,6 +2389,11 @@ const ar: Dict = {
   "agency.noResultsBody": "لا يوجد متاح لهذه التواريخ. جرّب تغييرها أو توسيع عدد النزلاء.",
   "agency.priceUnavailable": "السعر غير متاح",
   "agency.pricingFailed": "هذه الغرف متاحة وقابلة للحجز، لكن تعذّر حساب تكلفتك وسعر بيعك لها الآن.",
+  "agency.searchAsking": "نطلب التوافر المباشر من مصادر التوريد",
+  "agency.searchMore": "ما زلنا نضيف نتائج",
+  "agency.searchAnswered": "استجاب {answered} من {asked}",
+  "agency.searchElapsed": "{seconds} ث",
+  "agency.searchPartialAnnounce": "وصلت النتائج الأولى، وما زال المزيد في الطريق.",
   "agency.retryPricing": "أعد حساب الأسعار",
   "agency.pricedIn": "التسعير بعملة {currency}",
   "agency.describeTrip": "صف الرحلة",

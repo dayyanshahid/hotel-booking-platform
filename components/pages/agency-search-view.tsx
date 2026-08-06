@@ -34,6 +34,8 @@ import {
 import { countLabel, guestLabel, roomLabel } from "@/lib/i18n";
 import { href, intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav";
 import { appendResults } from "@/lib/search-append";
+import { isFrameStream, readFrames, type StreamProgress } from "@/lib/search-stream";
+import { forgetWarmedShelves, prefetchShelf } from "@/lib/agency/shelf-prefetch";
 import { rememberSearch } from "@/lib/agency/recent-searches";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { QUOTE_BATCH } from "@/lib/agency/rates";
@@ -79,8 +81,100 @@ function propertyQuery(intent: SearchIntent): string {
 /** Server sorts, plus the one only a trade screen can offer. */
 type TradeSort = SortKey | "marginDesc";
 
-function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
+/**
+ * What the wait is doing, while it does it.
+ *
+ * A trade search against both live suppliers was measured at 11.6 seconds, and
+ * for all 11.6 the screen showed fifteen shimmering rectangles and no words at
+ * all. An agent on the phone cannot tell a slow search from a broken one, and
+ * the difference matters: one is worth waiting out and the other is worth
+ * starting again. The elapsed count is there for exactly that judgement — a
+ * number climbing is a system working, and it lets someone say "bear with me,
+ * it's still going" instead of guessing.
+ *
+ * `role="status"` rather than an alert: this is progress, not a problem, and it
+ * should not interrupt whatever a screen reader is currently saying.
+ */
+function SearchProgressLine({
+  startedAt,
+  progress,
+  hasResults,
+}: {
+  startedAt: number;
+  progress: StreamProgress | null;
+  hasResults: boolean;
+}) {
   const { t } = useApp();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+
+  return (
+    <div
+      role="status"
+      className="text-muted flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-sm"
+    >
+      {/*
+        The shared `Spinner` is its own `role="status"` with its own
+        `aria-live` and an untranslated "Loading" inside it. Nested inside this
+        one it would be a second live region announcing a second, less useful
+        thing over the top of the first. Here the disc is decoration and the
+        sentence beside it is the message.
+      */}
+      <span
+        aria-hidden
+        className="inline-block size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+      />
+      <span className="text-[var(--text)]">
+        {hasResults ? t("agency.searchMore") : t("agency.searchAsking")}
+      </span>
+      {/* Only once a source has actually landed; "0 of 2" is noise. */}
+      {progress && progress.answered > 0 && (
+        <span>{t("agency.searchAnswered", { answered: progress.answered, asked: progress.asked })}</span>
+      )}
+      {/*
+        From one second, not from zero. A counter that appears reading "0s" the
+        instant the button is pressed looks like a stopwatch someone forgot to
+        start.
+      */}
+      {seconds >= 1 && (
+        <span aria-hidden className="tabular-nums">
+          {t("agency.searchElapsed", { seconds })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The filter rail's shape, before there are facets to put in it.
+ *
+ * The rail only renders once results exist, so during a search its 280px
+ * column stood empty and the result skeletons sat alone in the right-hand
+ * two-thirds with a blank gutter beside them — then everything shifted left
+ * when the rail appeared. A page that rearranges itself on arrival reads as a
+ * page that has gone wrong, and it is the one moment the agent is watching
+ * closely.
+ */
+function FilterRailSkeleton() {
+  return (
+    <Card aria-hidden className="sticky top-4 space-y-4 p-4">
+      <div className="surface-sunken shimmer h-5 w-20 rounded" />
+      {[64, 96, 72, 88].map((height, i) => (
+        <div key={i} className="space-y-2">
+          <div className="surface-sunken shimmer h-4 w-2/3 rounded" />
+          <div className="surface-sunken shimmer rounded" style={{ height }} />
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
+  const { t, announce } = useApp();
   const router = useRouter();
 
   /**
@@ -132,6 +226,27 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [pricingFailed, setPricingFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * How much of the supply is still outstanding, while it is outstanding.
+   *
+   * Null once the search finishes, which is what tells the page to stop
+   * narrating. Counts only — which supplier is slow today is not something an
+   * agent can act on, and naming one in a client response is the thing §9.4
+   * exists to prevent.
+   */
+  const [progress, setProgress] = useState<StreamProgress | null>(null);
+  /** When the search in flight began, so the wait can be counted out loud. */
+  const [startedAt, setStartedAt] = useState(0);
+  /**
+   * Offers already sent for pricing in this search.
+   *
+   * Streaming means the first supplier's rows are priced when they land and the
+   * rest when the search finishes, and without this the second call would
+   * re-price everything the first one already did — twice the quote requests
+   * for one page of results. Cleared whenever a new search starts, because
+   * offer ids belong to the batch that produced them.
+   */
+  const priced = useRef<Set<string>>(new Set());
 
   /**
    * Filters and sorting go to the server, as they do on the public site.
@@ -259,68 +374,150 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     const ticket = ++latest.current;
     setBusy(true);
     setError(null);
-    if (nextPage === 1) setData(null);
+    setProgress(null);
+    setStartedAt(Date.now());
+    if (nextPage === 1) {
+      setData(null);
+      priced.current = new Set();
+      // Rates warmed for the previous result set belong to a stay nobody is
+      // looking at any more.
+      forgetWarmedShelves();
+    }
     if (next.intent) setSeed(next.intent);
     setFilters(nextFilters);
     setSort(nextSort);
     setPage(nextPage);
 
-    const res = await fetch(apiUrl("/api/hotels/search"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: apiCredentials(),
-      body: JSON.stringify({
-        intent,
-        /*
-         * Contracted supply only.
-         *
-         * The portal used to search the same catalogue the public site does,
-         * demonstration inventory included, and an agent quoting one of those
-         * to a customer had a property nobody could book. Everything on this
-         * page now comes from Hotelbeds or TourMind.
-         */
-        supply: "live",
-        filters: nextFilters,
-        // Margin is ours, not the supplier's: the server has no concept of it,
-        // so it ranks by its own default and we reorder what comes back.
-        sort: nextSort === "marginDesc" ? "recommended" : nextSort,
-        page: nextPage,
-        pageSize: 12,
-      }),
-    });
-    const body = (await res.json()) as {
-      ok: boolean;
-      data?: SearchResponse;
-      error?: { message: string };
+    /**
+     * Put a page on screen, from a frame or from a whole response.
+     *
+     * `announce` rather than a toast, because the one person who cannot see
+     * fifteen shimmering rectangles turn into rooms is the one who most needs
+     * telling that they did.
+     */
+    const show = (response: SearchResponse, isFinal: boolean) => {
+      /*
+       * "Show 12 more" adds rows; it does not re-lay the page. The server ranks
+       * by a price percentile taken across the whole result set, so any supply
+       * change between the two calls re-scores every row — and an agent who was
+       * reading row nine would find something else there.
+       */
+      const merged =
+        nextPage > 1 && data ? appendResults(data.results, response.results) : response.results;
+      setData({ ...response, results: merged });
+      setApplied(intent);
+
+      /*
+       * Recorded on the finished search only, so the "recent searches" list
+       * never holds a count taken while a supplier was still answering.
+       */
+      if (isFinal && nextPage === 1) {
+        rememberSearch(context.session.agentId, intent, Date.now(), response.totalCount);
+      }
+      return merged;
     };
-    // Superseded by a newer search; this answer is stale.
-    if (ticket !== latest.current) return;
-    setBusy(false);
-    if (!body.ok || !body.data) {
-      setError(body.error?.message ?? t("error.temporaryService"));
-      return;
-    }
-    /*
-     * "Show 12 more" adds rows; it does not re-lay the page. The server ranks
-     * by a price percentile taken across the whole result set, so any supply
-     * change between the two calls re-scores every row — and an agent who was
-     * reading row nine would find something else there.
-     */
-    const merged =
-      nextPage > 1 && data ? appendResults(data.results, body.data.results) : body.data.results;
-    setData({ ...body.data, results: merged });
-    setApplied(intent);
 
     /*
-     * Recorded here rather than when the form is submitted, so the list only
-     * ever holds searches that actually returned something to come back to.
+     * The first page streams; later pages do not.
+     *
+     * A partial is a smaller slice of the same ranking, and merging one into a
+     * page the agent has already read would take rows away from underneath
+     * them — `appendResults` drops what is no longer in supply, which is right
+     * for a finished search and wrong for a half-arrived one. There is nothing
+     * to gain either way: "show 12 more" is served from the two-minute supply
+     * cache and comes back in about a third of a second.
      */
-    if (nextPage === 1) {
-      rememberSearch(context.session.agentId, intent, Date.now(), body.data.totalCount);
-    }
+    const streaming = nextPage === 1;
 
-    // One quote call for the whole page rather than one per row.
-    await priceRows(merged.map((r) => r.offerSummary.offerId));
+    try {
+      const res = await fetch(apiUrl("/api/hotels/search"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: apiCredentials(),
+        body: JSON.stringify({
+          intent,
+          /*
+           * Contracted supply only.
+           *
+           * The portal used to search the same catalogue the public site does,
+           * demonstration inventory included, and an agent quoting one of those
+           * to a customer had a property nobody could book. Everything on this
+           * page now comes from Hotelbeds or TourMind.
+           */
+          supply: "live",
+          filters: nextFilters,
+          // Margin is ours, not the supplier's: the server has no concept of it,
+          // so it ranks by its own default and we reorder what comes back.
+          sort: nextSort === "marginDesc" ? "recommended" : nextSort,
+          page: nextPage,
+          pageSize: 12,
+          stream: streaming,
+        }),
+      });
+      // Superseded by a newer search; this answer is stale.
+      if (ticket !== latest.current) return;
+
+      if (isFrameStream(res)) {
+        let arrived = false;
+        await readFrames(res, async (frame) => {
+          // Stop reading rather than race the search that replaced this one.
+          if (ticket !== latest.current) return false;
+          if (frame.type === "error") {
+            setBusy(false);
+            setProgress(null);
+            setError(frame.error?.message ?? t("error.temporaryService"));
+            return false;
+          }
+          arrived = true;
+          const isFinal = frame.type === "final";
+          const rows = show(frame.data, isFinal);
+          setProgress(isFinal ? null : frame.progress);
+          if (isFinal) setBusy(false);
+          announce(
+            isFinal
+              ? t("a11y.resultsAnnounce", { count: frame.data.totalCount })
+              : t("agency.searchPartialAnnounce"),
+          );
+          // One quote call per frame, and never for a row already priced.
+          await priceRows(rows.map((r) => r.offerSummary.offerId));
+          return true;
+        });
+        if (ticket !== latest.current) return;
+        setBusy(false);
+        setProgress(null);
+        // A stream that closed without a single frame is a failure that had no
+        // status code to carry it — the headers were sent before anything went
+        // wrong. Silence would leave the page shimmering for ever.
+        if (!arrived) setError(t("error.temporaryService"));
+        return;
+      }
+
+      const body = (await res.json()) as {
+        ok: boolean;
+        data?: SearchResponse;
+        error?: { message: string };
+      };
+      if (ticket !== latest.current) return;
+      setBusy(false);
+      if (!body.ok || !body.data) {
+        setError(body.error?.message ?? t("error.temporaryService"));
+        return;
+      }
+      const rows = show(body.data, true);
+      announce(t("a11y.resultsAnnounce", { count: body.data.totalCount }));
+      // One quote call for the whole page rather than one per row.
+      await priceRows(rows.map((r) => r.offerSummary.offerId));
+    } catch {
+      /*
+       * A dropped connection used to throw out of here unhandled, which left
+       * `busy` true and the page shimmering with no message at all — the same
+       * failure shape as a search that simply never returned.
+       */
+      if (ticket !== latest.current) return;
+      setBusy(false);
+      setProgress(null);
+      setError(t("error.temporaryService"));
+    }
   }
 
   /**
@@ -336,8 +533,24 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * sell and nothing to say why, on the one screen whose entire purpose is
    * those numbers.
    */
-  async function priceRows(offerIds: string[]): Promise<void> {
-    if (!offerIds.length) return;
+  async function priceRows(offerIds: string[], retry = false): Promise<void> {
+    /*
+     * Each row priced once per search.
+     *
+     * A streamed search calls this twice — when the first supplier's rows land
+     * and again when the page is complete — and without this the second call
+     * would re-price every row the first one already did. The retry button is
+     * the exception: it exists precisely to ask again for rows we have already
+     * asked about.
+     */
+    if (retry) for (const id of offerIds) priced.current.delete(id);
+    const wanted = offerIds.filter((id) => !priced.current.has(id));
+    if (!wanted.length) return;
+    for (const id of wanted) priced.current.add(id);
+    /** Anything we could not price is forgotten, so the retry can ask again. */
+    const forget = (ids: string[]) => {
+      for (const id of ids) priced.current.delete(id);
+    };
     setPricingFailed(false);
 
     /*
@@ -351,20 +564,20 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
      * where it is rather than raising a limit to whatever today's city needs.
      */
     const batches: string[][] = [];
-    for (let i = 0; i < offerIds.length; i += QUOTE_BATCH) {
-      batches.push(offerIds.slice(i, i + QUOTE_BATCH));
+    for (let i = 0; i < wanted.length; i += QUOTE_BATCH) {
+      batches.push(wanted.slice(i, i + QUOTE_BATCH));
     }
 
     try {
       const responses = await Promise.all(
         batches.map(async (batch) => {
-          const priced = await fetch(apiUrl("/api/agency/quote"), {
+          const res = await fetch(apiUrl("/api/agency/quote"), {
             method: "POST",
             headers: { "content-type": "application/json" },
             credentials: apiCredentials(),
             body: JSON.stringify({ offerIds: batch }),
           });
-          return (await priced.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
+          return (await res.json()) as { ok: boolean; data?: { quotes: AgencyOfferView[] } };
         }),
       );
 
@@ -377,8 +590,14 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       }
       // A partial answer is still a failure for the rows it left out, and those
       // are the ones that would otherwise shimmer.
-      if (quoted.length < offerIds.length) setPricingFailed(true);
+      const answered = new Set(quoted.map((q) => q.offerId));
+      const missing = wanted.filter((id) => !answered.has(id));
+      if (missing.length) {
+        forget(missing);
+        setPricingFailed(true);
+      }
     } catch {
+      forget(wanted);
       setPricingFailed(true);
     }
   }
@@ -485,7 +704,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => void priceRows(cards.map((c) => c.offerSummary.offerId))}
+              onClick={() => void priceRows(cards.map((c) => c.offerSummary.offerId), true)}
             >
               {t("agency.retryPricing")}
             </Button>
@@ -565,10 +784,23 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         screen the empty state below says the same thing at full length, and two
         notices carrying one fact reads as two faults.
       */}
-      {data?.completeness === "partial" && data.totalCount > 0 && (
+      {data?.completeness === "partial" && data.totalCount > 0 && !busy && (
         <Alert tone="warning" title={t("results.partial")}>
           {data.completenessMessage}
         </Alert>
+      )}
+
+      {/*
+        Said while the search is running, above whatever the search has so far.
+        Suppressed on "show 12 more", which is served from the supply cache in
+        about a third of a second — narrating that would be a flicker.
+      */}
+      {busy && page === 1 && (
+        <SearchProgressLine
+          startedAt={startedAt}
+          progress={progress}
+          hasResults={(data?.results.length ?? 0) > 0}
+        />
       )}
 
 
@@ -587,6 +819,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
         )}
       >
         <aside className="hidden @min-[900px]:block">
+          {busy && !data && <FilterRailSkeleton />}
           {data && (
             /*
               The rail fills the screen rather than stopping part-way down it.
@@ -705,6 +938,20 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             variant="action"
                             size="sm"
                             aria-expanded={openShelf === card.slug}
+                            /*
+                              Start the supplier request while the agent is
+                              still reaching for the button. The rate sheet is
+                              two round-trips deep and neither of them begins
+                              until the click; the few hundred milliseconds
+                              between a pointer arriving and a finger landing
+                              are free, and this spends them. Warmed on the
+                              button rather than for the whole page, because
+                              availability is a real supplier request against a
+                              real allowance — twelve per search, to answer a
+                              question nobody asked, is not a trade worth making.
+                            */
+                            onPointerEnter={() => prefetchShelf(card.slug, applied ?? seed)}
+                            onFocus={() => prefetchShelf(card.slug, applied ?? seed)}
                             onClick={() => setOpenShelf((prev) => (prev === card.slug ? null : card.slug))}
                           >
                             {openShelf === card.slug ? t("agency.hideRooms") : t("agency.viewRooms")}

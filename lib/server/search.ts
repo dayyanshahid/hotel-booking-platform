@@ -299,6 +299,40 @@ export interface SearchOptions {
    * nobody can keep. `live` restricts a search to the two contracted suppliers.
    */
   supply?: "all" | "live";
+  /**
+   * Called with a complete, usable page each time a source lands, before the
+   * rest of them have.
+   *
+   * A measured trade search took 11.6 seconds, and for all 11.6 the agent saw
+   * fifteen shimmering rectangles. The two live suppliers are asked in parallel
+   * and never answer together, so for most of that wait we were holding a
+   * perfectly good half of the answer back in order to deliver it together with
+   * the other half — with a customer on the phone.
+   *
+   * Every partial is a real `SearchResponse`: filtered, sorted, paged, and with
+   * its offers published, so an agent can act on the first one without waiting
+   * for the second. What a partial must never do is claim the missing supplier
+   * failed, so a source still in flight counts as not-yet-asked rather than
+   * unavailable, and what is still outstanding is reported through
+   * `SearchProgress` instead.
+   */
+  onPartial?: (partial: SearchResponse, progress: SearchProgress) => void | Promise<void>;
+}
+
+/**
+ * How much of the supply behind a streamed page has arrived.
+ *
+ * Counts, never names. Which supplier is slow this afternoon is ours to know
+ * and nothing an agent can act on, and a supplier name in a client response is
+ * the exact thing §9.4 exists to prevent.
+ */
+export interface SearchProgress {
+  /** Sources that have answered, whether or not they had anything. */
+  answered: number;
+  /** Sources still in flight. Zero on the final frame. */
+  pending: number;
+  /** Sources this search asked at all. */
+  asked: number;
 }
 
 /** Whether a live supplier answered, failed, or was never asked. */
@@ -403,6 +437,158 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
    */
   const batch = newOfferBatch();
 
+  /**
+   * A page, from whatever supply is in hand.
+   *
+   * Everything from here down used to run once, at the end, over the union of
+   * every source. It is a pure function of the supply it is given — rank it,
+   * filter it, page it, publish the offers it hands out — so it can just as
+   * well run over the first supplier's inventory while the second is still
+   * being asked. That is the whole of the streaming change; the rest is
+   * plumbing to call it more than once.
+   */
+  async function compose(
+    supply: NormalizedHotel[],
+    statuses: LiveStatus[],
+  ): Promise<SearchResponse> {
+    let cards = supply.map((n) => buildResultCard(n, effectiveIntent, locale));
+
+    // Multi-room partial availability (E-17): the party cannot be split silently.
+    if (scenario === "multiRoomPartial" && effectiveIntent.rooms.length > 1) {
+      cards = cards.filter((_, i) => i % 3 !== 0);
+    }
+
+    const dest = getDestination(resolved.destinationId);
+    const centre = dest?.coordinates ?? cards[0]?.coordinates ?? { lat: 0, lng: 0 };
+    const withDistance = cards.map((c) => ({ card: c, distance: distanceKm(centre, c.coordinates) }));
+
+    /*
+     * The searched city, for tidying zone names.
+     *
+     * Not `card.locality`: the live suppliers fill that with the zone string
+     * itself, so "DEIRA - DUBAI" was being compared against "DEIRA - DUBAI" and
+     * nothing ever matched.
+     */
+    const cityName = dest ? localized(dest.name, locale) : resolved.destinationId;
+    const anchors = anchorsFor(resolved.destinationId, locale);
+    const facets = buildFacets(
+      cards,
+      locale,
+      supply,
+      cityName,
+      anchors.map(({ id, label, type }) => ({ id, label, type })),
+    );
+    const filtered = applyFilters(
+      withDistance,
+      options.filters ?? {},
+      supply,
+      cityName,
+      anchorPoint(resolved.destinationId, options.filters?.distanceFrom, locale),
+    );
+    const sorted = applySort(filtered, options.sort ?? "recommended");
+
+    /*
+     * Paging here is cumulative, and deliberately so.
+     *
+     * The results screen appends — "load more" adds twelve rows below the ones
+     * already read — so page three means everything up to the end of page three,
+     * not rows twenty-five to thirty-six. Returning a window instead would make
+     * the caller stitch pages together and re-stitch them whenever a filter
+     * changed, and a stitch that drops a row is a room the agent never sees.
+     *
+     * What it does need is a ceiling. Both numbers come from the request body,
+     * and `slice(0, page * pageSize)` with either of them unbounded is a way to
+     * ask one request for every row of a large city.
+     */
+    const pageSize = Math.min(Math.max(Math.floor(options.pageSize ?? 12), 1), 48);
+    const page = Math.min(Math.max(Math.floor(options.page ?? 1), 1), 40);
+    const pageItems = sorted.slice(0, page * pageSize).map((x) => x.card);
+
+    /*
+     * The offers this response hands out, put somewhere the next request can
+     * find them — which may well be a different instance. Only the lead offer
+     * per card: that is the id on the page, the id the quote endpoint prices and
+     * the id checkout is given. Everything deeper is reached through the
+     * property's own availability call, which publishes its own.
+     */
+    await publishOffers(pageItems.map((card) => card.offerSummary.offerId));
+
+    // Every live supplier that was asked counts as a source, and each one that
+    // could not answer counts as a failure — otherwise a page missing a
+    // supplier's entire inventory describes itself as complete.
+    const liveAsked = statuses.filter((status) => status !== "skipped").length;
+    const liveFailedCount = statuses.filter((status) => status === "unavailable").length;
+    const totalSources = responses.length + liveAsked;
+    const totalFailed = failedCount + liveFailedCount;
+
+    /*
+     * Nobody was asked, so nobody failed.
+     *
+     * This is what a live-only search looks like in an environment with no
+     * supplier credentials: not a bad search and not an outage, just a platform
+     * with nothing plugged into it. Counting it as "everything failed" — which is
+     * what `0 >= 0` did — told an agent their search could not be reached and to
+     * try again in a moment, and no amount of trying would ever have produced a
+     * room. They would sooner shift the dates twenty times than guess that the
+     * supplier was never connected.
+     */
+    const unconfigured = totalSources === 0;
+    const completeness: SearchResponse["completeness"] = unconfigured
+      ? "unconfigured"
+      : totalFailed >= totalSources
+        ? "empty"
+        : totalFailed > 0
+          ? "partial"
+          : "complete";
+
+    const response: SearchResponse = {
+      searchToken: `st_${hash01(JSON.stringify(effectiveIntent)).toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`,
+      intent: effectiveIntent,
+      results: pageItems,
+      totalCount: sorted.length,
+      facets,
+      completeness,
+      sourcesUnavailable: totalFailed,
+      completenessMessage: unconfigured
+        ? locale === "ar"
+          ? "لا يوجد مورّد متصل بهذه البيئة، لذلك لا توجد أسعار لعرضها. تواصل مع مشغّل المنصة."
+          : "No supplier is connected to this environment, so there are no rates to show. This is not a problem with your search — contact the platform operator."
+        : totalFailed >= totalSources
+          ? locale === "ar"
+            ? "تعذّر الوصول إلى مصادر الفنادق. بحثك محفوظ ويمكنك إعادة المحاولة."
+            : "We could not reach our hotel sources. Your search is saved — try again in a moment."
+          : totalFailed > 0
+            ? /*
+               * A finished search, short one source.
+               *
+               * This used to read "some options are still loading… more may
+               * appear", which was a promise nothing in the system was going to
+               * keep: the sources had all returned and nothing further was on its
+               * way. On a page that also had nothing on it, an agent was told to
+               * wait for options that were never coming and then, underneath, to
+               * try different dates. Both were wrong, and the second one had them
+               * re-running a search that could not have worked.
+               */
+              sorted.length === 0
+              ? locale === "ar"
+                ? "بحثك وصلنا، لكن أحد مصادر التوريد لم يستجب، فلا توجد أسعار لعرضها. تغيير التواريخ لن يفيد — أعد المحاولة بعد قليل."
+                : "Your search reached us, but one of our supply sources did not answer, so there is nothing to price. Changing the dates will not help — try again shortly."
+              : locale === "ar"
+                ? "أحد مصادر التوريد لم يستجب، لذلك هذه الصفحة لا تعرض كل الخيارات المتاحة. الأسعار المعروضة حية."
+                : "One of our supply sources did not answer, so this page is missing some of what is available. The prices shown are live."
+            : undefined,
+      page,
+      pageSize,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    if (!sorted.length) {
+      response.recovery = buildRecovery(effectiveIntent, options.filters ?? {}, locale);
+    }
+
+    return response;
+  }
+
   let normalized: NormalizedHotel[];
   let liveStatuses: LiveStatus[];
 
@@ -452,6 +638,69 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
       hotels: [],
     });
 
+    /*
+     * What has landed, as it lands.
+     *
+     * `Promise.all` gives back both outcomes at once and there is nowhere in
+     * that shape to notice the first one. These two arrays are written by
+     * whichever supplier finishes first, so the page can be composed from a
+     * half-answer while the other half is still outstanding.
+     */
+    const liveHotels: NormalizedHotel[][] = [[], []];
+    const liveOutcomes: (LiveStatus | "pending")[] = ["pending", "pending"];
+
+    /**
+     * Hand the caller a page built from everything in hand so far.
+     *
+     * A source still in flight is reported as `skipped` rather than
+     * `unavailable`: it has not failed, it has not been given up on, and
+     * telling an agent mid-search that a supplier did not answer — when it is
+     * about to — would be a lie the page then has to retract.
+     */
+    async function emitPartial(): Promise<void> {
+      if (!options.onPartial) return;
+      const soFar = [...gathered, ...liveHotels.flat()];
+      // Nothing yet is not a page; it is the wait the agent is already in.
+      if (!soFar.length) return;
+      scoreSupply(soFar, effectiveIntent);
+      const asKnown = liveOutcomes.map((s) => (s === "pending" ? "skipped" : s)) as LiveStatus[];
+      const answered = liveOutcomes.filter((s) => s !== "pending").length;
+      await options.onPartial(await compose(soFar, asKnown), {
+        answered,
+        pending: liveOutcomes.length - answered,
+        asked: liveOutcomes.length,
+      });
+    }
+
+    /** Record an arrival, and show it if anyone is still outstanding. */
+    async function arrived(
+      index: number,
+      outcome: { status: LiveStatus; hotels: NormalizedHotel[] },
+    ): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> {
+      liveHotels[index] = outcome.hotels;
+      liveOutcomes[index] = outcome.status;
+      /*
+       * Two cases where a partial is not worth the frame. A source that was
+       * never asked adds nothing to show, and the last one to arrive is
+       * immediately followed by the final response — sending both would make
+       * the page render twice for no new information.
+       */
+      const stillOut = liveOutcomes.some((s) => s === "pending");
+      /*
+       * A partial is an optimisation, so it may fail like one. If composing or
+       * publishing an early page goes wrong, the search carries on to its real
+       * answer rather than failing over a frame nobody was promised.
+       */
+      if (stillOut && outcome.status !== "skipped") {
+        try {
+          await emitPartial();
+        } catch {
+          /* the final response still comes */
+        }
+      }
+      return outcome;
+    }
+
     const [tourmindOutcome, hotelbedsOutcome] = await Promise.all([
       bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
         if (!isTourmindEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
@@ -467,52 +716,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
               return adapted;
             })
             .map((adapted) => {
-              /*
-               * Remember every rate, exactly as the Hotelbeds path does.
-               *
-               * Without this a TourMind room could be searched, ranked and shown
-               * with a price, and then refused at checkout: the offer id on the
-               * card resolved to nothing in the store, so the session endpoint
-               * answered "this option changed or sold out" every single time. The
-               * supplier was fine and the search was fine — the rate was simply
-               * never written down, so nothing could be bought from one of the
-               * two suppliers we sell.
-               */
-              for (const offer of adapted.offers) {
-                const binding = adapted.contexts.get(offer.offerId);
-                if (!binding) continue;
-                const room = adapted.rooms.find((r) => r.canonicalRoomId === offer.canonicalRoomId);
-                rememberOffer(offer.offerId, {
-                  offerId: offer.offerId,
-                  hotelSlug: adapted.hotel.slug,
-                  roomKey: room?.canonicalRoomId ?? offer.canonicalRoomId,
-                  canonicalRoomKey: offer.canonicalRoomId,
-                  board: offer.board.code as never,
-                  rateClass: offer.cancellation.refundable ? "flex" : "nrf",
-                  sourceCode: "TM",
-                  // Their CheckRoomRate is mandatory before an order, so every
-                  // rate here has to be re-priced before it can be committed.
-                  rateTypeInternal: "RECHECK",
-                  conditionCodes: [],
-                  memberRate: false,
-                  guaranteeEligible: offer.capabilities.guaranteeEligible,
-                  modifiable: offer.capabilities.modifyAllowed,
-                  // What the supplier said it still holds. Hard-coding zero here made the
-                  // checkout's overbooking guard inert: it reads zero as "the source did not
-                  // say" and waves the basket through.
-                  allotment: offer.allotment,
-                  intent: effectiveIntent,
-                  price: offer.price,
-                  cancellation: offer.cancellation,
-                  expiresAt: offer.expiresAt,
-                  supplierRoomLabel: room?.name ?? offer.canonicalRoomId,
-                  hotelName: adapted.hotel.name,
-                  roomLabel: room?.name ?? offer.canonicalRoomId,
-                  boardLabel: offer.board.label,
-                  comments: offer.comments,
-                  tourmind: binding,
-                });
-              }
+              rememberTourmindOffers(adapted, effectiveIntent);
               return { ...adapted, sourceCount: 1 };
             });
           return { status: "ok", hotels };
@@ -521,7 +725,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
           // simulated and other live results still stand.
           return { status: "unavailable", hotels: [] };
         }
-      })(), deadlineAt, late),
+      })(), deadlineAt, late).then((outcome) => arrived(0, outcome)),
       bySearchDeadline((async (): Promise<{ status: LiveStatus; hotels: NormalizedHotel[] }> => {
         if (!isHotelbedsEnabled() || supplierOutageForced) return { status: "skipped", hotels: [] };
         // A coordinate for every city, or a supplier destination code on a deep link.
@@ -537,7 +741,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
             sourceCount: 1,
           })),
         };
-      })(), deadlineAt, late),
+      })(), deadlineAt, late).then((outcome) => arrived(1, outcome)),
     ]);
 
     gathered.push(...tourmindOutcome.hotels, ...hotelbedsOutcome.hotels);
@@ -565,136 +769,7 @@ export async function runSearch(intent: SearchIntent, options: SearchOptions): P
       if (answered || normalized.length) writeSupply(cacheKey, { normalized, liveStatuses });
     }
 
-  let cards = normalized.map((n) => buildResultCard(n, effectiveIntent, locale));
-
-  // Multi-room partial availability (E-17): the party cannot be split silently.
-  if (scenario === "multiRoomPartial" && effectiveIntent.rooms.length > 1) {
-    cards = cards.filter((_, i) => i % 3 !== 0);
-  }
-
-  const dest = getDestination(resolved.destinationId);
-  const centre = dest?.coordinates ?? cards[0]?.coordinates ?? { lat: 0, lng: 0 };
-  const withDistance = cards.map((c) => ({ card: c, distance: distanceKm(centre, c.coordinates) }));
-
-  /*
-   * The searched city, for tidying zone names.
-   *
-   * Not `card.locality`: the live suppliers fill that with the zone string
-   * itself, so "DEIRA - DUBAI" was being compared against "DEIRA - DUBAI" and
-   * nothing ever matched.
-   */
-  const cityName = dest ? localized(dest.name, locale) : resolved.destinationId;
-  const anchors = anchorsFor(resolved.destinationId, locale);
-  const facets = buildFacets(cards, locale, normalized, cityName, anchors.map(({ id, label, type }) => ({ id, label, type })));
-  const filtered = applyFilters(
-    withDistance,
-    options.filters ?? {},
-    normalized,
-    cityName,
-    anchorPoint(resolved.destinationId, options.filters?.distanceFrom, locale),
-  );
-  const sorted = applySort(filtered, options.sort ?? "recommended");
-
-  /*
-   * Paging here is cumulative, and deliberately so.
-   *
-   * The results screen appends — "load more" adds twelve rows below the ones
-   * already read — so page three means everything up to the end of page three,
-   * not rows twenty-five to thirty-six. Returning a window instead would make
-   * the caller stitch pages together and re-stitch them whenever a filter
-   * changed, and a stitch that drops a row is a room the agent never sees.
-   *
-   * What it does need is a ceiling. Both numbers come from the request body,
-   * and `slice(0, page * pageSize)` with either of them unbounded is a way to
-   * ask one request for every row of a large city.
-   */
-  const pageSize = Math.min(Math.max(Math.floor(options.pageSize ?? 12), 1), 48);
-  const page = Math.min(Math.max(Math.floor(options.page ?? 1), 1), 40);
-  const pageItems = sorted.slice(0, page * pageSize).map((x) => x.card);
-
-  /*
-   * The offers this response hands out, put somewhere the next request can
-   * find them — which may well be a different instance. Only the lead offer
-   * per card: that is the id on the page, the id the quote endpoint prices and
-   * the id checkout is given. Everything deeper is reached through the
-   * property's own availability call, which publishes its own.
-   */
-  await publishOffers(pageItems.map((card) => card.offerSummary.offerId));
-
-  // Every live supplier that was asked counts as a source, and each one that
-  // could not answer counts as a failure — otherwise a page missing a
-  // supplier's entire inventory describes itself as complete.
-  const liveAsked = liveStatuses.filter((status) => status !== "skipped").length;
-  const liveFailedCount = liveStatuses.filter((status) => status === "unavailable").length;
-  const totalSources = responses.length + liveAsked;
-  const totalFailed = failedCount + liveFailedCount;
-
-  /*
-   * Nobody was asked, so nobody failed.
-   *
-   * This is what a live-only search looks like in an environment with no
-   * supplier credentials: not a bad search and not an outage, just a platform
-   * with nothing plugged into it. Counting it as "everything failed" — which is
-   * what `0 >= 0` did — told an agent their search could not be reached and to
-   * try again in a moment, and no amount of trying would ever have produced a
-   * room. They would sooner shift the dates twenty times than guess that the
-   * supplier was never connected.
-   */
-  const unconfigured = totalSources === 0;
-  const completeness: SearchResponse["completeness"] = unconfigured
-    ? "unconfigured"
-    : totalFailed >= totalSources
-      ? "empty"
-      : totalFailed > 0
-        ? "partial"
-        : "complete";
-
-  const response: SearchResponse = {
-    searchToken: `st_${hash01(JSON.stringify(effectiveIntent)).toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`,
-    intent: effectiveIntent,
-    results: pageItems,
-    totalCount: sorted.length,
-    facets,
-    completeness,
-    sourcesUnavailable: totalFailed,
-    completenessMessage: unconfigured
-      ? locale === "ar"
-        ? "لا يوجد مورّد متصل بهذه البيئة، لذلك لا توجد أسعار لعرضها. تواصل مع مشغّل المنصة."
-        : "No supplier is connected to this environment, so there are no rates to show. This is not a problem with your search — contact the platform operator."
-      : totalFailed >= totalSources
-        ? locale === "ar"
-          ? "تعذّر الوصول إلى مصادر الفنادق. بحثك محفوظ ويمكنك إعادة المحاولة."
-          : "We could not reach our hotel sources. Your search is saved — try again in a moment."
-        : totalFailed > 0
-          ? /*
-             * A finished search, short one source.
-             *
-             * This used to read "some options are still loading… more may
-             * appear", which was a promise nothing in the system was going to
-             * keep: the sources had all returned and nothing further was on its
-             * way. On a page that also had nothing on it, an agent was told to
-             * wait for options that were never coming and then, underneath, to
-             * try different dates. Both were wrong, and the second one had them
-             * re-running a search that could not have worked.
-             */
-            sorted.length === 0
-            ? locale === "ar"
-              ? "بحثك وصلنا، لكن أحد مصادر التوريد لم يستجب، فلا توجد أسعار لعرضها. تغيير التواريخ لن يفيد — أعد المحاولة بعد قليل."
-              : "Your search reached us, but one of our supply sources did not answer, so there is nothing to price. Changing the dates will not help — try again shortly."
-            : locale === "ar"
-              ? "أحد مصادر التوريد لم يستجب، لذلك هذه الصفحة لا تعرض كل الخيارات المتاحة. الأسعار المعروضة حية."
-              : "One of our supply sources did not answer, so this page is missing some of what is available. The prices shown are live."
-          : undefined,
-    page,
-    pageSize,
-    fetchedAt: new Date().toISOString(),
-  };
-
-  if (!sorted.length) {
-    response.recovery = buildRecovery(effectiveIntent, options.filters ?? {}, locale);
-  }
-
-  return response;
+  return compose(normalized, liveStatuses);
 }
 
 /**
@@ -1103,6 +1178,63 @@ function buildRecovery(intent: SearchIntent, filters: SearchFilters, locale: Loc
 
 /* --------------------------------------------------- single hotel view */
 
+/**
+ * Write down every TourMind rate, so something can be bought from it later.
+ *
+ * The offer id on a card is a receipt: the quote endpoint prices from it, the
+ * cart holds it, and checkout commits it. If the rate behind it was never
+ * stored, all three answer "this option changed or sold out" for a rate that is
+ * perfectly available — the supplier was fine, the search was fine, the rate
+ * was simply never written down.
+ *
+ * This lived inline in `runSearch` and was missing from
+ * `runHotelAvailability`, which published ids for rates it had not remembered.
+ * The visible result was that the trade rate sheet on every TourMind property
+ * showed no cost and no margin at all — and, worse, quietly fell back to the
+ * public price in the slot where the agency's selling price goes. One
+ * function, called from both, is the only version of this that stays true.
+ */
+function rememberTourmindOffers(
+  adapted: ReturnType<typeof normalizeTourmind>,
+  intent: SearchIntent,
+): void {
+  for (const offer of adapted.offers) {
+    const binding = adapted.contexts.get(offer.offerId);
+    if (!binding) continue;
+    const room = adapted.rooms.find((r) => r.canonicalRoomId === offer.canonicalRoomId);
+    rememberOffer(offer.offerId, {
+      offerId: offer.offerId,
+      hotelSlug: adapted.hotel.slug,
+      roomKey: room?.canonicalRoomId ?? offer.canonicalRoomId,
+      canonicalRoomKey: offer.canonicalRoomId,
+      board: offer.board.code as never,
+      rateClass: offer.cancellation.refundable ? "flex" : "nrf",
+      sourceCode: "TM",
+      // Their CheckRoomRate is mandatory before an order, so every rate here
+      // has to be re-priced before it can be committed.
+      rateTypeInternal: "RECHECK",
+      conditionCodes: [],
+      memberRate: false,
+      guaranteeEligible: offer.capabilities.guaranteeEligible,
+      modifiable: offer.capabilities.modifyAllowed,
+      // What the supplier said it still holds. Hard-coding zero here made the
+      // checkout's overbooking guard inert: it reads zero as "the source did
+      // not say" and waves the basket through.
+      allotment: offer.allotment,
+      intent,
+      price: offer.price,
+      cancellation: offer.cancellation,
+      expiresAt: offer.expiresAt,
+      supplierRoomLabel: room?.name ?? offer.canonicalRoomId,
+      hotelName: adapted.hotel.name,
+      roomLabel: room?.name ?? offer.canonicalRoomId,
+      boardLabel: offer.board.label,
+      comments: offer.comments,
+      tourmind: binding,
+    });
+  }
+}
+
 export async function runHotelAvailability(
   slug: string,
   intent: SearchIntent,
@@ -1126,6 +1258,15 @@ export async function runHotelAvailability(
     if (!result) return null;
     const adapted = normalizeTourmind(result, intent, locale);
     rebatchOffers(batch, adapted);
+    /*
+     * Before publishing, not after and not never.
+     *
+     * `publishOffers` writes down the ids of rates the store already holds, so
+     * publishing ids nobody remembered writes nothing at all. That is what this
+     * branch did, and it is why the trade rate sheet on a TourMind property had
+     * no cost and no margin on any line.
+     */
+    rememberTourmindOffers(adapted, intent);
     await publishOffers(adapted.offers.map((offer) => offer.offerId));
     return { hotel: adapted.hotel, rooms: adapted.rooms, offers: adapted.offers, sourceCount: 1 };
   }
