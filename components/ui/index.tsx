@@ -602,6 +602,7 @@ export function Drawer({
   children,
   footer,
   side = "end",
+  width = "standard",
   className,
 }: {
   open: boolean;
@@ -610,6 +611,15 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   side?: "start" | "end";
+  /**
+   * How much room the panel needs.
+   *
+   * 420px is right for a cart or a filter list, where everything is one column
+   * of rows. It is wrong for anything read *across*: the trade comparison put
+   * three properties side by side and only one of them fit, which turns a
+   * comparison back into the scrolling it was built to replace.
+   */
+  width?: "standard" | "wide";
   /**
    * Applied to the scrim, so a caller can retire the whole overlay at a
    * breakpoint. The cart uses it to be a sheet on a phone and a docked panel
@@ -638,7 +648,8 @@ export function Drawer({
         aria-label={title}
         className={cx(
           "surface rise flex max-h-[88vh] w-full flex-col rounded-t-[var(--radius-sheet)]",
-          "shadow-[var(--shadow-float)] sm:max-h-none sm:w-[420px] sm:rounded-none",
+          "shadow-[var(--shadow-float)] sm:max-h-none sm:rounded-none",
+          width === "wide" ? "sm:w-[min(92vw,880px)]" : "sm:w-[420px]",
           side === "start" && "sm:me-auto",
         )}
       >

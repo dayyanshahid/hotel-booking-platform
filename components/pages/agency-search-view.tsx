@@ -36,7 +36,10 @@ import { href, intentFromSearchParams, searchParamsFromIntent } from "@/lib/nav"
 import { appendResults } from "@/lib/search-append";
 import { isFrameStream, readFrames, type StreamProgress } from "@/lib/search-stream";
 import { forgetWarmedShelves, prefetchShelf } from "@/lib/agency/shelf-prefetch";
+import { CompareBar, TradeCompare } from "@/components/agency/trade-compare";
+import { ShortcutsCard, useShortcuts, type Shortcut } from "@/components/agency/shortcuts";
 import { rememberSearch } from "@/lib/agency/recent-searches";
+import { readSortPreference, rememberSortPreference } from "@/lib/agency/sort-preference";
 import type { AgencyOfferView } from "@/lib/agency/types";
 import { QUOTE_BATCH } from "@/lib/agency/rates";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -80,6 +83,23 @@ function propertyQuery(intent: SearchIntent): string {
 
 /** Server sorts, plus the one only a trade screen can offer. */
 type TradeSort = SortKey | "marginDesc";
+
+/**
+ * Every ordering this screen offers, for checking a remembered one against.
+ *
+ * `rating` and `bestValue` are absent on purpose and are omitted from the
+ * control for the same reason: neither supplier publishes a review or quality
+ * score, so both would sort the page by zero and look as though they had
+ * worked.
+ */
+const TRADE_SORTS: TradeSort[] = [
+  "recommended",
+  "priceAsc",
+  "priceDesc",
+  "distance",
+  "flexible",
+  "marginDesc",
+];
 
 /**
  * What the wait is doing, while it does it.
@@ -174,7 +194,7 @@ function FilterRailSkeleton() {
 }
 
 function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
-  const { t, announce } = useApp();
+  const { t, announce, compare, toggleCompare, clearCompare, toast } = useApp();
   const router = useRouter();
 
   /**
@@ -258,7 +278,19 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * beside a filter is the number the filter will actually give.
    */
   const [filters, setFilters] = useState<SearchFilters>({});
-  const [sort, setSort] = useState<TradeSort>("recommended");
+  /**
+   * How this agent last asked for their results to be ordered.
+   *
+   * Not a changed default — whether a trade screen should open on best margin
+   * is the client's decision — but a decision this agent has already made
+   * being kept rather than thrown away on every search. An unknown or retired
+   * value falls back to the product's own ranking rather than putting the page
+   * into a state the sort control cannot show.
+   */
+  const [sort, setSort] = useState<TradeSort>(() => {
+    const held = readSortPreference(context.session.agentId);
+    return held && TRADE_SORTS.includes(held as TradeSort) ? (held as TradeSort) : "recommended";
+  });
   const [page, setPage] = useState(1);
   /*
    * Which search this screen is waiting for. Live supply takes seconds, and
@@ -304,6 +336,11 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
    * page could not do.
    */
   const [openShelf, setOpenShelf] = useState<string | null>(null);
+
+  /** Whether the side-by-side comparison is on screen. */
+  const [compareOpen, setCompareOpen] = useState(false);
+  /** Whether the list of keyboard shortcuts is on screen. */
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   /**
    * The map shows the whole result set, not the page the list happens to be on.
@@ -387,6 +424,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     setFilters(nextFilters);
     setSort(nextSort);
     setPage(nextPage);
+    rememberSortPreference(context.session.agentId, nextSort);
 
     /**
      * Put a page on screen, from a frame or from a whole response.
@@ -604,6 +642,84 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
 
   const nights = nightsBetween(seed.checkIn, seed.checkOut);
   const cards = data?.results ?? [];
+
+  /**
+   * What is actually comparable right now.
+   *
+   * The selection is shared with the public site and outlives a search, which
+   * is right there and wrong here: a property ticked during yesterday's Dubai
+   * enquiry is not a column in today's Lisbon comparison, and showing it with
+   * no price would be worse than not showing it. Intersected with the visible
+   * result set, in the order they appear on the page rather than the order
+   * they were ticked — the agent is reading down the list and the columns
+   * should match it.
+   */
+  const comparing = useMemo(
+    () => cards.filter((card) => compare.includes(card.slug)),
+    [cards, compare],
+  );
+
+  /**
+   * Four keys, and a fifth that says what the four are.
+   *
+   * Every one of them replaces a hunt across a dense screen. `/` is the
+   * convention for a search field and it is the field this whole page hangs
+   * off; `f` reaches the filters, which on a laptop are a rail an agent has to
+   * aim at and on anything narrower are behind a button; `c` opens the
+   * comparison they have just been ticking, which otherwise means finding a
+   * bar at the bottom of the viewport.
+   *
+   * Escape clears the comparison rather than closing something, because the
+   * drawers already close themselves on Escape and a selection with nothing
+   * open is the state that has no other way out.
+   */
+  const shortcuts: Shortcut[] = useMemo(
+    () => [
+      {
+        key: "/",
+        labelKey: "agency.shortcutSearch",
+        run: () =>
+          document.querySelector<HTMLInputElement>('input[role="combobox"]')?.focus(),
+      },
+      {
+        key: "f",
+        labelKey: "agency.shortcutFilters",
+        run: () => {
+          /*
+           * The rail on a wide screen, the drawer on a narrow one — the same
+           * key for the same intention. `matchMedia` rather than a breakpoint
+           * guess, because the rail is hidden by a container query and the
+           * only honest question is whether it is on screen.
+           */
+          const railField = document.querySelector<HTMLInputElement>(
+            'aside input[type="search"], aside input[type="text"]',
+          );
+          if (railField?.getClientRects().length) railField.focus();
+          else setFiltersOpen(true);
+        },
+      },
+      { key: "c", labelKey: "agency.shortcutCompare", run: () => setCompareOpen(true) },
+      { key: "?", labelKey: "agency.shortcutHelp", run: () => setShortcutsOpen(true) },
+      {
+        key: "Escape",
+        labelKey: "agency.shortcutClose",
+        run: () => {
+          /*
+           * Only when nothing is open.
+           *
+           * Every drawer closes itself on Escape, and without this guard the
+           * same keystroke would close the comparison and empty it on the way
+           * out — the agent presses Escape to put the panel away and loses the
+           * shortlist they spent the last minute building.
+           */
+          if (compareOpen || shortcutsOpen || filtersOpen) return;
+          clearCompare();
+        },
+      },
+    ],
+    [clearCompare, compareOpen, shortcutsOpen, filtersOpen],
+  );
+  useShortcuts(shortcuts);
 
   const ordered =
     sort === "marginDesc"
@@ -928,6 +1044,31 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                           reads as one.
                         */
                         <div className="mt-1.5 flex items-center justify-end gap-3">
+                          {/*
+                            Ticking, not a button.
+
+                            Shortlisting two or three for a caller is the most
+                            common thing an agent does on this screen, and the
+                            portal had no way to do it — the shared card offers
+                            one, but the trade actions replace the whole block
+                            it lives in, so it had been quietly dropped. A
+                            checkbox rather than a toggle button because
+                            selecting several down a list is what checkboxes
+                            are, and because the state has to be readable at a
+                            glance from eleven rows away.
+                          */}
+                          <label className="text-muted hover:text-ink-900 inline-flex cursor-pointer items-center gap-1.5 text-xs transition-colors">
+                            <input
+                              type="checkbox"
+                              className="accent-[var(--brand-600)]"
+                              checked={compare.includes(card.slug)}
+                              onChange={() => {
+                                const room = toggleCompare(card.slug);
+                                if (!room) toast(t("results.compareFull"), "critical");
+                              }}
+                            />
+                            {t("agency.compareAdd")}
+                          </label>
                           <Link
                             href={property}
                             className="text-muted hover:text-ink-900 text-xs underline underline-offset-2 transition-colors"
@@ -992,6 +1133,22 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                   </Button>
                 </div>
               )}
+
+              {/*
+                A shortcut nobody knows about is dead weight, and a permanent
+                legend is clutter on a screen this dense. Said once, quietly,
+                at the foot of the results — where an agent who has read the
+                whole page is the one most likely to want a faster way round it.
+              */}
+              <p className="text-muted mt-6 text-center text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShortcutsOpen(true)}
+                  className="hover:text-[var(--text)] underline underline-offset-2"
+                >
+                  {t("agency.shortcutsHint")}
+                </button>
+              </p>
             </>
           )}
 
@@ -1048,6 +1205,53 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           </Button>
         </div>
       </Drawer>
+
+      <ShortcutsCard
+        open={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        shortcuts={shortcuts}
+      />
+      <CompareBar
+        count={comparing.length}
+        onOpen={() => setCompareOpen(true)}
+        onClear={clearCompare}
+      />
+      <TradeCompare
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        cards={comparing}
+        quotes={quotes}
+        intent={applied ?? seed}
+        locale={locale}
+        currency={(applied?.currency ?? seed.currency) as CurrencyCode}
+        onRemove={(slug) => toggleCompare(slug)}
+        onClear={() => {
+          clearCompare();
+          setCompareOpen(false);
+        }}
+        /*
+          Straight from a column to that property's rates, in the list behind.
+          The comparison narrows the choice; the rate sheet is where the choice
+          gets made, and making the agent close this and find the row again
+          would undo the point of comparing in place.
+        */
+        onViewRooms={(slug) => {
+          setCompareOpen(false);
+          setOpenShelf(slug);
+          /*
+           * Found by its own property link rather than by an id.
+           *
+           * The card is a shared component and does not take one, and widening
+           * its API so this view can scroll to a row is the wrong direction —
+           * the link is already there, already unique to the slug, and already
+           * inside the row we want.
+           */
+          document
+            .querySelector(`a[href*="/agency/hotel/${CSS.escape(slug)}?"]`)
+            ?.closest("li")
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+      />
     </div>
   );
 }
