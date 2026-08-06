@@ -21,6 +21,7 @@ import {
 import { PageHeader, TradePrices } from "@/components/agency/ui";
 import { DeskPrelude } from "@/components/pages/agency-dashboard-view";
 import { RateShelf } from "@/components/agency/rate-shelf";
+import { useCart } from "@/components/agency/cart";
 import Link from "next/link";
 import {
   addDays,
@@ -195,6 +196,9 @@ function FilterRailSkeleton() {
 
 function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t, announce, compare, toggleCompare, clearCompare, toast } = useApp();
+  // The comparison can put a rate straight into the selection, so this screen
+  // needs the basket the rate sheet already had.
+  const cart = useCart();
   const router = useRouter();
 
   /**
@@ -420,6 +424,27 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       // looking at any more.
       forgetWarmedShelves();
     }
+
+    /*
+     * A new stay starts a new shortlist.
+     *
+     * The comparison is held in the browser and outlives a search, and the cap
+     * is four. Search Lisbon, tick four, search Cairo: the four Lisbon slugs
+     * are still selected, none of them is in the new result set so nothing
+     * appears selected on screen — and every tick is refused with "you can
+     * compare up to four" against a comparison the agent can see is empty.
+     *
+     * Only when the stay itself changes. A filter or a sort narrows the same
+     * enquiry, and dropping a property the agent deliberately shortlisted
+     * because they then filtered by board would be worse than the bug.
+     */
+    const stayChanged =
+      next.intent !== undefined &&
+      (applied === null ||
+        next.intent.destinationId !== applied.destinationId ||
+        next.intent.checkIn !== applied.checkIn ||
+        next.intent.checkOut !== applied.checkOut);
+    if (stayChanged) clearCompare();
     if (next.intent) setSeed(next.intent);
     setFilters(nextFilters);
     setSort(nextSort);
@@ -1235,6 +1260,35 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           gets made, and making the agent close this and find the row again
           would undo the point of comparing in place.
         */
+        canIssue={canIssue}
+        /*
+          The lead rate, from the comparison, into the selection.
+
+          The same line the rate sheet builds — one property, one rate, the
+          agency's own price on it. Anything beyond the lead rate is a choice
+          between rates rather than between properties, and that is what the
+          sheet is for.
+        */
+        onAdd={(card) => {
+          const quote = quotes[card.offerSummary.offerId];
+          if (!quote) return;
+          cart.add({
+            offerId: card.offerSummary.offerId,
+            hotelSlug: card.slug,
+            hotelName: card.name,
+            roomName: card.offerSummary.roomSummary,
+            boardLabel: card.offerSummary.boardSummary,
+            refundable: card.offerSummary.refundable,
+            sell: quote.sell,
+            cost: quote.cost,
+            margin: quote.margin,
+            currency: quote.currency as CurrencyCode,
+            nights,
+            roomsCovered: isPerRoomTotal(card.price) ? card.price.roomsRequested : 1,
+            allotment: 0,
+            expiresAt: undefined,
+          });
+        }}
         onViewRooms={(slug) => {
           setCompareOpen(false);
           setOpenShelf(slug);

@@ -1060,6 +1060,15 @@ const en: Dict = {
   "agency.compareDistance": "Distance",
   "agency.compareAmenities": "Facilities",
   "agency.compareFreeUntil": "Free until {date}",
+  /*
+   * The three distinctions worth marking. Distance and rooms-left are
+   * deliberately unmarked — see lib/agency/compare-verdict for why.
+   */
+  "agency.compareBest.cheapest": "Cheapest",
+  "agency.compareBest.margin": "Best margin",
+  "agency.compareBest.flexible": "Most flexible",
+  "agency.compareQuoteAll": "Quote all {count}",
+  "agency.comparePrintTitle": "Options for your stay",
   /* The keyboard, and the card that says what it does. */
   "agency.shortcuts": "Keyboard shortcuts",
   "agency.shortcutsHint": "Press ? for keyboard shortcuts",
@@ -2433,6 +2442,11 @@ const ar: Dict = {
   "agency.compareDistance": "المسافة",
   "agency.compareAmenities": "المرافق",
   "agency.compareFreeUntil": "مجاني حتى {date}",
+  "agency.compareBest.cheapest": "الأرخص",
+  "agency.compareBest.margin": "أفضل هامش",
+  "agency.compareBest.flexible": "الأكثر مرونة",
+  "agency.compareQuoteAll": "عرض سعر للكل ({count})",
+  "agency.comparePrintTitle": "خيارات إقامتك",
   "agency.shortcuts": "اختصارات لوحة المفاتيح",
   "agency.shortcutsHint": "اضغط ؟ لعرض اختصارات لوحة المفاتيح",
   "agency.shortcutSearch": "الانتقال إلى حقل الوجهة",

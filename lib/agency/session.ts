@@ -1,5 +1,5 @@
 import "server-only";
-import { crossSiteSessions } from "@/lib/server/cors";
+import { sessionCookiePolicy } from "@/lib/server/cookie-policy";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { canAtLeast, permissionOf, type AgencySession, type AgentPermission } from "./types";
@@ -156,11 +156,11 @@ export async function startSession(session: AgencySession): Promise<void> {
    * stays `lax`, which is the safer default and the one that needs no TLS in
    * local development.
    */
-  const crossSite = crossSiteSessions();
+  const { sameSite, secure } = sessionCookiePolicy();
   jar.set(COOKIE, encodeSession(session), {
     httpOnly: true,
-    sameSite: crossSite ? "none" : "lax",
-    secure: crossSite || process.env.NODE_ENV === "production",
+    sameSite,
+    secure,
     path: "/",
     maxAge: MAX_AGE,
   });

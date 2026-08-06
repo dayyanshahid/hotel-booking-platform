@@ -402,6 +402,42 @@ html[data-theme="dark"] .text-critical-700:not([class*="bg-"]) {
   body {
     background: #fff;
   }
+
+  /*
+   * A panel that prints as the whole page.
+   *
+   * The comparison is the one thing on this site an agent hands to a customer
+   * without turning it into something else first — three properties, side by
+   * side, on a sheet of paper or a PDF attached to an email. It lives in a
+   * drawer, which is fixed, scrimmed, portalled to the end of `body` and
+   * scrolled inside itself: print it as it stands and you get the page
+   * underneath with a clipped panel over one corner of it.
+   *
+   * Marking the scrim `print-sheet` says "when this is on screen, it *is* the
+   * printed page". Everything else in `body` goes, the overlay stops being an
+   * overlay, and the panel flows so it can paginate.
+   */
+  body:has(.print-sheet) > *:not(.print-sheet) {
+    display: none !important;
+  }
+  .print-sheet {
+    position: static !important;
+    display: block !important;
+    background: none !important;
+    backdrop-filter: none !important;
+  }
+  .print-sheet [role="dialog"] {
+    position: static !important;
+    width: 100% !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  /* The panel scrolls on screen; on paper it has as many pages as it needs. */
+  .print-sheet [role="dialog"] > * {
+    overflow: visible !important;
+    max-height: none !important;
+  }
 }
 
 /* ---------------------------------------------------------------- surfaces */
