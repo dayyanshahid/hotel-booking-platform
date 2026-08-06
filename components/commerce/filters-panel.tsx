@@ -213,12 +213,23 @@ export function FiltersPanel({
   onChange,
   currency,
   supported = ALL_FILTERS,
+  fullHeight = false,
 }: {
   facets: SearchFacets;
   filters: SearchFilters;
   onChange: (next: SearchFilters) => void;
   currency: CurrencyCode;
   supported?: FilterKey[];
+  /**
+   * Fill the column and scroll inside, with the header staying put.
+   *
+   * A rail capped part-way down the screen stops in the middle of whatever
+   * section happens to be there — a heading sliced in half, and a scrollbar
+   * that reads as the card being broken rather than as more filters below. Given
+   * the whole column it looks like what it is, and the count and Clear stay in
+   * view while the sections move under them.
+   */
+  fullHeight?: boolean;
 }) {
   const { t, locale } = useApp();
   const shows = (key: FilterKey) => supported.includes(key);
@@ -254,8 +265,8 @@ export function FiltersPanel({
     (filters.amenities?.length ?? 0);
 
   return (
-    <div className="space-y-2">
-      <div className="hairline flex items-center justify-between gap-2 border-b pb-2">
+    <div className={cx(fullHeight ? "flex h-full min-h-0 flex-col gap-2" : "space-y-2")}>
+      <div className="hairline flex shrink-0 items-center justify-between gap-2 border-b pb-2">
         <p className="flex items-center gap-2 text-sm font-bold">
           {t("common.filters")}
           {activeCount > 0 && (
@@ -275,6 +286,8 @@ export function FiltersPanel({
         )}
       </div>
 
+      {/* `min-h-0` or a flex child refuses to shrink and the scroll never engages. */}
+      <div className={cx(fullHeight ? "min-h-0 flex-1 overflow-y-auto pe-1" : "space-y-2")}>
       {/*
         Find one property among a hundred.
         An agent who has been asked for the Hilton does not want to narrow by
@@ -619,6 +632,7 @@ export function FiltersPanel({
           of the same control that shipped with the panel. */}
 
       {/* Clearing lives in the header now, where the count that justifies it is. */}
+      </div>
     </div>
   );
 }

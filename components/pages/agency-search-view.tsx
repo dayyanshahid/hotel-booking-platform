@@ -588,7 +588,14 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
       >
         <aside className="hidden @min-[900px]:block">
           {data && (
-            <Card className="sticky top-4 max-h-[calc(100vh-8rem)] overflow-y-auto p-4">
+            /*
+              The rail fills the screen rather than stopping part-way down it.
+              Capped at `100vh-8rem` it ended mid-section — a heading sliced in
+              half above a scrollbar, which reads as a broken card rather than
+              as more filters below. The panel scrolls inside itself now, with
+              the count and Clear pinned at the top.
+            */
+            <Card className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col overflow-hidden p-4">
               <FiltersPanel
                 facets={data.facets}
                 filters={filters}
@@ -596,6 +603,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 currency={(applied?.currency ?? seed.currency) as CurrencyCode}
                 // Only what the two suppliers actually publish.
                 supported={supportedFilters}
+                fullHeight
               />
             </Card>
           )}

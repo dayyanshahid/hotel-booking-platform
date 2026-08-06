@@ -283,9 +283,15 @@ export function SearchResultsView({
         )}
       >
         <aside className="hidden @min-[900px]:block">
-          <Card className="sticky top-40 max-h-[calc(100vh-12rem)] overflow-y-auto p-4">
+          <Card className="sticky top-40 flex h-[calc(100vh-11rem)] flex-col overflow-hidden p-4">
             {data && (
-              <FiltersPanel facets={data.facets} filters={filters} onChange={applyFilters} currency={intent.currency} />
+              <FiltersPanel
+                facets={data.facets}
+                filters={filters}
+                onChange={applyFilters}
+                currency={intent.currency}
+                fullHeight
+              />
             )}
           </Card>
         </aside>
