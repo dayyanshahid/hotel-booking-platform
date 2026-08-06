@@ -1047,6 +1047,7 @@ const en: Dict = {
    * say the same thing; these are the ones a trade screen needs and a shopping
    * one does not.
    */
+  "agency.cartMarginUnknown": "One of these rates could not be priced, so the margin on this selection is incomplete.",
   "agency.compareTitle": "Compare these properties",
   "agency.compareEmpty": "Tick two or more properties in your results to compare them here.",
   "agency.compareSelected": "{count} selected to compare",
@@ -2419,6 +2420,7 @@ const ar: Dict = {
   "agency.searchAnswered": "استجاب {answered} من {asked}",
   "agency.searchElapsed": "{seconds} ث",
   "agency.searchPartialAnnounce": "وصلت النتائج الأولى، وما زال المزيد في الطريق.",
+  "agency.cartMarginUnknown": "تعذّر تسعير أحد هذه العروض، لذلك هامش هذه المجموعة غير مكتمل.",
   "agency.compareTitle": "قارن هذه الفنادق",
   "agency.compareEmpty": "حدّد فندقين أو أكثر من النتائج لمقارنتها هنا.",
   "agency.compareSelected": "{count} محدّد للمقارنة",

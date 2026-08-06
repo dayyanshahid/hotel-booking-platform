@@ -93,6 +93,47 @@ function CartBody({ locale, onClose }: { locale: Locale; onClose: () => void }) 
           <span className="text-base font-semibold">{t("agency.cartTotal")}</span>
           <span className="tabular text-xl font-bold">{formatMoney(cart.total, cart.currency, locale)}</span>
         </div>
+
+        {/*
+          What the basket makes, on the screen where credit gets committed.
+
+          Every other trade surface — the results card, the rate sheet, the
+          comparison — puts cost and margin beside the sell, and this one showed
+          the sell alone. It is the last screen before the money moves and the
+          one place the margin was missing, so an agent building a four-room
+          selection could not see what they were making on it until after they
+          had made it.
+        */}
+        {cart.costKnown ? (
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+            <span className="text-muted">
+              {t("agency.cost")}{" "}
+              <span className="tabular text-[var(--text)]">
+                {formatMoney(cart.totalCost, cart.currency, locale)}
+              </span>
+            </span>
+            <span
+              className={cx(
+                "inline-flex items-baseline gap-1 rounded-[var(--radius-pill)] px-2 py-0.5 font-semibold",
+                cart.totalMargin > 0 ? "bg-positive-50 text-positive-700" : "surface-sunken text-muted",
+              )}
+            >
+              <span className="font-medium opacity-80">{t("agency.margin")}</span>
+              <span className="tabular">{formatMoney(cart.totalMargin, cart.currency, locale)}</span>
+            </span>
+          </div>
+        ) : (
+          cart.lines.length > 0 && (
+            /*
+             * Said, rather than shown as a smaller margin. A basket holding one
+             * line we could not price has a real margin we do not know, and a
+             * total that quietly leaves it out reads as better business than the
+             * agency is actually doing.
+             */
+            <p className="text-caution-700 text-xs">{t("agency.cartMarginUnknown")}</p>
+          )
+        )}
+
         <p className="text-muted text-xs">
           {t("agency.cartCovers", {
             rooms: cart.roomsCovered,

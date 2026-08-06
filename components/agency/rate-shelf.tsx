@@ -349,6 +349,11 @@ export function RateShelf({
                       boardLabel: offer.board.label,
                       refundable: offer.cancellation.refundable,
                       sell: quote?.sell ?? offer.price.total,
+                      // Undefined rather than zero when the pricing call failed:
+                      // the room is real and the agent may still want it, but the
+                      // margin on it is genuinely unknown and must not read as none.
+                      cost: quote?.cost,
+                      margin: quote?.margin,
                       currency: (quote?.currency ?? offer.price.currency) as CurrencyCode,
                       nights,
                       roomsCovered: offer.roomsCovered,

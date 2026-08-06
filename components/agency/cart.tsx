@@ -32,8 +32,24 @@ export interface CartLine {
   roomName: string;
   boardLabel: string;
   refundable: boolean;
-  /** What the agency is charged, in the agency's settlement currency. */
+  /**
+   * What the agency charges the customer, in its settlement currency.
+   *
+   * The comment here used to read "what the agency is charged", which is the
+   * cost and not this number — a one-word slip on the field the whole basket
+   * totals, in a file where the two are a few pixels apart on screen.
+   */
   sell: number;
+  /**
+   * What the agency pays, and what is left.
+   *
+   * Optional because a rate can be added when our own pricing call has failed:
+   * the room is real and bookable and the agent may well want it, but the cost
+   * is genuinely unknown. Absent rather than zero — a missing margin shown as
+   * "0" is a claim, and it is the wrong one.
+   */
+  cost?: number;
+  margin?: number;
   currency: CurrencyCode;
   nights: number;
   /** Rooms this one rate covers — suppliers differ, so it is never assumed. */
@@ -72,6 +88,11 @@ interface CartApi {
   onePropertyOnly: boolean;
   roomsCovered: number;
   total: number;
+  /** What the basket costs the agency, over the lines that have a cost. */
+  totalCost: number;
+  totalMargin: number;
+  /** Whether every line in the basket has a cost behind it. */
+  costKnown: boolean;
   currency: CurrencyCode;
   /** The soonest a rate in here goes stale, or null when none says. */
   expiresAt: string | null;
@@ -146,6 +167,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
       onePropertyOnly: hotels.size <= 1,
       roomsCovered: lines.reduce((sum, l) => sum + Math.max(1, l.roomsCovered), 0),
       total: lines.reduce((sum, l) => sum + l.sell, 0),
+      /*
+       * Summed over the lines that have one, and `costKnown` says whether that
+       * was all of them. A total cost quietly missing a line reads as a better
+       * margin than the agency is actually making, on the screen where they
+       * decide to commit credit.
+       */
+      totalCost: lines.reduce((sum, l) => sum + (l.cost ?? 0), 0),
+      totalMargin: lines.reduce((sum, l) => sum + (l.margin ?? 0), 0),
+      costKnown: lines.length > 0 && lines.every((l) => l.cost !== undefined),
       // Every line settles in the agency's own currency, so the first is the
       // currency of all of them.
       currency: lines[0]?.currency ?? "USD",

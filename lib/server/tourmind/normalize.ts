@@ -3,6 +3,7 @@ import { localized, BOARD_CATALOG } from "@/lib/data/catalog";
 import type { TourmindOfferBinding } from "../store";
 import type { TourmindHotelRecord } from "./catalogue";
 import { AMENITY_CATALOG } from "@/lib/data/catalog";
+import { isAmenityNoise } from "../amenity-noise";
 import { sceneUrl } from "@/lib/illustration/scenes";
 import type { TourmindResult } from "./search";
 import type {
@@ -119,34 +120,13 @@ const AMENITY_KEYWORDS: [RegExp, string][] = [
   [/kids|children/i, "kidsClub"],
 ];
 
-/**
- * Entries in their facility list that are not facilities.
- *
- * TourMind sends payment methods, the property type and distance readings down
- * the same array as the swimming pool, and everything unmatched is kept
- * verbatim — which is right for a genuine amenity we do not have a code for and
- * wrong for these. On a results card it showed as "Meeting rooms · Distance
- * from property (ft) - 1640", and in the trade comparison every column's
- * facilities row read "hotel · American Express · MasterCard": three identical
- * rows of nothing, in a panel whose whole purpose is telling three properties
- * apart.
- *
- * Dropped rather than mapped, because there is nothing to map them to. What a
- * property charges on is a commercial detail we settle ourselves, its type is
- * already a field of its own, and a distance with no anchor named is not a
- * fact anybody can use.
- */
-const NOT_AN_AMENITY = [
-  /^(hotel|motel|hostel|apartment|resort|guest ?house|inn|villa|b&b)$/i,
-  /american express|mastercard|visa|diners|union ?pay|jcb|maestro|\bec\b|cash only|credit cards?/i,
-  /^distance from/i,
-];
-
 function amenities(record: TourmindHotelRecord, locale: Locale): Amenity[] {
   const out: Amenity[] = [];
   const seen = new Set<string>();
   for (const name of record.amenities ?? []) {
-    if (NOT_AN_AMENITY.some((pattern) => pattern.test(name.trim()))) continue;
+    // Their list carries the property type, the cards it takes and stray
+    // distance readings alongside the swimming pool. See lib/server/amenity-noise.
+    if (isAmenityNoise(name)) continue;
     const matched = AMENITY_KEYWORDS.find(([pattern]) => pattern.test(name))?.[1];
     const code = matched ?? `tm:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`;
     if (seen.has(code)) continue;

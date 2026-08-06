@@ -1,3 +1,4 @@
+import { isAmenityNoise } from "../amenity-noise";
 import type {
   Amenity,
   CanonicalHotel,
@@ -379,7 +380,13 @@ export function buildCanonicalHotelFromContent(
       included: facility.indFee !== true,
       fee: facility.indFee ? (ar ? "برسوم إضافية" : "Additional charge") : undefined,
     }))
-    .filter((amenity) => amenity.label.length > 0);
+    /*
+     * And the entries that describe the property rather than offer anything.
+     * Their catalogue has a facility labelled simply "hotel", which passed the
+     * group filter, was not informational, and led every Hotelbeds card with
+     * the word "hotel" as its first feature.
+     */
+    .filter((amenity) => !isAmenityNoise(amenity.label));
 
   const imageCategory = (typeCode: string | undefined): HotelImage["category"] => {
     switch (typeCode) {
