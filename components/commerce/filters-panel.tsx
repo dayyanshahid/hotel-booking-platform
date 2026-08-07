@@ -358,6 +358,7 @@ export function FiltersPanel({
   onChange,
   currency,
   supported = ALL_FILTERS,
+  unanswerable = [],
   fullHeight = false,
 }: {
   facets: SearchFacets;
@@ -365,6 +366,15 @@ export function FiltersPanel({
   onChange: (next: SearchFilters) => void;
   currency: CurrencyCode;
   supported?: FilterKey[];
+  /**
+   * Filters to show as present but unusable, with the reason stated.
+   *
+   * Separate from `supported`, which says what this surface offers at all.
+   * This is for the ones asked for by name that the data cannot yet answer:
+   * visible, so nobody thinks they were forgotten, and disabled, so nobody
+   * thinks they work.
+   */
+  unanswerable?: FilterKey[];
   /**
    * Fill the column and scroll inside, with the header staying put.
    *
@@ -563,6 +573,37 @@ export function FiltersPanel({
           <option value="7">7+</option>
         </Select>
       </FilterSection>
+      )}
+
+      {/*
+        Asked for, and honestly unanswerable.
+
+        The rule this panel follows is that a control which silently matches
+        nothing is worse than an absent one: an agent reads the empty result as
+        "no availability". That rule is right, and it left a third state
+        unbuilt — a filter that was specified, is wanted, and has no data
+        behind it. Dropped in silence it reads as a requirement nobody did;
+        shown and working it lies. Shown, disabled, with the reason on it, it
+        does neither — and it turns itself on the day a source starts sending
+        scores, because the caller decides which list this is in.
+      */}
+      {unanswerable.includes("rating") && !shows("rating") && (
+        <FilterSection title={t("filters.rating")} active={0}>
+          <div className="mt-2 space-y-2">
+            <Select
+              className="opacity-60"
+              value=""
+              disabled
+              aria-label={t("filters.rating")}
+              aria-describedby="rating-unavailable"
+            >
+              <option value="">9+ · 8+ · 7+</option>
+            </Select>
+            <p id="rating-unavailable" className="text-muted text-xs">
+              {t("filters.ratingUnavailable")}
+            </p>
+          </div>
+        </FilterSection>
       )}
 
       {shows("neighborhood") && (

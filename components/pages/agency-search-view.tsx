@@ -317,6 +317,20 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     const hasReviews = (data?.results ?? []).some((card) => card.review?.score != null);
     return hasReviews ? [...LIVE_SUPPLY_FILTERS, "rating" as const] : LIVE_SUPPLY_FILTERS;
   }, [data]);
+  /**
+   * Guest rating, shown but not usable, when nothing on the page has a score.
+   *
+   * It used to vanish entirely, which was the right call against the rule that
+   * a control matching nothing is worse than no control — and it read, to
+   * anyone holding the list of filters they asked for, as the one requirement
+   * that had not been done. Measured across Cairo, Dubai and London: 159 live
+   * properties, none of them carrying a guest score. So the honest thing is to
+   * show it, disable it, and say why.
+   */
+  const unanswerableFilters = useMemo(
+    () => (supportedFilters.includes("rating") ? [] : (["rating"] as const).slice()),
+    [supportedFilters],
+  );
   const [view, setView] = useState<"list" | "map">("list");
   const [selected, setSelected] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1000,6 +1014,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                 currency={(applied?.currency ?? seed.currency) as CurrencyCode}
                 // Only what the two suppliers actually publish.
                 supported={supportedFilters}
+                unanswerable={unanswerableFilters}
                 fullHeight
               />
             </Card>
@@ -1267,6 +1282,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
             onChange={(next) => void run({ filters: next })}
             currency={(applied?.currency ?? seed.currency) as CurrencyCode}
             supported={supportedFilters}
+            unanswerable={unanswerableFilters}
           />
         )}
         <div className="mt-4">
