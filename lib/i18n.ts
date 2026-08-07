@@ -328,6 +328,7 @@ const en: Dict = {
   // put a party total outside its own filter's maximum.
   "filters.hotelName": "Hotel name",
   "filters.hotelNamePlaceholder": "Find a property in these results",
+  "filters.hotelNameNone": "No property in these results matches that.",
   "filters.priceMin": "Min",
   "filters.priceMax": "Max",
   "filters.unrated": "Unrated",
@@ -1723,6 +1724,7 @@ const ar: Dict = {
 
   "filters.hotelName": "اسم الفندق",
   "filters.hotelNamePlaceholder": "ابحث عن عقار ضمن هذه النتائج",
+  "filters.hotelNameNone": "لا يوجد فندق في هذه النتائج يطابق ذلك.",
   "filters.priceMin": "الأدنى",
   "filters.priceMax": "الأعلى",
   "filters.unrated": "بلا تصنيف",

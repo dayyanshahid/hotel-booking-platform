@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Checkbox, Input, Select, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { formatMoney } from "@/lib/format";
 import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/types";
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
+import { fold, foldedIncludes } from "@/lib/text";
 
 /** Filter set from §5.4, rendered as a sidebar on desktop and a sheet on mobile. */
 /**
@@ -103,10 +104,49 @@ export const LIVE_SUPPLY_FILTERS: FilterKey[] = [
  * or resetting the panel, has to empty the box — but not while the agent is
  * mid-word, which is what a naive sync would do.
  */
-function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next: string | undefined) => void }) {
+function HotelNameFilter({
+  value,
+  names,
+  onCommit,
+}: {
+  value?: string;
+  /** Every property in these results, for the box to offer. */
+  names: SearchFacets["names"];
+  onCommit: (next: string | undefined) => void;
+}) {
   const { t } = useApp();
   const [typed, setTyped] = useState(value ?? "");
   const committed = useRef(value ?? "");
+  /** Whether the list of properties is showing. */
+  const [open, setOpen] = useState(false);
+  /** Which suggestion the arrow keys are on; -1 is "none, use what is typed". */
+  const [active, setActive] = useState(-1);
+  const boxId = useId();
+  const wrap = useRef<HTMLDivElement>(null);
+
+  /*
+   * What the box offers, narrowed by what has been typed so far.
+   *
+   * Bounded, because a large city can return several hundred properties and a
+   * list that long is a scroll rather than a shortcut — but bounded at the
+   * *rendering*, never at the data, so typing three more letters still reaches
+   * a property that sat below the cut.
+   */
+  const shown = useMemo(() => {
+    const needle = fold(typed.trim());
+    const pool = needle ? names.filter((n) => foldedIncludes(n.value, needle)) : names;
+    return pool.slice(0, 40);
+  }, [names, typed]);
+
+  /* Clicking anywhere else puts the list away. */
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
 
   useEffect(() => {
     if ((value ?? "") === committed.current) return;
@@ -125,16 +165,121 @@ function HotelNameFilter({ value, onCommit }: { value?: string; onCommit: (next:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typed]);
 
+  /** Take a suggestion: the whole name, committed at once rather than debounced. */
+  function choose(name: string) {
+    setTyped(name);
+    committed.current = name;
+    onCommit(name);
+    setOpen(false);
+    setActive(-1);
+  }
+
+  function onKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActive((current) => {
+        const next = current + step;
+        if (next < 0) return shown.length - 1;
+        if (next >= shown.length) return 0;
+        return next;
+      });
+      return;
+    }
+    if (event.key === "Enter" && open && active >= 0 && shown[active]) {
+      event.preventDefault();
+      choose(shown[active].value);
+      return;
+    }
+    if (event.key === "Escape" && open) {
+      // Swallowed, so it closes the list rather than the drawer around it.
+      event.stopPropagation();
+      setOpen(false);
+      setActive(-1);
+    }
+  }
+
   return (
     <FilterSection title={t("filters.hotelName")} active={value?.trim() ? 1 : 0} defaultOpen>
-      <Input
-        className="mt-2"
-        type="search"
-        value={typed}
-        placeholder={t("filters.hotelNamePlaceholder")}
-        aria-label={t("filters.hotelName")}
-        onChange={(e) => setTyped(e.target.value)}
-      />
+      {/*
+        A list, not a guess.
+        
+        This was a bare text box over a substring match: an agent typed two
+        letters and either got results or did not, with no way to tell whether
+        they had misremembered the name or the property simply is not in supply
+        tonight. The names are already in the response — offering them turns a
+        guess into a choice, and typing still works exactly as it did for anyone
+        who knows what they are looking for.
+      */}
+      <div ref={wrap} className="relative mt-2">
+        <Input
+          type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={`${boxId}-list`}
+          aria-autocomplete="list"
+          aria-activedescendant={active >= 0 ? `${boxId}-opt-${active}` : undefined}
+          autoComplete="off"
+          value={typed}
+          placeholder={t("filters.hotelNamePlaceholder")}
+          aria-label={t("filters.hotelName")}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            setOpen(true);
+            setActive(-1);
+          }}
+          // On focus, not only on keystroke: the whole point is to say what is
+          // there before anybody types.
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+        />
+
+        {open && shown.length > 0 && (
+          <ul
+            id={`${boxId}-list`}
+            role="listbox"
+            aria-label={t("filters.hotelName")}
+            className="surface hairline absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-[var(--radius-control)] border py-1 shadow-[var(--shadow-float)]"
+          >
+            {shown.map((name, i) => (
+              <li key={`${name.value}-${name.locality}`}>
+                <button
+                  id={`${boxId}-opt-${i}`}
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  // The pointer moving over an option is the same intention as
+                  // arrowing onto it, and keeping them in step stops the
+                  // keyboard highlight sitting somewhere the mouse is not.
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => choose(name.value)}
+                  className={cx(
+                    "block w-full px-3 py-1.5 text-start text-sm",
+                    i === active ? "surface-sunken" : "hover:surface-sunken",
+                  )}
+                >
+                  <span className="block truncate">{name.value}</span>
+                  {name.locality && (
+                    /* Four Hiltons in one city, and the name alone does not say which. */
+                    <span className="text-muted block truncate text-xs">{name.locality}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Typed something nothing matches: said here, rather than as an empty page. */}
+        {open && typed.trim() && shown.length === 0 && (
+          <p className="surface hairline absolute z-20 mt-1 w-full rounded-[var(--radius-control)] border px-3 py-2 text-xs text-[var(--text-muted)]">
+            {t("filters.hotelNameNone")}
+          </p>
+        )}
+      </div>
     </FilterSection>
   );
 }
@@ -296,7 +441,11 @@ export function FiltersPanel({
         cached supply instead of calling both suppliers again.
       */}
       {shows("hotelName") && (
-        <HotelNameFilter value={filters.hotelName} onCommit={(hotelName) => set({ hotelName })} />
+        <HotelNameFilter
+          value={filters.hotelName}
+          names={facets.names ?? []}
+          onCommit={(hotelName) => set({ hotelName })}
+        />
       )}
 
       {/*

@@ -821,6 +821,22 @@ function buildFacets(
     return map;
   };
 
+  /*
+   * The properties this search found, named, in the order a person scans a
+   * list. Deduplicated on name-and-place rather than on name: two hotels in
+   * one city really can share a name, and collapsing them would hide one.
+   */
+  const seenNames = new Set<string>();
+  const names: SearchFacets["names"] = [];
+  for (const card of cards) {
+    const locality = zoneLabel(card.neighborhood, cityName) || card.locality;
+    const key = `${fold(card.name)}::${fold(locality)}`;
+    if (seenNames.has(key)) continue;
+    seenNames.add(key);
+    names.push({ value: card.name, locality });
+  }
+  names.sort((a, b) => a.value.localeCompare(b.value, locale === "ar" ? "ar" : "en"));
+
   const catCount = count(cards.map((c) => c.category));
   const hoodCount = count(cards.map((c) => zoneLabel(c.neighborhood, cityName)));
   const typeCount = count(cards.map((c) => c.propertyType));
@@ -946,6 +962,7 @@ function buildFacets(
       count: conditionCount.get(value)!,
     })),
     distanceAnchors: anchors,
+    names,
   };
 }
 

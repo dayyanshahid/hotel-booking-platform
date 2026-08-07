@@ -410,6 +410,23 @@ export interface SearchFacets {
    * landmarks in the dataset simply offers its centre.
    */
   distanceAnchors: { id: string; label: string; type: string }[];
+  /**
+   * Every property in these results, by name, for the name filter to offer.
+   *
+   * The filter was a bare text box: an agent typed two letters and either got
+   * results or did not, with no way to tell whether they had misremembered the
+   * name or the property simply is not in supply tonight. Offering the names
+   * turns a guess into a choice.
+   *
+   * Built before any filter is applied, deliberately. A suggestion list that
+   * narrowed to what had already been typed could only ever confirm the guess
+   * it was meant to replace — the agent would type "ro", see the two matches,
+   * and never learn that the property they wanted is spelled "Rho".
+   *
+   * `locality` rides along because a city can hold four Hiltons and the name
+   * alone does not say which is which.
+   */
+  names: { value: string; locality: string }[];
 }
 
 export type SortKey =

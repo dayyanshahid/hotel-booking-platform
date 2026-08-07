@@ -412,13 +412,42 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
     // asks for a later one.
     const nextPage = next.page ?? 1;
 
+    /*
+     * Whether this is a different stay or the same one, looked at differently.
+     *
+     * Everything below turns on it. A new stay may clear the screen because
+     * nothing on it will still be true; a filter or a sort is the same enquiry
+     * narrowed, and blanking the page for it throws away the thing the agent
+     * is working with.
+     */
+    const stayChanged =
+      next.intent !== undefined &&
+      (applied === null ||
+        next.intent.destinationId !== applied.destinationId ||
+        next.intent.checkIn !== applied.checkIn ||
+        next.intent.checkOut !== applied.checkOut);
+
     const ticket = ++latest.current;
     setBusy(true);
     setError(null);
     setProgress(null);
     setStartedAt(Date.now());
     if (nextPage === 1) {
-      setData(null);
+      /*
+       * The results stay up while they are refined.
+       *
+       * `setData(null)` ran on every first-page search, filters included — so
+       * ticking a star box emptied the page, and the filter rail, which only
+       * renders when there is data, unmounted and came back. Every bit of its
+       * state went with it: an agent halfway through typing a hotel name had
+       * the box cleared and the cursor thrown out of it, mid-word, because
+       * their own typing had triggered the search.
+       *
+       * Refining now leaves the previous answer on screen until the new one
+       * arrives, which is both kinder and more honest — those rows are still
+       * live rates for the same stay.
+       */
+      if (stayChanged) setData(null);
       priced.current = new Set();
       // Rates warmed for the previous result set belong to a stay nobody is
       // looking at any more.
@@ -438,12 +467,6 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
      * enquiry, and dropping a property the agent deliberately shortlisted
      * because they then filtered by board would be worse than the bug.
      */
-    const stayChanged =
-      next.intent !== undefined &&
-      (applied === null ||
-        next.intent.destinationId !== applied.destinationId ||
-        next.intent.checkIn !== applied.checkIn ||
-        next.intent.checkOut !== applied.checkOut);
     if (stayChanged) clearCompare();
     if (next.intent) setSeed(next.intent);
     setFilters(nextFilters);
@@ -1068,7 +1091,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                           keeps the button; the property page is a detour and
                           reads as one.
                         */
-                        <div className="mt-1.5 flex items-center justify-end gap-3">
+                        <div className="mt-1.5 flex flex-col items-end gap-1.5">
                           {/*
                             Ticking, not a button.
 
@@ -1094,9 +1117,30 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                             />
                             {t("agency.compareAdd")}
                           </label>
+                          {/*
+                            The tick sits on its own line above these two.
+
+                            Three controls shared one row and there was not
+                            room: "See property details" broke across two lines
+                            and the three of them settled on three different
+                            baselines. Comparing is a deliberate, occasional
+                            act and the rate sheet is the constant one, so they
+                            are not peers and should not fight for the same
+                            inch.
+                          */}
+                          {/*
+                            Wrapping as a whole rather than mid-phrase.
+
+                            "See property details" was breaking into three
+                            lines beside the button on a narrow rail — a label
+                            shredded into fragments reads as damage. Held on one
+                            line, so either both controls fit or the button
+                            drops below the link intact.
+                          */}
+                          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1.5">
                           <Link
                             href={property}
-                            className="text-muted hover:text-ink-900 text-xs underline underline-offset-2 transition-colors"
+                            className="text-muted hover:text-ink-900 whitespace-nowrap text-xs underline underline-offset-2 transition-colors"
                           >
                             {t("agency.seePropertyDetails")}
                           </Link>
@@ -1127,6 +1171,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                               className={cx("transition-transform", openShelf === card.slug && "rotate-180")}
                             />
                           </Button>
+                          </div>
                         </div>
                       }
                       below={
