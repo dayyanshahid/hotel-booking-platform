@@ -19,8 +19,8 @@ import type { AgencyQuote, AgencyQuoteItem } from "@/lib/agency/types";
  * moved would be worse than one that is plainly out of date.
  */
 
-/** Long enough to be useful, short enough that the rate has not certainly gone. */
-const VALID_DAYS = 3;
+// Validity and the "expiring soon" window are one decision, made in one place.
+import { VALID_DAYS } from "@/lib/agency/quotes";
 
 function reference(): string {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";

@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { brandingOf } from "@/lib/agency/branding";
 import { roomLabel } from "@/lib/i18n";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
-import { Alert, Badge, Button, Card, Skeleton } from "@/components/ui";
+import { Alert, Badge, Button, Card, Input, Skeleton, cx } from "@/components/ui";
 import { LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { useResource } from "@/components/providers/use-resource";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
+import { daysUntilExpiry, isExpiringSoon } from "@/lib/agency/quotes";
+import { fold, foldedIncludes } from "@/lib/text";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -31,8 +33,27 @@ const QUOTE_TONE: Record<AgencyQuote["status"], "positive" | "caution" | "neutra
   expired: "neutral",
 };
 
+/** How a list of quotes can be narrowed. "all" is not a status, it is the absence of one. */
+type QuoteFilter = "all" | AgencyQuote["status"] | "expiring";
+
 function QuoteList({ locale }: { locale: Locale }) {
   const { t } = useApp();
+  /**
+   * Finding one quote among a year of them.
+   *
+   * The list was every quote the agency had ever raised, newest first, as a
+   * wall of identical cards — no search, no filter, nothing to sort by. An
+   * agency doing thirty a week has fifteen hundred of them by the same time
+   * next year, and the only way to reach the one a customer is ringing about
+   * was the browser's own find-in-page against whatever had rendered.
+   *
+   * Filtered here rather than at the endpoint on purpose: the whole list is
+   * already in the browser, an agency's quote count is bounded by how many
+   * they can physically write, and a round trip per keystroke would make the
+   * search slower than the scrolling it replaces.
+   */
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<QuoteFilter>("all");
   /*
    * Three states, not two.
    *
@@ -43,6 +64,51 @@ function QuoteList({ locale }: { locale: Locale }) {
    */
   const { data, failed, loading, reload } = useResource<{ quotes: AgencyQuote[] }>("/api/agency/quotes");
   const quotes = data?.quotes ?? null;
+
+  /** What each filter would show, so a tab can say so before it is pressed. */
+  const counts = useMemo(() => {
+    const all = quotes ?? [];
+    return {
+      all: all.length,
+      open: all.filter((q) => q.status === "open").length,
+      expiring: all.filter((q) => isExpiringSoon(q)).length,
+      accepted: all.filter((q) => q.status === "accepted").length,
+      declined: all.filter((q) => q.status === "declined").length,
+      expired: all.filter((q) => q.status === "expired").length,
+    };
+  }, [quotes]);
+
+  /**
+   * What is still in play, in money.
+   *
+   * The question behind a pipeline is not how many quotes are open, it is how
+   * much is riding on them — and that number was nowhere on the screen.
+   */
+  const openValue = useMemo(
+    () =>
+      (quotes ?? [])
+        .filter((q) => q.status === "open")
+        .reduce((sum, q) => sum + q.items.reduce((n, i) => n + i.sell, 0), 0),
+    [quotes],
+  );
+  const currency = (quotes?.[0]?.currency ?? "USD") as CurrencyCode;
+
+  const shown = useMemo(() => {
+    const needle = fold(query.trim());
+    return (quotes ?? []).filter((quote) => {
+      if (filter === "expiring" ? !isExpiringSoon(quote) : filter !== "all" && quote.status !== filter) {
+        return false;
+      }
+      if (!needle) return true;
+      /*
+       * Customer, reference and the properties on it. An agent looking for a
+       * quote has one of those three in front of them — a name on a caller ID,
+       * a reference read off an email, or "the Cairo one".
+       */
+      const haystack = [quote.customerName, quote.reference, quote.customerEmail ?? "", ...quote.items.map((i) => i.hotelName)];
+      return haystack.some((value) => foldedIncludes(value, needle));
+    });
+  }, [quotes, query, filter]);
 
   return (
     <div className="space-y-4">
@@ -57,6 +123,57 @@ function QuoteList({ locale }: { locale: Locale }) {
           </Link>
         }
       />
+
+      {/*
+        The pipeline in one line, and the way into it.
+
+        Kept out of the way when there is nothing to say: an agency with no
+        quotes gets the empty state below rather than a row of zeroes.
+      */}
+      {quotes && quotes.length > 0 && (
+        <div className="space-y-3">
+          <Card className="surface-sunken flex flex-wrap items-center gap-x-6 gap-y-2 border-0 p-3 shadow-none">
+            <span className="text-sm">
+              <span className="text-muted">{t("agency.quotesOpenValue")} </span>
+              <Money amount={openValue} currency={currency} locale={locale} />
+            </span>
+            {counts.expiring > 0 && (
+              <span className="text-caution-700 text-sm font-medium">
+                {t("agency.quotesExpiringCount", { count: counts.expiring })}
+              </span>
+            )}
+          </Card>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("agency.quotesSearchPlaceholder")}
+              aria-label={t("agency.quotesSearch")}
+              className="min-w-0 flex-1 sm:max-w-xs"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {(["all", "open", "expiring", "accepted", "declined", "expired"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  aria-pressed={filter === key}
+                  className={cx(
+                    "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-colors",
+                    filter === key
+                      ? "bg-brand-600 text-white"
+                      : "surface-sunken text-muted hover:text-ink-900",
+                  )}
+                >
+                  {t(`agency.quoteFilter.${key}` as never)} {counts[key]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && <TableSkeleton rows={3} />}
       {failed && (
@@ -75,8 +192,17 @@ function QuoteList({ locale }: { locale: Locale }) {
         />
       )}
 
+      {quotes && quotes.length > 0 && shown.length === 0 && (
+        /*
+          A filter that matched nothing is not an empty pipeline, and the
+          full-page empty state above would tell the agent to go and build a
+          quote they may well already have.
+        */
+        <p className="text-muted py-6 text-center text-sm">{t("agency.quotesNoMatch")}</p>
+      )}
+
       <ul className="space-y-2">
-        {(quotes ?? []).map((quote) => {
+        {shown.map((quote) => {
           const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
           // Expiry is applied by the endpoint, so rendering does not consult
           // the clock — a render that reads Date.now() is a render that can
@@ -87,7 +213,15 @@ function QuoteList({ locale }: { locale: Locale }) {
               <Card className="p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <Badge tone={QUOTE_TONE[status]}>{t(`agency.quoteStatus.${status}`)}</Badge>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <Badge tone={QUOTE_TONE[status]}>{t(`agency.quoteStatus.${status}`)}</Badge>
+                      {/* Said on the row, because chasing is decided while scanning. */}
+                      {isExpiringSoon(quote) && (
+                        <Badge tone="caution">
+                          {t("agency.quoteExpiresIn", { days: Math.max(0, daysUntilExpiry(quote)) })}
+                        </Badge>
+                      )}
+                    </span>
                     <p className="mt-1 font-semibold wrap-anywhere">
                       <Link href={href(locale, `/agency/quotes/${quote.id}`)} className="hover:underline">
                         {quote.customerName}
@@ -192,6 +326,46 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   const roomsQuoted = quote.items.reduce((sum, item) => sum + (item.roomsCovered ?? 1), 0);
   const shortRooms = quote.items.length > 0 && roomsQuoted < roomsWanted;
 
+  /*
+   * Whether this can be put on the account as it stands.
+   *
+   * Rates live about forty-five minutes; a quote is valid for days. So on any
+   * quote older than lunchtime the answer is no, and the screen says so
+   * *before* offering a button rather than after an agent presses one and gets
+   * "this option changed or sold out" in front of a customer who has just said
+   * yes. The prices on the document are still the quotation — what has gone is
+   * the specific rate behind them, which has to be found again.
+   */
+  const bookable = quote.items.length > 0 && quote.items.every((item) => item.live);
+  const bookHref = href(
+    locale,
+    `/agency/book/${quote.items.map((item) => encodeURIComponent(item.offerId ?? "")).join(",")}`,
+  );
+  /** Back to a search for the first line's stay, when the rates have to be found again. */
+  const research = quote.items[0]
+    ? `${href(locale, "/agency")}?${new URLSearchParams({
+        destinationDisplay: quote.items[0].city,
+        checkIn: quote.items[0].checkIn,
+        checkOut: quote.items[0].checkOut,
+      }).toString()}`
+    : href(locale, "/agency");
+
+  async function extend(days: number) {
+    setBusy(true);
+    setMarkError(null);
+    const body = await apiFetch<unknown>(`/api/agency/quotes/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ extendDays: days }),
+    });
+    setBusy(false);
+    if (!body.ok) {
+      setMarkError(body.error?.message ?? t("error.temporaryService"));
+      return;
+    }
+    await load();
+  }
+
   return (
     <div className="space-y-4">
       {/* Never on the customer's printed copy — this is an operational
@@ -209,6 +383,16 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
           <Button size="sm" variant="secondary" onClick={() => window.print()}>
             {t("common.print")}
           </Button>
+          {/*
+            Extending is offered where it is needed: on a quote that has run
+            out, or is about to. Everywhere else it is a button asking a
+            question nobody has.
+          */}
+          {(quote.status === "expired" || isExpiringSoon(quote)) && (
+            <Button size="sm" variant="secondary" onClick={() => void extend(7)} loading={busy}>
+              {t("agency.quoteExtend")}
+            </Button>
+          )}
           {quote.status !== "accepted" && (
             <Button size="sm" onClick={() => mark("accepted")} loading={busy}>
               {t("agency.markAccepted")}
@@ -221,6 +405,40 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
           )}
         </div>
       </div>
+
+      {/*
+        Where an accepted quote goes.
+
+        Accepting used to change a badge and stop. The customer has said yes
+        and the agent is holding a document with prices on it; the next thing
+        they need is the booking, or an honest account of why they cannot have
+        it in one press.
+      */}
+      {quote.status === "accepted" && (
+        <div className="no-print">
+          {bookable ? (
+            <Alert tone="info" title={t("agency.quoteReadyToBook")}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span>{t("agency.quoteReadyToBookBody")}</span>
+                <Link href={bookHref}>
+                  <Button size="sm">{t("agency.quoteBookNow")}</Button>
+                </Link>
+              </div>
+            </Alert>
+          ) : (
+            <Alert tone="warning" title={t("agency.quoteRatesStale")}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span>{t("agency.quoteRatesStaleBody")}</span>
+                <Link href={research}>
+                  <Button size="sm" variant="secondary">
+                    {t("agency.quoteFindRates")}
+                  </Button>
+                </Link>
+              </div>
+            </Alert>
+          )}
+        </div>
+      )}
 
       {/* For the agent, before they send it — never on the printed copy. */}
       {shortRooms && (

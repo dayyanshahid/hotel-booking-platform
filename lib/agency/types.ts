@@ -399,6 +399,17 @@ export interface AgencyQuoteItem {
   cancellation: string;
   /** The offer this came from, so an agent can try to book it directly. */
   offerId?: string;
+  /**
+   * Whether that offer is still in the store, resolved when a quote is read.
+   *
+   * Never stored — it is a fact about right now, and writing it down would be
+   * recording a rate's availability at the moment somebody happened to open
+   * the page. Rates live about forty-five minutes and quotes are valid for
+   * days, so on an ordinary quote this is false, and that is the honest
+   * answer: the price still stands as a quotation, and the specific rate
+   * behind it has to be found again before anyone can be charged for it.
+   */
+  live?: boolean;
 }
 
 export interface AgencyQuote {
