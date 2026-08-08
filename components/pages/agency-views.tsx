@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { useResource } from "@/components/providers/use-resource";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, cx } from "@/components/ui";
+import { arrivalBucket, bookingTotals } from "@/lib/agency/book";
+// From the policy module, not `holds.ts`: that one is server-only and
+// importing it here would throw the moment this component hydrated.
+import { hoursLeftOnHold, isHoldUrgent } from "@/lib/agency/hold-policy";
 import { DataTable, LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
@@ -26,7 +30,7 @@ import type {
 import type { CurrencyCode, Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
-import { dayLabel } from "@/lib/i18n";
+import { bookingLabel, dayLabel, hourLabel, minuteLabel } from "@/lib/i18n";
 
 /** One label for a permission, wherever it is shown. */
 function permissionLabel(t: (key: string) => string, permission: AgentPermission): string {
@@ -213,6 +217,9 @@ export function AgencyBookingsView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{() => <BookingsPanel locale={locale} />}</PortalShell>;
 }
 
+/** How the book is narrowed, beyond a status. */
+type BookView = "all" | "today" | "week" | "staying" | "holds" | "past";
+
 function BookingsPanel({ locale }: { locale: Locale }) {
   const { t } = useApp();
   /*
@@ -224,18 +231,127 @@ function BookingsPanel({ locale }: { locale: Locale }) {
   const bookings = booked.data?.bookings ?? null;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  /**
+   * Which slice of the book is on screen.
+   *
+   * The two questions that run a counter's day are who is arriving and what is
+   * about to be given back, and the list could answer neither: check-in dates
+   * were printed in a column that could not be sorted, filtered or counted, and
+   * a hold — a real supplier booking that cancels itself unless somebody issues
+   * it — looked exactly as settled as a confirmed sale.
+   */
+  const [view, setView] = useState<BookView>("all");
 
-  const rows = (bookings ?? []).filter((booking) => {
-    if (status !== "all" && booking.status !== status) return false;
-    if (!query.trim()) return true;
-    return `${booking.reference} ${booking.hotelName} ${booking.leadGuest}`
-      .toLowerCase()
-      .includes(query.trim().toLowerCase());
-  });
+  const all = bookings ?? [];
+
+  /** What each view holds, so a tab can say so before it is pressed. */
+  const counts = useMemo(
+    () => ({
+      all: all.length,
+      today: all.filter((b) => arrivalBucket(b) === "today").length,
+      week: all.filter((b) => ["today", "week"].includes(arrivalBucket(b))).length,
+      staying: all.filter((b) => arrivalBucket(b) === "staying").length,
+      holds: all.filter((b) => b.status === "held").length,
+      past: all.filter((b) => arrivalBucket(b) === "past").length,
+    }),
+    [all],
+  );
+
+  /** Holds close enough to release that somebody has to decide today. */
+  const urgentHolds = useMemo(() => all.filter((b) => isHoldUrgent(b)).length, [all]);
+
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const filtered = all.filter((booking) => {
+      if (status !== "all" && booking.status !== status) return false;
+      if (view === "holds" ? booking.status !== "held" : view !== "all") {
+        const bucket = arrivalBucket(booking);
+        if (view === "week" ? !["today", "week"].includes(bucket) : bucket !== view) return false;
+      }
+      if (!needle) return true;
+      return `${booking.reference} ${booking.hotelName} ${booking.leadGuest}`.toLowerCase().includes(needle);
+    });
+
+    /*
+     * Sorted by the thing the view is about. Looking at arrivals, the soonest
+     * comes first; looking at the whole book or at history, the newest sale
+     * does — which is the order the endpoint already returns and the order a
+     * general list wants.
+     */
+    if (view === "today" || view === "week" || view === "staying") {
+      return [...filtered].sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+    }
+    if (view === "holds") {
+      // Soonest to be given back, first.
+      return [...filtered].sort((a, b) => (a.holdExpiresAt ?? "9999").localeCompare(b.holdExpiresAt ?? "9999"));
+    }
+    return filtered;
+  }, [all, query, status, view]);
+
+  const totals = useMemo(() => bookingTotals(rows), [rows]);
 
   return (
     <div className="space-y-5">
       <PageHeader title={t("agency.bookings")} description={t("agency.bookingsBody")} />
+
+      {/*
+        The day's questions, as tabs.
+
+        Above the search box rather than beside it, because searching is what
+        an agent does when they already know the name — these are for the
+        bookings they have not thought about yet.
+      */}
+      {bookings && bookings.length > 0 && (
+        <div className="space-y-3">
+          {urgentHolds > 0 && (
+            /*
+              A hold is a room already reserved that hands itself back unless
+              somebody issues it. Said at the top, in the colour of a deadline,
+              because it is the only thing on this screen with a clock running.
+            */
+            <Alert tone="warning" title={t("agency.holdsUrgent", { count: urgentHolds })}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span>{t("agency.holdsUrgentBody")}</span>
+                <Button size="sm" variant="secondary" onClick={() => setView("holds")}>
+                  {t("agency.bookView.holds")}
+                </Button>
+              </div>
+            </Alert>
+          )}
+
+          <div className="flex flex-wrap gap-1.5">
+            {(["all", "today", "week", "staying", "holds", "past"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                aria-pressed={view === key}
+                className={cx(
+                  "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-colors",
+                  view === key ? "bg-brand-600 text-white" : "surface-sunken text-muted hover:text-ink-900",
+                )}
+              >
+                {t(`agency.bookView.${key}` as never)} {counts[key]}
+              </button>
+            ))}
+          </div>
+
+          {/* What the slice on screen is worth, once it is more than one row. */}
+          {totals.count > 1 && (
+            <p className="text-muted text-sm">
+              {totals.count} {bookingLabel(t, totals.count, locale)} ·{" "}
+              <Money amount={totals.sell} currency={rows[0]?.currency ?? "USD"} locale={locale} />
+              <span className="text-muted"> · {t("agency.margin")} </span>
+              <Money
+                amount={totals.margin}
+                currency={rows[0]?.currency ?? "USD"}
+                locale={locale}
+                tone="positive"
+              />
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Filters appear only once there is enough to be worth filtering. */}
       {bookings && bookings.length > 3 && (
@@ -275,6 +391,26 @@ function BookingsPanel({ locale }: { locale: Locale }) {
       {bookings && bookings.length > 0 && <BookingTable locale={locale} bookings={rows} />}
     </div>
   );
+}
+
+/**
+ * Time left on a hold, in the unit a person would say it in.
+ *
+ * Minutes when it is minutes, hours when it is hours, days beyond two — the
+ * point of the badge is that it can be read at a glance down a column, and a
+ * number that needs dividing by twenty-four is not glanceable.
+ */
+function holdCountdown(t: (key: never) => string, hoursLeft: number, locale: string): string {
+  if (hoursLeft < 1) {
+    const minutes = Math.max(1, Math.round(hoursLeft * 60));
+    return `${minutes} ${minuteLabel(t, minutes, locale)}`;
+  }
+  if (hoursLeft < 48) {
+    const hours = Math.round(hoursLeft);
+    return `${hours} ${hourLabel(t, hours, locale)}`;
+  }
+  const days = Math.round(hoursLeft / 24);
+  return `${days} ${dayLabel(t, days, locale)}`;
 }
 
 const BOOKING_TONE: Record<AgencyBooking["status"], "positive" | "caution" | "neutral" | "critical"> = {
@@ -349,7 +485,34 @@ function BookingTable({ locale, bookings }: { locale: Locale; bookings: AgencyBo
         {
           key: "status",
           header: t("agency.statusLabel"),
-          render: (booking) => <Badge tone={BOOKING_TONE[booking.status]}>{t(BOOKING_STATUS[booking.status])}</Badge>,
+          render: (booking) => {
+            /*
+              A hold with the clock on it.
+
+              Held looked exactly like confirmed in this column, and it is not:
+              the room is really reserved and it hands itself back unless
+              somebody issues it. The hours are the whole point — an agent
+              scanning thirty rows needs to see which one goes tonight.
+            */
+            const left = hoursLeftOnHold(booking);
+            return (
+              <span className="flex flex-wrap items-center gap-1.5">
+                <Badge tone={BOOKING_TONE[booking.status]}>{t(BOOKING_STATUS[booking.status])}</Badge>
+                {left !== null && left > 0 && (
+                  <Badge tone={isHoldUrgent(booking) ? "critical" : "caution"}>
+                    {/*
+                      In the unit a person would use. Rounding everything to
+                      hours printed "479h left" on a hold three weeks out, which
+                      is twenty days expressed as a number the reader has to
+                      divide. Hours are the right unit only while hours are what
+                      is left.
+                    */}
+                    {holdCountdown(t, left, locale)}
+                  </Badge>
+                )}
+              </span>
+            );
+          },
         },
         {
           key: "cost",

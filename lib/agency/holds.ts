@@ -2,7 +2,7 @@ import "server-only";
 import { appendLedger, getAgencyBooking, listLedger, saveAgencyBooking } from "./store";
 import type { AgencyBooking, AgencySession, LedgerEntry } from "./types";
 
-export { canHold, holdDeadline, HOLD_SAFETY_MARGIN_MS } from "./hold-policy";
+export { canHold, holdDeadline, hoursLeftOnHold, isHoldUrgent, HOLD_SAFETY_MARGIN_MS, HOLD_URGENT_HOURS } from "./hold-policy";
 
 /**
  * Holding a room when no supplier will hold a room.

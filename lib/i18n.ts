@@ -78,6 +78,11 @@ const en: Dict = {
    * numeral Arabic takes the indefinite, so the same keys rendered "٢ الضيوف" —
    * "2 the-guests".
    */
+  "count.booking": "booking",
+  "count.bookings": "bookings",
+  "count.bookingTwo": "bookings",
+  "count.bookingFew": "bookings",
+  "count.bookingMany": "bookings",
   "count.night": "night",
   "count.nightTwo": "nights",
   "count.nightMany": "nights",
@@ -1090,6 +1095,15 @@ const en: Dict = {
   "agency.sortPrice": "Lowest price",
   "agency.noBookingsBody": "Search the catalogue and your rates appear on every room.",
   "agency.bookingSearch": "Reference, property or guest",
+  /* ---- the book of business, as a counter works it ---- */
+  "agency.bookView.all": "All",
+  "agency.bookView.today": "Arriving today",
+  "agency.bookView.week": "Next 7 days",
+  "agency.bookView.staying": "In house",
+  "agency.bookView.holds": "Holds",
+  "agency.bookView.past": "Past",
+  "agency.holdsUrgent": "{count} on hold and about to be released",
+  "agency.holdsUrgentBody": "A hold is a real reservation that hands itself back unless it is issued.",
   "agency.noMatches": "Nothing matches those filters",
   "agency.settingsIntro": "What you charge your customers, and the details on the documents they receive.",
   "agency.backToResults": "Back to results",
@@ -1500,6 +1514,11 @@ const ar: Dict = {
   "common.dates": "التواريخ",
   "common.guests": "الضيوف",
   "common.guest": "ضيف",
+  "count.booking": "حجز",
+  "count.bookings": "حجوزات",
+  "count.bookingTwo": "حجزان",
+  "count.bookingFew": "حجوزات",
+  "count.bookingMany": "حجزًا",
   "count.night": "ليلة",
   "count.nightTwo": "ليلتان",
   "count.nightMany": "ليلة",
@@ -2489,6 +2508,14 @@ const ar: Dict = {
   "agency.sortPrice": "أقل سعر",
   "agency.noBookingsBody": "ابحث في الكتالوج وستظهر أسعارك على كل غرفة.",
   "agency.bookingSearch": "رقم الحجز أو العقار أو الضيف",
+  "agency.bookView.all": "الكل",
+  "agency.bookView.today": "الوصول اليوم",
+  "agency.bookView.week": "خلال ٧ أيام",
+  "agency.bookView.staying": "نزلاء حاليون",
+  "agency.bookView.holds": "الحجوزات المؤقتة",
+  "agency.bookView.past": "سابقة",
+  "agency.holdsUrgent": "{count} حجز مؤقت على وشك الإلغاء",
+  "agency.holdsUrgentBody": "الحجز المؤقت حجز فعلي يُلغى تلقائيًا ما لم يُصدر.",
   "agency.noMatches": "لا شيء يطابق هذه المرشحات",
   "agency.settingsIntro": "ما تحاسب به عملاءك، والبيانات التي تظهر في مستنداتهم.",
   "agency.backToResults": "العودة إلى النتائج",
@@ -2970,6 +2997,10 @@ export function hourLabel(t: (key: never) => string, n: number, locale = "en"): 
 
 export function minuteLabel(t: (key: never) => string, n: number, locale = "en"): string {
   return plural(t, n, locale, "count.minute", "count.minutes");
+}
+
+export function bookingLabel(t: (key: never) => string, n: number, locale = "en"): string {
+  return plural(t, n, locale, "count.booking", "count.bookings");
 }
 
 export function adultLabel(t: (key: never) => string, n: number, locale = "en"): string {
