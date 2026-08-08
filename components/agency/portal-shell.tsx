@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { Button, Drawer, Spinner, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
@@ -339,8 +339,26 @@ export function PortalShell({
         makes it worse in exactly the same way, because zoom is a narrower
         viewport wearing a different name.
       */}
-      <div className="@container min-w-0 flex-1 space-y-5">
-        <header className="hairline flex items-center justify-between gap-3 border-b pb-3">
+      {/*
+        Six between blocks rather than five, now that the header is a card
+        sitting in the same stack: a surface needs a little more room around it
+        than a line of text does before the next one starts.
+      */}
+      <div className="@container min-w-0 flex-1 space-y-6">
+        {/*
+          Sticky, and a surface of its own.
+
+          It scrolled away with the page, which is wrong for what it holds: the
+          basket carries a countdown to the moment its rates go stale, and the
+          credit line is the number behind every decision on the screen below
+          it. Both were reachable only by scrolling back to the top of a result
+          list the agent had just scrolled down.
+
+          A surface because it now sits between two of them — the rail beside
+          it and the cards under it — and a bare row with one hairline read as
+          the gap between them rather than as a thing.
+        */}
+        <header className="surface hairline sticky top-4 z-30 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border px-3 py-2 shadow-[var(--shadow-card)]">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
@@ -360,7 +378,7 @@ export function PortalShell({
               never needs reminding of, and it is in the drawer regardless.
             */}
             <div className="hidden min-w-0 sm:block">
-              <p className="truncate text-sm font-semibold">{context.agency.name}</p>
+              <p className="truncate text-sm font-semibold leading-tight">{context.agency.name}</p>
               <p className="text-muted truncate text-xs">{context.session.name}</p>
             </div>
           </div>
@@ -401,9 +419,16 @@ export function PortalShell({
             {/* The selection follows the agent between screens, so its
                 handle has to be somewhere that does the same. */}
             <CartButton />
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              {t("agency.signOut")}
-            </Button>
+            {/*
+              Sign out behind the account, not beside the basket.
+
+              It sat in the top-right corner — the most prominent position on
+              the screen — as a plain button one stray click from an agent
+              mid-quote, and it was the only thing there. The account it belongs
+              to now holds it, which is where somebody goes looking for it and
+              nowhere near where they are working.
+            */}
+            <AccountMenu context={context} onSignOut={signOut} />
           </div>
         </header>
 
@@ -509,6 +534,100 @@ function CreditRail({
       <p className="text-muted mt-1.5 text-[11px]">{t("agency.ofLimit", { limit })}</p>
       {ratio < 0.15 && <p className="text-critical-700 mt-1.5 text-xs font-medium">{t("agency.creditLow")}</p>}
     </Link>
+  );
+}
+
+/**
+ * Who you are signed in as, and the way out.
+ *
+ * Sign out used to be a bare button in the top-right corner: the most prominent
+ * position on the screen, holding the one action an agent cannot undo, one
+ * stray click from a quote in progress. Behind the account is where people look
+ * for it and nowhere near where they work.
+ *
+ * Written here rather than as a `Menu` in the kit because there is one of them.
+ * A primitive designed against a single caller is a guess about the next four;
+ * if a second menu turns up, this is the thing to lift.
+ */
+function AccountMenu({
+  context,
+  onSignOut,
+}: {
+  context: AgencyContext;
+  onSignOut: () => void | Promise<void>;
+}) {
+  const { t } = useApp();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  /** Initials, so the control is identifiable at a glance on a shared machine. */
+  const initials = context.session.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return (
+    <div ref={wrap} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={context.session.name}
+        className="hover:bg-ink-50 flex items-center gap-2 rounded-[var(--radius-pill)] py-1 pe-2 ps-1 transition-colors"
+      >
+        <span
+          aria-hidden
+          className="bg-brand-100 text-brand-700 grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold"
+        >
+          {initials || "?"}
+        </span>
+        <Icon name="chevronDown" size={14} className="text-muted" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="surface hairline absolute end-0 z-40 mt-1 w-56 rounded-[var(--radius-card)] border p-1 shadow-[var(--shadow-float)]"
+        >
+          {/* Which account, on a machine several agents share. */}
+          <div className="hairline border-b px-3 py-2">
+            <p className="truncate text-sm font-semibold">{context.session.name}</p>
+            <p className="text-muted truncate text-xs">{context.agency.name}</p>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              void onSignOut();
+            }}
+            className="hover:bg-ink-50 mt-1 flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-start text-sm"
+          >
+            <Icon name="close" size={14} />
+            {t("agency.signOut")}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

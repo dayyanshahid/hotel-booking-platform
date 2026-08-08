@@ -84,13 +84,25 @@ export function PageHeader({
   actions?: ReactNode;
   back?: ReactNode;
 }) {
+  /*
+   * A page title should look like one.
+   *
+   * The content column spaces everything on one rhythm, so the name of the
+   * page sat exactly as far from the first section as that section sat from
+   * the next — five identical gaps down a screen with one title and four
+   * section headings on it, and nothing in the spacing saying which was which.
+   * Depth was being carried entirely by type size.
+   *
+   * A little more air underneath, and the title is a level rather than just a
+   * larger line.
+   */
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 pb-1">
       {back}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-[-0.01em] wrap-anywhere sm:text-2xl">{title}</h1>
-          {description && <p className="text-muted mt-1 max-w-2xl text-sm leading-relaxed">{description}</p>}
+          <h1 className="text-2xl font-bold tracking-[-0.02em] wrap-anywhere sm:text-[1.75rem]">{title}</h1>
+          {description && <p className="text-muted mt-1.5 max-w-2xl text-sm leading-relaxed">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -111,10 +123,16 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-2.5">
+    <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
-          <h2 className="font-semibold tracking-[-0.01em]">{title}</h2>
+          {/*
+            A shade larger than the body it heads, and a shade tighter. It was
+            the same size as the sentence underneath it, so a section announced
+            itself with weight alone — which on a screen of eight stat tiles
+            and three tables is not enough to break the page into parts.
+          */}
+          <h2 className="text-[0.9375rem] font-semibold tracking-[-0.01em]">{title}</h2>
           {description && <p className="text-muted mt-0.5 text-sm">{description}</p>}
         </div>
         {actions}
