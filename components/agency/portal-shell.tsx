@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
-import { Badge, Button, Drawer, Spinner, cx } from "@/components/ui";
+import { Button, Drawer, Spinner, cx } from "@/components/ui";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { Wordmark } from "@/components/ui/wordmark";
 import { CartProvider } from "./cart";
@@ -166,7 +166,7 @@ export function PortalShell({
               // the grouping is still legible, the label is not pretending.
               <div className="hairline mx-2 border-t pt-2" aria-hidden />
             ) : (
-              <p className="text-muted px-3 text-[11px] font-semibold uppercase tracking-wider">
+              <p className="text-muted px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
                 {group.label}
               </p>
             )}
@@ -181,12 +181,29 @@ export function PortalShell({
                       aria-current={active ? "page" : undefined}
                       title={compact ? item.label : undefined}
                       className={cx(
-                        "flex items-center rounded-[var(--radius-control)] text-sm font-medium transition-colors",
+                        "relative flex items-center rounded-[var(--radius-control)] text-sm transition-colors",
                         compact ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2",
-                        active ? "bg-brand-50 text-brand-700" : "text-muted hover:bg-ink-50 hover:text-ink-900",
+                        /*
+                          Weight as well as colour, and a mark on the edge.
+                          The active item was a pale wash the same shape as the
+                          hover state, so "where am I" and "what is under the
+                          pointer" looked alike — and on the two screens where
+                          the tint sits behind a hover at the same time, alike
+                          enough to misread. Colour is doing the least of the
+                          work here, which is the point.
+                        */
+                        active
+                          ? "bg-brand-50 text-brand-700 font-semibold"
+                          : "text-muted hover:bg-ink-50 hover:text-ink-900 font-medium",
                       )}
                     >
-                      <Icon name={item.icon} size={compact ? 18 : 16} />
+                      {active && !compact && (
+                        <span
+                          aria-hidden
+                          className="bg-brand-600 absolute inset-y-1.5 start-0 w-[3px] rounded-e-full"
+                        />
+                      )}
+                      <Icon name={item.icon} size={compact ? 18 : 16} className={active ? undefined : "opacity-80"} />
                       {compact ? <span className="sr-only">{item.label}</span> : item.label}
                     </Link>
                   </li>
@@ -211,7 +228,7 @@ export function PortalShell({
       */}
       <aside
         className={cx(
-          "hairline no-print hidden shrink-0 border-e transition-[width] duration-200 ease-[var(--ease-out)] lg:block",
+          "no-print hidden shrink-0 transition-[width] duration-200 ease-[var(--ease-out)] lg:block",
           /*
             256, not 240. The lockup is 34px of globe plus two lines of
             non-wrapping type, and with the collapse button beside it the row
@@ -219,26 +236,60 @@ export function PortalShell({
             as "TRAVEL & MOR". Clipping a company's own name in its own
             product is not a rounding error.
           */
-          railClosed ? "w-16 pe-2" : "w-64 pe-3",
+          railClosed ? "w-16" : "w-64",
         )}
       >
-        <div className="sticky top-4 space-y-4 py-1">
+        {/*
+          A plane of its own, rather than text floating on the page.
+
+          The rail was transparent over the same tint as the content, held apart
+          by a single hairline — so nine links, three headings and the credit
+          line read as loose furniture at the left edge rather than as one
+          region you navigate from. Everything else on this screen that groups
+          things is a card on that tint: the filter rail, the KPI tiles, the
+          results. The navigation was the only structural element not speaking
+          the language, and giving it the same surface costs nothing and settles
+          it.
+
+          It also scrolls inside itself now. Sticky alone meant a laptop short
+          enough — and 800px of viewport is ordinary — pushed Settings off the
+          bottom with no way to reach it but scrolling the results.
+        */}
+        <div
+          className={cx(
+            "surface hairline sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col gap-4",
+            "overflow-y-auto rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]",
+            railClosed ? "p-2" : "p-3",
+          )}
+        >
           <div className={cx("flex items-center", railClosed ? "justify-center" : "justify-between gap-2")}>
             <Link href={href(locale, "/agency")} className="block min-w-0 overflow-hidden">
               <Wordmark markOnly={railClosed} />
             </Link>
             {!railClosed && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0"
+              /*
+                A 28px control, not a 44px one.
+
+                The lockup needs 187 pixels and the row had 178 to give it, so
+                the brand rendered as "TRAVEL & MOR" — the exact clipping the
+                width comment above was written about, reintroduced by the
+                card's own padding. A ghost Button at `size="sm"` was 44 pixels
+                wide for a chevron; at 28 the name fits with room to spare, and
+                a control this secondary should not have been carrying a
+                primary button's dimensions next to the company's name in the
+                first place. Comfortably past the 24px minimum, and this rail is
+                desktop-only — the phone gets the drawer.
+              */
+              <button
+                type="button"
                 onClick={toggleRail}
                 aria-label={t("agency.collapseNav")}
                 title={t("agency.collapseNav")}
                 aria-expanded
+                className="hover:bg-ink-50 text-muted hover:text-ink-900 grid size-7 shrink-0 place-items-center rounded-[var(--radius-control)] transition-colors"
               >
                 <Icon name="chevronRight" size={16} className="rotate-180 rtl:rotate-0" />
-              </Button>
+              </button>
             )}
           </div>
 
@@ -246,23 +297,34 @@ export function PortalShell({
             /*
               Collapsed, the one thing that still has to be visible is the
               money — a credit line an agent cannot see is a credit line they
-              overspend. It becomes the bar alone, which is readable at any
-              width, with the figure in its tooltip.
+              overspend.
+
+              This is what the comment here has always claimed and the code
+              never did: it rendered a chevron and nothing else, so collapsing
+              the rail hid the credit line completely. Now it is the bar alone,
+              which is readable at sixteen pixels, with the figure and the limit
+              in its tooltip and in its accessible name.
             */
-            <button
-              type="button"
-              onClick={toggleRail}
-              aria-label={t("agency.expandNav")}
-              title={t("agency.expandNav")}
-              className="hover:bg-ink-50 flex w-full flex-col items-center gap-2 rounded-[var(--radius-control)] py-2"
-            >
-              <Icon name="chevronRight" size={16} className="rtl:rotate-180" />
-            </button>
-          ) : (
             <>
-              <Badge tone="brand">{t("agency.portal")}</Badge>
-              <CreditRail locale={locale} context={context} />
+              <CreditRail locale={locale} context={context} compact />
+              <button
+                type="button"
+                onClick={toggleRail}
+                aria-label={t("agency.expandNav")}
+                title={t("agency.expandNav")}
+                className="hover:bg-ink-50 text-muted flex w-full items-center justify-center rounded-[var(--radius-control)] py-2"
+              >
+                <Icon name="chevronRight" size={16} className="rtl:rotate-180" />
+              </button>
             </>
+          ) : (
+            /*
+              The badge that said "Agent portal" on the agent portal is gone.
+              It was the third brand mark in a 90-pixel column, under a wordmark
+              that had already said whose product this is, telling an agent
+              something they cannot fail to know.
+            */
+            <CreditRail locale={locale} context={context} />
           )}
 
           {navList(railClosed)}
@@ -382,31 +444,69 @@ export function PortalShell({
  * The limit sits below in smaller type — useful context, not the operative
  * figure — and the bar changes colour before the money runs out.
  */
-function CreditRail({ locale, context }: { locale: Locale; context: AgencyContext }) {
+function CreditRail({
+  locale,
+  context,
+  compact = false,
+}: {
+  locale: Locale;
+  context: AgencyContext;
+  /** Icon-width rail: the bar alone, with the figures in its accessible name. */
+  compact?: boolean;
+}) {
   const { t } = useApp();
   const balance = context.balance;
   if (!balance) return null;
 
   const ratio = balance.limit > 0 ? balance.available / balance.limit : 0;
-  const limit = new Intl.NumberFormat(locale === "ar" ? "ar" : "en", {
-    style: "currency",
-    currency: balance.currency,
-    maximumFractionDigits: 0,
-  }).format(balance.limit);
+  const money = (amount: number) =>
+    new Intl.NumberFormat(locale === "ar" ? "ar" : "en", {
+      style: "currency",
+      currency: balance.currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  const limit = money(balance.limit);
+  /** Everything the expanded block says, in one string a tooltip can hold. */
+  const summary = `${t("agency.creditAvailable")}: ${money(balance.available)} ${t("agency.ofLimit", { limit })}`;
 
+  if (compact) {
+    return (
+      <Link
+        href={href(locale, "/agency/credit")}
+        title={summary}
+        aria-label={summary}
+        className="hover:bg-ink-50 block rounded-[var(--radius-control)] px-1.5 py-2"
+      >
+        <Meter value={balance.available} max={balance.limit} label={t("agency.creditAvailable")} />
+      </Link>
+    );
+  }
+
+  /*
+   * Tinted rather than outlined.
+   *
+   * A bordered card inside a bordered card is two frames around one number, and
+   * it made the credit line the loudest thing in a column whose job is
+   * navigation — an agent's eye went to the money before the menu on every
+   * single page load. The figure is a shade smaller and the frame is gone; it
+   * is still the first thing under the wordmark, which is prominence enough for
+   * something read at a glance rather than studied.
+   */
   return (
     <Link
       href={href(locale, "/agency/credit")}
-      className="hairline hover:border-brand-300 block rounded-[var(--radius-card)] border p-3 transition-colors"
+      className="surface-sunken hover:bg-brand-50 block rounded-[var(--radius-control)] p-3 transition-colors"
     >
-      <p className="text-muted text-[11px] font-semibold uppercase tracking-wider">{t("agency.creditAvailable")}</p>
+      <p className="text-muted text-[10px] font-semibold uppercase tracking-[0.08em]">
+        {t("agency.creditAvailable")}
+      </p>
       <p className="mt-0.5">
-        <Money amount={balance.available} currency={balance.currency} locale={locale} size="lg" />
+        <Money amount={balance.available} currency={balance.currency} locale={locale} size="md" />
       </p>
       <div className="mt-2">
         <Meter value={balance.available} max={balance.limit} label={t("agency.creditAvailable")} />
       </div>
-      <p className="text-muted mt-1.5 text-xs">{t("agency.ofLimit", { limit })}</p>
+      <p className="text-muted mt-1.5 text-[11px]">{t("agency.ofLimit", { limit })}</p>
       {ratio < 0.15 && <p className="text-critical-700 mt-1.5 text-xs font-medium">{t("agency.creditLow")}</p>}
     </Link>
   );
