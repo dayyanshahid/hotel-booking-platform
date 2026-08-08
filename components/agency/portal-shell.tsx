@@ -358,7 +358,7 @@ export function PortalShell({
           it and the cards under it — and a bare row with one hairline read as
           the gap between them rather than as a thing.
         */}
-        <header className="surface hairline sticky top-4 z-30 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border px-3 py-2 shadow-[var(--shadow-card)]">
+        <header className="surface hairline sticky top-4 z-30 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border px-3 py-1.5 shadow-[var(--shadow-card)]">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
@@ -377,9 +377,21 @@ export function PortalShell({
               on the space — the agency's own name is the one thing an agent
               never needs reminding of, and it is in the drawer regardless.
             */}
-            <div className="hidden min-w-0 sm:block">
+            {/*
+              The agency, then the desk.
+
+              Two lines of equal-weight grey in a band a thousand pixels wide
+              read as a caption nobody wrote on purpose. The agency's name is
+              the identity on the document an agent is about to send, so it
+              carries the weight; the role beside it, in a pill, is the thing
+              that actually changes between the people sharing this machine and
+              decides what the screen will let them do.
+            */}
+            <div className="hidden min-w-0 items-center gap-2 sm:flex">
               <p className="truncate text-sm font-semibold leading-tight">{context.agency.name}</p>
-              <p className="text-muted truncate text-xs">{context.session.name}</p>
+              <span className="surface-sunken text-muted hidden shrink-0 rounded-[var(--radius-pill)] px-2 py-0.5 text-[11px] font-medium md:inline">
+                {context.session.name}
+              </span>
             </div>
           </div>
 

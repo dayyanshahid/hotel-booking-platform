@@ -38,6 +38,31 @@ export function searchParamsFromIntent(intent: SearchIntent): URLSearchParams {
   return params;
 }
 
+/**
+ * A readable name for a destination we only have the id of.
+ *
+ * Links built by `searchParamsFromIntent` always carry `label`, so this is for
+ * the ones that are not: a hand-edited URL, a truncated share, a bookmark from
+ * before the parameter existed. The fallback used to be the id itself, and it
+ * surfaced — "dest-cairo" sat in the recent-searches list where a city name
+ * belongs, which is an internal identifier shown to a customer-facing user.
+ *
+ * Derived rather than looked up. The catalogue lives on the server and this
+ * runs in the browser; a slug turned back into words is not the editorial name
+ * — "dest-new-york" gives "New York" and `hbd-PMI` gives "PMI" — but it is
+ * always a great deal better than the slug, and it needs no round trip to say
+ * so. The moment a real label is available it wins.
+ */
+export function humanDestination(destinationId: string): string {
+  if (!destinationId) return "";
+  return destinationId
+    .replace(/^(dest|hbd|tmd)-/, "")
+    .split("-")
+    .filter(Boolean)
+    .map((word) => (word === word.toUpperCase() ? word : word[0].toUpperCase() + word.slice(1)))
+    .join(" ");
+}
+
 export function intentFromSearchParams(
   params: URLSearchParams | Record<string, string | string[] | undefined>,
   locale: Locale,
@@ -66,7 +91,7 @@ export function intentFromSearchParams(
 
   return {
     destinationId,
-    destinationDisplay: get("label") ?? "",
+    destinationDisplay: get("label") || humanDestination(destinationId),
     destinationType: (get("type") as SearchIntent["destinationType"]) ?? "city",
     checkIn,
     checkOut,

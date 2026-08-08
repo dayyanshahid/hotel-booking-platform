@@ -12,7 +12,7 @@ import { Icon } from "@/components/ui/icons";
 import { SearchBar } from "@/components/search/search-bar";
 import { formatDate, formatDateTime, formatMoney, nightsBetween, todayIso } from "@/lib/format";
 import { dayLabel, guestLabel, nightLabel } from "@/lib/i18n";
-import { href, searchParamsFromIntent } from "@/lib/nav";
+import { href, humanDestination, searchParamsFromIntent } from "@/lib/nav";
 import { attentionItems, type AttentionItem } from "@/lib/agency/attention";
 import { forgetSearches, readRecentSearches, type RecentSearch } from "@/lib/agency/recent-searches";
 import type { AgencyBooking, AgencyQuote } from "@/lib/agency/types";
@@ -339,7 +339,8 @@ function RecentSearches({ locale, context }: { locale: Locale; context: AgencyCo
               <Icon name="search" size={16} className="text-muted shrink-0" />
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">
-                  {entry.intent.destinationDisplay || entry.intent.destinationId}
+                  {/* Never the raw id: see `humanDestination`. */}
+                  {entry.intent.destinationDisplay || humanDestination(entry.intent.destinationId)}
                 </span>
                 <span className="text-muted block text-xs">
                   {formatDate(entry.intent.checkIn, locale)} → {formatDate(entry.intent.checkOut, locale)} ·{" "}

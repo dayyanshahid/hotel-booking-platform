@@ -359,6 +359,8 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
   const [compareOpen, setCompareOpen] = useState(false);
   /** Whether the list of keyboard shortcuts is on screen. */
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  /** Whether the sentence-shaped search is open. Closed is the ordinary case. */
+  const [promptOpen, setPromptOpen] = useState(false);
 
   /**
    * The map shows the whole result set, not the page the list happens to be on.
@@ -831,30 +833,53 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
           autoFocus={!seed.destinationId && !data}
           onSearch={(intent) => void run({ intent, filters: {} })}
         />
-        <div className="hairline flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-          <p className="text-muted text-sm">
-            {formatDate(seed.checkIn, locale)} → {formatDate(seed.checkOut, locale)} · {nights}{" "}
-            {nights === 1 ? t("common.night") : t("common.nights")} ·{" "}
-            {t("agency.pricedIn", { currency: seed.currency })}
-          </p>
+        {/*
+          One line under the bar, and only what the bar does not already say.
+
+          This used to reprint the dates and the night count sixty pixels below
+          the field that had just stated them — "29 Aug → 1 Sept · 3 nights"
+          directly under "29 Aug → 1 Sept · 3 nights". The only new fact in it
+          was the settlement currency, which is worth saying once and quietly:
+          a trade price is in the agency's currency and not the customer's, and
+          nothing else on the screen mentions that.
+
+          The prompt sits on the same line rather than under its own heading
+          with a permanently open field. It is the second way to search, used
+          by an agent repeating a caller's sentence; open by default it cost
+          ninety pixels above the fold on every load and put a worked example
+          in a placeholder, which reads as content until you try to read it.
+        */}
+        <div className="hairline mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
+          <button
+            type="button"
+            onClick={() => setPromptOpen((was) => !was)}
+            aria-expanded={promptOpen}
+            className="text-brand-700 inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+          >
+            <Icon name="sparkle" size={15} />
+            {t("agency.describeTrip")}
+          </button>
+          <p className="text-muted text-xs">{t("agency.pricedIn", { currency: seed.currency })}</p>
         </div>
 
-        {/*
-          An agent is usually repeating a sentence a caller just said. Typing it
-          is faster than filling four controls, and it is the same interpreter
-          the consumer site runs — so a trade search cannot understand less of a
-          request than a traveller's would.
-        */}
-        <TripPrompt
-          className="max-w-none"
-          currency={seed.currency as CurrencyCode}
-          label={t("agency.describeTrip")}
-          placeholder={t("agency.describeTripPlaceholder")}
-          // Filters the sentence asked for go with the search, so "free
-          // cancellation" narrows the page rather than being read aloud and
-          // forgotten.
-          onRun={(intent, asked) => void run({ intent, filters: asked })}
-        />
+        {promptOpen && (
+          /*
+            An agent is usually repeating a sentence a caller just said. Typing
+            it is faster than filling four controls, and it is the same
+            interpreter the consumer site runs — so a trade search cannot
+            understand less of a request than a traveller's would.
+          */
+          <TripPrompt
+            className="mt-3 max-w-none"
+            currency={seed.currency as CurrencyCode}
+            label={t("agency.describeTrip")}
+            placeholder={t("agency.describeTripPlaceholder")}
+            // Filters the sentence asked for go with the search, so "free
+            // cancellation" narrows the page rather than being read aloud and
+            // forgotten.
+            onRun={(intent, asked) => void run({ intent, filters: asked })}
+          />
+        )}
       </Card>
 
       {error && <Alert tone="critical">{error}</Alert>}

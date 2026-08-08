@@ -209,8 +209,23 @@ export function StatGrid({ children, columns = 4 }: { children: ReactNode; colum
  */
 export function Meter({ value, max, label }: { value: number; max: number; label?: string }) {
   const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
-  const tone = ratio < 0.15 ? "critical" : ratio < 0.35 ? "caution" : "brand";
+  const tone = ratio < 0.15 ? "critical" : ratio < 0.35 ? "caution" : "healthy";
 
+  /*
+   * A healthy credit line should not look like an alarm.
+   *
+   * The thresholds were right and the colour was backwards. An agency that has
+   * spent almost nothing has almost all of its credit available, so the bar is
+   * nearly full — and it was painted full-strength brand orange, edge to edge,
+   * at the top of the sidebar on every screen. A saturated bar running the
+   * whole width is the universal shape of "at the limit"; here it meant the
+   * exact opposite, and it was the loudest thing in the portal saying it.
+   *
+   * So the good state is quiet. It keeps the brand hue and drops to a tint that
+   * reads as a filled track rather than a warning, and the bar only gains
+   * saturation as the money actually runs down — amber at a third left, red at
+   * a sixth. Colour now moves in the same direction as concern.
+   */
   return (
     <div className="space-y-1">
       <div
@@ -226,7 +241,7 @@ export function Meter({ value, max, label }: { value: number; max: number; label
             "h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none",
             tone === "critical" && "bg-critical-600",
             tone === "caution" && "bg-caution-500",
-            tone === "brand" && "bg-brand-500",
+            tone === "healthy" && "bg-brand-300",
           )}
           style={{ width: `${Math.round(ratio * 100)}%` }}
         />
