@@ -70,6 +70,30 @@ export interface Agent {
    * before" — see {@link capabilitiesOf}.
    */
   capabilities?: Partial<AgentCapabilities>;
+  /**
+   * The account that created this one and answers for it.
+   *
+   * Absent means top-level: an agency administrator, and every agent that
+   * existed before sub-agents did. A parent is always inside the same agency —
+   * a hierarchy that crossed agencies would let one line of credit be spent by
+   * people on another's contract.
+   */
+  parentId?: string;
+  /**
+   * The slice of credit this account may commit, in the agency's currency.
+   *
+   * Absent means "not separately capped": the account is bounded only by the
+   * agency line, which is how every agent behaved before this existed and must
+   * keep behaving. Zero is a real value and means exactly what it says.
+   */
+  creditLimit?: number;
+  /**
+   * What this account sells at, when it should not be the agency default.
+   *
+   * A sub-agent is often a different trading relationship — a branch on a
+   * thinner margin, a sub-agent on a fatter one — and the parent sets it.
+   */
+  markup?: MarkupRule;
   /** Suspended agents keep their bookings but cannot sign in or book. */
   active: boolean;
   createdAt: string;
@@ -306,6 +330,15 @@ export interface LedgerEntry {
   kind: "booking" | "cancellation" | "settlement" | "adjustment" | "hold" | "holdRelease";
   /** Platform booking reference, when the entry came from one. */
   reference?: string;
+  /**
+   * Who committed it, when we know.
+   *
+   * Absent on everything written before sub-agents existed, and on movements an
+   * operator makes against the whole line. A sub-limit is measured only from
+   * entries that name somebody, so introducing one today cannot retroactively
+   * charge a sub-agent for spending nobody attributed to them.
+   */
+  agentId?: string;
   note: string;
 }
 
@@ -337,6 +370,12 @@ export interface AgencySession {
    * hold or to sell non-refundable stock is a demotion by another name.
    */
   capabilities?: AgentCapabilities;
+  /**
+   * What this account sells at, when it is not the agency default. Resolved
+   * with the rest, so a parent changing it reaches the next quote rather than
+   * the next sign-in.
+   */
+  markup?: MarkupRule;
   agencyName: string;
   /**
    * Our own staff, identified by an allowlist rather than a row anyone can

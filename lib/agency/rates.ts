@@ -1,4 +1,4 @@
-import type { Agency, AgencyOfferView } from "./types";
+import type { Agency, AgencyOfferView, MarkupRule } from "./types";
 import { agencyOfferView } from "./pricing";
 
 /**
@@ -52,7 +52,12 @@ export function viewOffer(
   currency: string,
   agency: Agency,
   countryCode?: string,
+  /** The selling account's own markup, when their parent set one. */
+  sellerRule?: MarkupRule,
 ): AgencyOfferView & { publicPrice: number } {
   const cost = agencyCost(publicPrice, agency);
-  return { ...agencyOfferView(offerId, cost, currency, agency.markup, countryCode), publicPrice };
+  return {
+    ...agencyOfferView(offerId, cost, currency, agency.markup, countryCode, sellerRule),
+    publicPrice,
+  };
 }

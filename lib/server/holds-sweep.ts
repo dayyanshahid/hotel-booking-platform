@@ -49,7 +49,7 @@ async function releaseOne(
   if (!booking) {
     // No guest record: nothing to cancel with the supplier, but the reserved
     // headroom must still go back or it is held for ever.
-    await releaseHold(trade.agencyId, trade.reference, trade.cost, trade.currency, now, "Hold expired");
+    await releaseHold(trade.agencyId, trade.agentId, trade.reference, trade.cost, trade.currency, now, "Hold expired");
     await saveAgencyBooking({ ...trade, status: "cancelled", holdExpiresAt: undefined });
     result.cancelled.push(trade.reference);
     return;
@@ -85,7 +85,7 @@ async function releaseOne(
      * both would hand the agency back money it never committed. What has to go
      * back is the reservation.
      */
-    await releaseHold(trade.agencyId, trade.reference, trade.cost, trade.currency, now, "Hold expired — released");
+    await releaseHold(trade.agencyId, trade.agentId, trade.reference, trade.cost, trade.currency, now, "Hold expired — released");
     await saveAgencyBooking({ ...trade, status: "cancelled", holdExpiresAt: undefined });
     result.cancelled.push(trade.reference);
   } catch (error) {
@@ -182,7 +182,7 @@ export async function reconcileUnconfirmedCancellations(
       const total = booking?.price.total ?? 0;
       const fee = Math.max(0, total - (booking?.refund?.amount ?? total));
       const retained = total > 0 ? Math.round(trade.cost * (fee / total)) : 0;
-      await releaseBooking(trade.agencyId, trade.reference, trade.cost, retained, trade.currency, stamp);
+      await releaseBooking(trade.agencyId, trade.agentId, trade.reference, trade.cost, retained, trade.currency, stamp);
       await saveAgencyBooking({
         ...trade,
         status: "cancelled",

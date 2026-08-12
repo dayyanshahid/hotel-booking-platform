@@ -337,14 +337,14 @@ describe("credit after a cancellation", () => {
      * the end of the month when the statement refused to reconcile.
      */
     await commit("NZ-FEE-0001", 30_000);
-    await releaseBooking(agency.id, "NZ-FEE-0001", 30_000, 5_000, "USD", "2026-02-02T00:00:00.000Z");
+    await releaseBooking(agency.id, "agt_t", "NZ-FEE-0001", 30_000, 5_000, "USD", "2026-02-02T00:00:00.000Z");
     expect((await agencyBalance(agency.id))?.used).toBe(5_000);
     expect((await agencyBalance(agency.id))?.available).toBe(95_000);
   });
 
   it("returns everything when the cancellation was free", async () => {
     await commit("NZ-FREE-0001", 30_000);
-    await releaseBooking(agency.id, "NZ-FREE-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
+    await releaseBooking(agency.id, "agt_t", "NZ-FREE-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
     expect((await agencyBalance(agency.id))?.available).toBe(100_000);
   });
 
@@ -357,14 +357,14 @@ describe("credit after a cancellation", () => {
      */
     await commit("NZ-DUP-0001", 30_000);
     for (let i = 0; i < 4; i += 1) {
-      await releaseBooking(agency.id, "NZ-DUP-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
+      await releaseBooking(agency.id, "agt_t", "NZ-DUP-0001", 30_000, 0, "USD", "2026-02-02T00:00:00.000Z");
     }
     expect((await agencyBalance(agency.id))?.available).toBe(100_000);
   });
 
   it("keeps the credit committed when the fee swallowed the whole cost", async () => {
     await commit("NZ-NRF-0001", 30_000);
-    await releaseBooking(agency.id, "NZ-NRF-0001", 30_000, 30_000, "USD", "2026-02-02T00:00:00.000Z");
+    await releaseBooking(agency.id, "agt_t", "NZ-NRF-0001", 30_000, 30_000, "USD", "2026-02-02T00:00:00.000Z");
     // A non-refundable room that was cancelled anyway still has to be paid for.
     expect((await agencyBalance(agency.id))?.available).toBe(70_000);
   });

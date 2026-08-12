@@ -59,6 +59,7 @@ export async function reserveForHold(
     currency,
     kind: "hold",
     reference,
+    agentId: session.agentId,
     note: `Held · ${hotelName} · ${session.name}`,
   };
   await appendLedger(entry);
@@ -67,6 +68,14 @@ export async function reserveForHold(
 /** Give the reserved headroom back — on issue, on cancellation, on expiry. */
 export async function releaseHold(
   agencyId: string,
+  /**
+   * Whose pool the reservation came out of, so the same pool gets it back.
+   *
+   * Crediting the agency but not the sub-agent would leave a cancelled hold
+   * counted against their allocation forever, and the ledger would still add up
+   * — the shortfall would only ever show as a sub-agent who cannot book.
+   */
+  agentId: string | undefined,
   reference: string,
   cost: number,
   currency: string,
@@ -85,6 +94,7 @@ export async function releaseHold(
     currency,
     kind: "holdRelease",
     reference,
+    agentId,
     note,
   });
 }
@@ -103,7 +113,21 @@ export async function issueHold(
   booking: AgencyBooking,
   at: string,
 ): Promise<AgencyBooking> {
-  await releaseHold(booking.agencyId, booking.reference, booking.cost, booking.currency, at, "Issued");
+  /*
+   * Both movements are attributed to whoever made the booking, not to whoever
+   * is issuing it. The hold came out of their pool; releasing it to one account
+   * and charging another would hand the first free headroom and bill the second
+   * for a room they did not choose.
+   */
+  await releaseHold(
+    booking.agencyId,
+    booking.agentId,
+    booking.reference,
+    booking.cost,
+    booking.currency,
+    at,
+    "Issued",
+  );
 
   const chargeId = entryId(booking.reference, "booking");
   const existing = await listLedger(booking.agencyId, 500);
@@ -116,6 +140,7 @@ export async function issueHold(
       currency: booking.currency,
       kind: "booking",
       reference: booking.reference,
+      agentId: booking.agentId,
       note: `${booking.hotelName} · ${session.name}`,
     });
   }

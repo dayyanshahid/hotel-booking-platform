@@ -26,6 +26,7 @@ import { activeAgent } from "@/lib/agency/session";
 import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
 import { canHold, reserveForHold } from "@/lib/agency/holds";
 import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
+import { agentHeadroom } from "@/lib/agency/store";
 import { saveAgencyBooking } from "@/lib/agency/store";
 import { countryForOffer } from "@/lib/agency/context";
 import type { Booking, BookingGuest, Locale, RoomAllocation, ServiceEvent } from "@/lib/types";
@@ -300,9 +301,30 @@ export async function POST(req: Request) {
       session.price.currency,
       agent.agencyId,
       countryForOffer(offer),
+      agent.markup,
     );
     if (!agencyCommit) {
       return fail("policyRestriction", "agency.suspended", locale, { status: 403, action: "contactSupport" });
+    }
+    /*
+     * The agent's own allocation, checked before the agency's.
+     *
+     * Both refusals mean "not enough credit" and they send the agent to
+     * different people: the agency line is a conversation with us, a sub-agent's
+     * allocation is a conversation with their own manager. Told apart here
+     * because an agent who reads "your agency is out of credit" when their
+     * branch simply capped them at 2,000 will ring the wrong number.
+     */
+    const mine = await agentHeadroom(agent.agencyId, agent.agentId);
+    if (mine && agencyCommit.cost > mine.available) {
+      return fail("policyRestriction", "agency.allocationExceeded", locale, {
+        status: 402,
+        action: "contactSupport",
+        message:
+          locale === "ar"
+            ? "هذا الحجز يتجاوز حد الائتمان المخصص لحسابك. لم يُنشأ أي حجز."
+            : "This booking would exceed the credit allocated to your account. Nothing was booked.",
+      });
     }
     if (!(await hasHeadroom(agent.agencyId, agencyCommit.cost))) {
       return fail("policyRestriction", "agency.creditExceeded", locale, {

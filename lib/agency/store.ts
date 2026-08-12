@@ -1,6 +1,7 @@
 import "server-only";
 import { driver } from "../server/persistence";
 import { policyFrom } from "./pricing";
+import { chainOf, headroomFor } from "./subagents";
 import type {
   Agency,
   Agent,
@@ -282,6 +283,34 @@ export async function agencyBalance(agencyId: string): Promise<AgencyBalance | n
     heldAmount: Math.max(0, -heldNet),
     available: Math.max(0, agency.credit.limit - used),
   };
+}
+
+/**
+ * The most this account may commit right now, and why.
+ *
+ * Separate from {@link agencyBalance} because they answer different questions.
+ * The balance is what the agency has left; this is what *this person* has left,
+ * which for a sub-agent is the narrowest allocation anywhere above them. An
+ * account with no allocation in its chain is bounded only by the agency line
+ * and reports `null` rather than a number, so a caller cannot mistake "no
+ * personal cap" for "no headroom".
+ */
+export async function agentHeadroom(
+  agencyId: string,
+  agentId: string,
+): Promise<{ available: number; currency: string } | null> {
+  await loadAgencies();
+  const agency = state.agencies.find((a) => a.id === agencyId);
+  if (!agency) return null;
+  const agents = state.agents.filter((a) => a.agencyId === agencyId);
+  const self = agents.find((a) => a.id === agentId);
+  if (!self) return null;
+
+  const chain = chainOf(self, new Map(agents.map((a) => [a.id, a])));
+  const entries = state.ledger.filter((e) => e.agencyId === agencyId);
+  const available = headroomFor(chain, agents, entries, agency.credit.limit);
+  if (!Number.isFinite(available)) return null;
+  return { available, currency: agency.credit.currency };
 }
 
 /**

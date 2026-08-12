@@ -206,7 +206,7 @@ export async function cancelBooking({
       await saveAgencyBooking({ ...trade, cancellationUnconfirmedAt: now });
     } else {
       const retained = Math.round(trade.cost * (quote.fee / Math.max(1, booking.price.total)));
-      await releaseBooking(trade.agencyId, trade.reference, trade.cost, retained, trade.currency, now);
+      await releaseBooking(trade.agencyId, trade.agentId, trade.reference, trade.cost, retained, trade.currency, now);
       await saveAgencyBooking({
         ...trade,
         status: "cancelled",

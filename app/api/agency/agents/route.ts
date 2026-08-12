@@ -1,29 +1,105 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
-import { getAgentByEmail, listAgents, saveAgent } from "@/lib/agency/store";
+import { getAgency, getAgentByEmail, listAgents, saveAgent } from "@/lib/agency/store";
 import { readCapabilities } from "@/lib/agency/types";
-import type { Agent, AgentCapabilities, AgentPermission } from "@/lib/agency/types";
+import {
+  allocatableBy,
+  chainOf,
+  descendantsOf,
+  mayGrantCapabilities,
+  mayGrantPermission,
+  mayManage,
+} from "@/lib/agency/subagents";
+import type { Agent, AgentCapabilities, AgentPermission, MarkupRule } from "@/lib/agency/types";
+
+/**
+ * The people who work on an agency's account, and the people beneath them.
+ *
+ * An agency is not always one desk. A parent account creates sub-agents and
+ * hands each of them part of what it holds — some of the credit line, some of
+ * the rights, a margin to sell at — so almost everything here is a question
+ * about the grantor rather than about the account being created. Nobody hands
+ * down what they do not hold, and nobody allocates credit they were not given.
+ */
 
 /** Anything we do not recognise is the least a login can be given. */
 function readPermission(value: unknown): AgentPermission {
   return value === "viewOnly" || value === "booking" || value === "issue" ? value : "issue";
 }
 
-/** Staff on the account. Any agent can see the list; only an admin changes it. */
+/**
+ * A markup rule, or nothing.
+ *
+ * Nothing means "sell at the agency's own rates", which is not the same as a
+ * rule of zero — that would be an instruction to sell at cost.
+ */
+function readMarkup(value: unknown): MarkupRule | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Record<string, unknown>;
+  const mode = input.mode === "fixed" ? "fixed" : input.mode === "percent" ? "percent" : null;
+  if (!mode) return undefined;
+  const raw = typeof input.value === "number" ? input.value : Number(input.value);
+  if (!Number.isFinite(raw) || raw < 0) return undefined;
+  // A percent beyond this is a typo — 500% is not a margin, it is a missing
+  // decimal point — and it would quote a customer a price nobody could explain.
+  if (mode === "percent" && raw > 100) return undefined;
+  return { mode, value: Math.round(raw), currency: typeof input.currency === "string" ? input.currency : undefined };
+}
+
+/** An allocation in whole currency units, or nothing. Zero is a real answer. */
+function readAllocation(value: unknown): number | undefined {
+  const raw = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(raw) || raw < 0) return undefined;
+  return Math.round(raw);
+}
+
+/**
+ * The list, scoped to what the reader is entitled to see.
+ *
+ * An administrator runs the agency and sees all of it. Anyone else sees
+ * themselves and the people beneath them — a sub-agent has no business reading
+ * a peer's credit allocation, which is a commercial arrangement between that
+ * peer and their own manager.
+ */
 export async function GET(req: Request) {
   const locale = localeFrom(req);
   const session = await activeAgent();
   if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
-  return ok({ agents: await listAgents(session.agencyId) });
+
+  const agents = await listAgents(session.agencyId);
+  if (session.role === "admin") return ok({ agents });
+
+  const mine = new Set([session.agentId, ...descendantsOf(session.agentId, agents).map((a) => a.id)]);
+  return ok({ agents: agents.filter((a) => mine.has(a.id)) });
+}
+
+/**
+ * Everything a grant has to satisfy, gathered once.
+ *
+ * Both verbs ask the same questions in the same order, and asking them in two
+ * places is how the create path and the edit path drift apart until one of them
+ * lets something through.
+ */
+async function guard(
+  session: NonNullable<Awaited<ReturnType<typeof activeAgent>>>,
+): Promise<{ actor: Agent; agents: Agent[]; agencyLimit: number } | null> {
+  const [actor, agents, agency] = await Promise.all([
+    getAgentByEmail(session.email),
+    listAgents(session.agencyId),
+    getAgency(session.agencyId),
+  ]);
+  if (!actor || !agency) return null;
+  return { actor, agents, agencyLimit: agency.credit.limit };
 }
 
 export async function POST(req: Request) {
   const locale = localeFrom(req);
   const session = await activeAgent();
   if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
-  if (session.role !== "admin") {
-    return fail("policyRestriction", "agency.adminOnly", locale, { status: 403, action: "contactSupport" });
-  }
+
+  const context = await guard(session);
+  if (!context) return fail("validation", "error.notFound", locale, { status: 404 });
+  const { actor, agents, agencyLimit } = context;
 
   const body = await readJson<{
     email: string;
@@ -31,9 +107,73 @@ export async function POST(req: Request) {
     role?: Agent["role"];
     permission?: AgentPermission;
     capabilities?: Partial<AgentCapabilities>;
+    parentId?: string;
+    creditLimit?: number;
+    markup?: MarkupRule;
   }>(req);
   if (!body?.email || !isEmail(body.email) || !body.name?.trim()) {
     return fail("validation", "error.validation", locale, { status: 422, fields: { email: "invalid" } });
+  }
+
+  /*
+   * Who this account will answer to.
+   *
+   * An administrator may place somebody at the top of the agency or beneath a
+   * named parent. Anybody else is creating a sub-agent of their own, and saying
+   * so is not optional — an agent who could nominate someone else's parent
+   * could spend someone else's allocation.
+   */
+  const parentId = actor.role === "admin" ? body.parentId : actor.id;
+  const parent = parentId ? agents.find((a) => a.id === parentId) : undefined;
+  if (parentId && !parent) return fail("validation", "error.notFound", locale, { status: 404 });
+  if (!parent && actor.role !== "admin") {
+    return fail("policyRestriction", "agency.adminOnly", locale, { status: 403, action: "contactSupport" });
+  }
+  /*
+   * You cannot share a pool you were never given.
+   *
+   * An account with no allocation of its own is bounded by the agency line, so
+   * "from their pool" would quietly mean "from the agency's" — and a counter
+   * agent could create a sub-agent holding the whole credit line, which is the
+   * exact thing the administrator-only rule existed to prevent. An agency
+   * grants somebody an allocation first; that is what makes them a parent.
+   */
+  if (actor.role !== "admin" && actor.creditLimit === undefined) {
+    return fail("policyRestriction", "agency.noPoolToShare", locale, { status: 403, action: "contactSupport" });
+  }
+
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  const grantor = chainOf(parent ?? actor, byId);
+  const permission = readPermission(body.permission);
+  const capabilities = readCapabilities(body.capabilities);
+
+  if (!mayGrantPermission(grantor, permission)) {
+    return fail("policyRestriction", "agency.grantAboveSelf", locale, { status: 403, action: "contactSupport" });
+  }
+  if (capabilities && !mayGrantCapabilities(grantor, capabilities)) {
+    return fail("policyRestriction", "agency.grantAboveSelf", locale, { status: 403, action: "contactSupport" });
+  }
+
+  /*
+   * A sub-agent must be given a number.
+   *
+   * Left blank they would inherit the agency line, which is the one thing a
+   * parent handing out a slice of their own pool cannot have meant. Top-level
+   * accounts keep working exactly as they always have, with no allocation and
+   * no cap beyond the agency's.
+   */
+  const creditLimit = readAllocation(body.creditLimit);
+  if (parent) {
+    if (creditLimit === undefined) {
+      return fail("validation", "agency.allocationRequired", locale, { status: 422, fields: { creditLimit: "required" } });
+    }
+    const ceiling = allocatableBy(parent, agents, agencyLimit);
+    if (creditLimit > ceiling) {
+      return fail("policyRestriction", "agency.allocationTooLarge", locale, {
+        status: 422,
+        fields: { creditLimit: String(ceiling) },
+      });
+    }
   }
 
   // An email already on another agency cannot be re-used: one address, one
@@ -42,6 +182,9 @@ export async function POST(req: Request) {
   if (existing && existing.agencyId !== session.agencyId) {
     return fail("policyRestriction", "agency.emailTaken", locale, { status: 409, action: "contactSupport" });
   }
+  if (existing && !mayManage(actor, existing, agents)) {
+    return fail("policyRestriction", "agency.notYourSubAgent", locale, { status: 403, action: "contactSupport" });
+  }
 
   const agent: Agent = existing ?? {
     id: `agt_${Math.random().toString(36).slice(2, 10)}`,
@@ -49,56 +192,100 @@ export async function POST(req: Request) {
     email: body.email.trim().toLowerCase(),
     name: sanitize(body.name, 60),
     role: body.role === "admin" ? "admin" : "agent",
-    permission: readPermission(body.permission),
-    capabilities: readCapabilities(body.capabilities),
+    permission,
+    capabilities,
+    parentId: parent?.id,
+    creditLimit,
+    markup: readMarkup(body.markup),
     active: true,
     createdAt: new Date().toISOString(),
   };
   if (existing) {
     agent.name = sanitize(body.name, 60);
     agent.role = body.role === "admin" ? "admin" : "agent";
-    agent.permission = readPermission(body.permission);
-    agent.capabilities = { ...agent.capabilities, ...readCapabilities(body.capabilities) };
+    agent.permission = permission;
+    agent.capabilities = { ...agent.capabilities, ...capabilities };
+    if (parent) agent.parentId = parent.id;
+    if (creditLimit !== undefined) agent.creditLimit = creditLimit;
+    const markup = readMarkup(body.markup);
+    if (markup) agent.markup = markup;
     agent.active = true;
   }
   await saveAgent(agent);
   return ok({ agent });
 }
 
-/** Suspend or restore an agent. Their bookings stay; their access does not. */
+/** Suspend, restore, or change what somebody may do and spend. */
 export async function PATCH(req: Request) {
   const locale = localeFrom(req);
   const session = await activeAgent();
   if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
-  if (session.role !== "admin") {
-    return fail("policyRestriction", "agency.adminOnly", locale, { status: 403, action: "contactSupport" });
-  }
+
+  const context = await guard(session);
+  if (!context) return fail("validation", "error.notFound", locale, { status: 404 });
+  const { actor, agents, agencyLimit } = context;
 
   const body = await readJson<{
     agentId: string;
     active?: boolean;
     permission?: AgentPermission;
     capabilities?: Partial<AgentCapabilities>;
+    creditLimit?: number;
+    markup?: MarkupRule;
   }>(req);
   if (!body?.agentId) return fail("validation", "error.validation", locale, { status: 400 });
-  const agents = await listAgents(session.agencyId);
   const agent = agents.find((a) => a.id === body.agentId);
   if (!agent) return fail("validation", "error.notFound", locale, { status: 404 });
+  if (!mayManage(actor, agent, agents)) {
+    return fail("policyRestriction", "agency.notYourSubAgent", locale, { status: 403, action: "contactSupport" });
+  }
+
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  const grantor = chainOf(actor, byId);
+  const capabilities = readCapabilities(body.capabilities);
+  const markup = readMarkup(body.markup);
+  const creditLimit = readAllocation(body.creditLimit);
+
+  if (body.permission && !mayGrantPermission(grantor, readPermission(body.permission))) {
+    return fail("policyRestriction", "agency.grantAboveSelf", locale, { status: 403, action: "contactSupport" });
+  }
+  if (capabilities && !mayGrantCapabilities(grantor, capabilities)) {
+    return fail("policyRestriction", "agency.grantAboveSelf", locale, { status: 403, action: "contactSupport" });
+  }
+
+  if (creditLimit !== undefined && agent.parentId) {
+    /*
+     * Measured against the parent's pool with this account's own share taken
+     * out. Raising somebody from 1,000 to 2,000 is a 1,000 increase; measured
+     * against a pool that still counts their old 1,000 as promised, every
+     * increase would be refused as though it were being asked for twice.
+     */
+    const parent = agents.find((a) => a.id === agent.parentId);
+    const ceiling = parent ? allocatableBy(parent, agents, agencyLimit, agent.id) : agencyLimit;
+    if (creditLimit > ceiling) {
+      return fail("policyRestriction", "agency.allocationTooLarge", locale, {
+        status: 422,
+        fields: { creditLimit: String(ceiling) },
+      });
+    }
+  }
 
   /*
-   * A permission change on its own, without touching whether they are active.
+   * A change to what somebody may do, without touching whether they are active.
    *
-   * Raising or lowering what someone may do is the everyday action here —
+   * Raising or lowering what an account may do is the everyday action here —
    * suspending them is the rare one — and the two must not be the same request,
    * or demoting an agent would silently reactivate a suspended account.
    */
-  const capabilities = readCapabilities(body.capabilities);
-  if ((body.permission || capabilities) && body.active === undefined) {
+  const adjusts = body.permission || capabilities || markup || creditLimit !== undefined;
+  if (adjusts && body.active === undefined) {
     const updated: Agent = {
       ...agent,
       permission: body.permission ? readPermission(body.permission) : agent.permission,
       // Merged, not replaced: one switch at a time is how the screen sends it.
       capabilities: capabilities ? { ...agent.capabilities, ...capabilities } : agent.capabilities,
+      creditLimit: creditLimit === undefined ? agent.creditLimit : creditLimit,
+      markup: markup ?? agent.markup,
     };
     await saveAgent(updated);
     return ok({ agent: updated });

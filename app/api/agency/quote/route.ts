@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       // A genuinely expired offer is not a pricing failure; the caller sees
       // which ids came back and re-searches for the rest.
       if (!offer) return null;
-      return viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer));
+      return viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer), session.markup);
     }),
   );
   const quotes = priced.filter((quote) => quote !== null);

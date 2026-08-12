@@ -98,7 +98,7 @@ export async function POST(req: Request) {
     // promising a price we can no longer hold.
     if (!offer) continue;
 
-    const view = viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer));
+    const view = viewOffer(offerId, offer.price.total, offer.price.currency, agency, countryForOffer(offer), session.markup);
     const policy = offer.cancellation;
     items.push({
       id: `qi_${Math.random().toString(36).slice(2, 10)}`,

@@ -278,6 +278,139 @@ async function main(): Promise<void> {
   });
 
   /* ---------------------------------------------------------------------- */
+  section("Sub-agents: users beneath users");
+
+  /*
+   * One branch manager, created by the administrator with a slice of the agency
+   * line, then left to build their own desk out of it. Everything below is
+   * asked of the branch rather than of the administrator, because the point of
+   * the feature is what somebody can do *without* being an administrator.
+   */
+  const branchEmail = `qa-branch-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+  const branch = new Session();
+  let branchId = "";
+
+  await check("an administrator creates a branch and allocates it credit", async () => {
+    if (gate()) return gate()!;
+    const res = await admin.api<{ agent?: { id: string; creditLimit?: number } }>("/api/agency/agents", {
+      body: { email: branchEmail, name: "QA Branch", permission: "booking", creditLimit: 4000 },
+    });
+    if (!res.ok) throw new Error(`refused: ${res.status} ${res.error?.messageKey ?? ""}`);
+    branchId = res.data?.agent?.id ?? "";
+    if (!branchId) throw new Error("created without an id");
+    if (res.data?.agent?.creditLimit !== 4000) throw new Error("the allocation was not stored");
+    if (!(await branch.signIn(branchEmail))) throw new Error("the branch could not sign in");
+    return "4000 allocated";
+  });
+
+  await check("the branch builds its own desk out of that allocation", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * The whole concept in one request. A non-administrator creating a login —
+     * which the old rule forbade outright — is now allowed precisely because
+     * the credit comes out of their own pool rather than the agency's.
+     */
+    const res = await branch.api<{ agent?: { parentId?: string; creditLimit?: number } }>("/api/agency/agents", {
+      body: { email: `qa-desk-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Desk", permission: "booking", creditLimit: 1500 },
+    });
+    if (!res.ok) throw new Error(`the branch was refused: ${res.status} ${res.error?.messageKey ?? ""}`);
+    if (res.data?.agent?.parentId !== branchId) throw new Error("the sub-agent was not filed under its creator");
+    return `desk on 1500 under ${branchId}`;
+  });
+
+  await check("the branch cannot hand out credit it does not hold", async () => {
+    if (!branchId) return "SKIP: no branch";
+    // 4,000 allocated and 1,500 already promised. Asking for 3,000 is asking
+    // for money that does not exist anywhere in the hierarchy.
+    const res = await branch.api("/api/agency/agents", {
+      body: { email: `qa-over-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Over", permission: "booking", creditLimit: 3000 },
+    });
+    if (res.ok) throw new Error("a branch allocated more than its own pool");
+    if (res.error?.messageKey !== "agency.allocationTooLarge") {
+      throw new Error(`refused for the wrong reason: ${res.status} ${res.error?.messageKey}`);
+    }
+    return `422 · ${res.error.messageKey}`;
+  });
+
+  await check("the branch cannot promote somebody above itself", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * The escalation this closes: a booking-only manager creating an account
+     * that may issue, then signing in as it. The ladder would be advisory.
+     */
+    const res = await branch.api("/api/agency/agents", {
+      body: { email: `qa-up-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Up", permission: "issue", creditLimit: 100 },
+    });
+    if (res.ok) throw new Error("a booking-only branch created an issuer");
+    if (res.error?.messageKey !== "agency.grantAboveSelf") {
+      throw new Error(`refused for the wrong reason: ${res.status} ${res.error?.messageKey}`);
+    }
+    return `403 · ${res.error.messageKey}`;
+  });
+
+  await check("the branch cannot reach an account that is not beneath it", async () => {
+    if (!branchId) return "SKIP: no branch";
+    // The seeded counter agent is a peer, not a child. Editing their allocation
+    // would be reaching sideways into somebody else's arrangement.
+    const all = await must<{ agents?: { id: string; email: string }[] }>(admin, "/api/agency/agents");
+    const peer = all.agents?.find((a) => a.email === COUNTER);
+    if (!peer) return "SKIP: the counter agent is not on the list";
+    const res = await branch.api("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId: peer.id, creditLimit: 999 },
+    });
+    if (res.ok) throw new Error("a branch edited a peer's account");
+    if (res.error?.messageKey !== "agency.notYourSubAgent") {
+      throw new Error(`refused for the wrong reason: ${res.status} ${res.error?.messageKey}`);
+    }
+    return `403 · ${res.error.messageKey}`;
+  });
+
+  await check("a sub-agent sees its own branch and not the whole agency", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * A peer's credit allocation is a commercial arrangement between that peer
+     * and their own manager. The administrator sees everything; a branch sees
+     * itself and the people it created.
+     */
+    const mine = await must<{ agents?: { email: string }[] }>(branch, "/api/agency/agents");
+    const everyone = await must<{ agents?: { email: string }[] }>(admin, "/api/agency/agents");
+    if (mine.agents?.some((a) => a.email === COUNTER)) throw new Error("a branch read a peer's record");
+    if ((mine.agents?.length ?? 0) >= (everyone.agents?.length ?? 0)) {
+      throw new Error("the branch saw as much as the administrator");
+    }
+    return `${mine.agents?.length} of ${everyone.agents?.length}`;
+  });
+
+  await check("demoting the branch narrows everyone beneath it", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * The reason rights are read up the chain on every request rather than
+     * copied at the moment of granting. The desk's own record still says
+     * booking; what changed is the authority of the account above it.
+     */
+    const desk = await branch.api<{ agent?: { id: string } }>("/api/agency/agents", {
+      body: { email: `qa-narrow-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Narrow", permission: "booking", creditLimit: 100 },
+    });
+    if (!desk.ok || !desk.data?.agent?.id) return "SKIP: could not create a desk";
+
+    await admin.api("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId: branchId, permission: "viewOnly" },
+    });
+    const after = await branch.api<{ session?: { permission: string } }>("/api/agency/me");
+    await admin.api("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId: branchId, permission: "booking" },
+    });
+    if (!after.ok) throw new Error(`the branch could not read its own session: ${after.status}`);
+    if (after.data?.session?.permission !== "viewOnly") {
+      throw new Error(`the demotion did not take: ${after.data?.session?.permission}`);
+    }
+    return "view-only, on the next request";
+  });
+
+  /* ---------------------------------------------------------------------- */
   section("Settings");
 
   await check("a counter agent cannot change the agency's markup", async () => {

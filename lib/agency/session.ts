@@ -2,8 +2,9 @@ import "server-only";
 import { sessionCookiePolicy } from "@/lib/server/cookie-policy";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { canAtLeast, capabilitiesOf, permissionOf, type AgencySession, type AgentPermission } from "./types";
-import { getAgency, getAgentByEmail } from "./store";
+import { canAtLeast, type AgencySession, type AgentPermission } from "./types";
+import { chainOf, effectiveCapabilities, effectivePermission } from "./subagents";
+import { getAgency, getAgentByEmail, listAgents } from "./store";
 
 /**
  * Who is driving the portal.
@@ -119,6 +120,24 @@ export async function activeAgent(): Promise<AgencySession | null> {
   const [agent, agency] = await Promise.all([getAgentByEmail(session.email), getAgency(session.agencyId)]);
   if (!agent?.active || agent.agencyId !== session.agencyId) return null;
   if (!agency || agency.status !== "active") return null;
+
+  /*
+   * Rights are read up the chain, not off the row.
+   *
+   * A sub-agent's authority is the narrowest link above them. Demoting a branch
+   * manager to view-only has to stop the people working under that manager on
+   * their next request too — otherwise the demotion is undone by anybody who
+   * was already beneath them, and the account that was restricted keeps
+   * operating through somebody else's login.
+   */
+  const colleagues = await listAgents(session.agencyId);
+  const chain = chainOf(agent, new Map(colleagues.map((a) => [a.id, a])));
+  /*
+   * A suspended parent takes their children with them. The whole branch is
+   * their responsibility, and leaving it trading is the same hole as leaving
+   * their rights standing.
+   */
+  if (chain.some((link) => !link.active)) return null;
   /*
    * Permission comes from the stored account, never from the cookie.
    *
@@ -129,8 +148,9 @@ export async function activeAgent(): Promise<AgencySession | null> {
    */
   return {
     ...session,
-    permission: permissionOf(agent),
-    capabilities: capabilitiesOf(agent),
+    permission: effectivePermission(chain),
+    capabilities: effectiveCapabilities(chain),
+    markup: agent.markup,
     ops: isOpsEmail(session.email),
   };
 }

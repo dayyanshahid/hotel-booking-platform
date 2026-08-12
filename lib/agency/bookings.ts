@@ -1,7 +1,7 @@
 import "server-only";
 import { appendLedger, canCommit, getAgency, listLedger } from "./store";
 import { viewOffer } from "./rates";
-import type { AgencySession, LedgerEntry } from "./types";
+import type { AgencySession, LedgerEntry, MarkupRule } from "./types";
 
 /**
  * Booking on credit.
@@ -33,10 +33,19 @@ export async function priceForAgency(
   currency: string,
   agencyId: string,
   countryCode?: string,
+  /**
+   * The booking agent's own markup, when their parent set one.
+   *
+   * Passed in rather than looked up so the price committed to the ledger is
+   * built from the same rule the agent was quoted from. A booking that priced
+   * itself independently would eventually disagree with the quote the customer
+   * accepted.
+   */
+  sellerRule?: MarkupRule,
 ): Promise<AgencyCommit | null> {
   const agency = await getAgency(agencyId);
   if (!agency) return null;
-  const view = viewOffer("", publicPrice, currency, agency, countryCode);
+  const view = viewOffer("", publicPrice, currency, agency, countryCode, sellerRule);
   return {
     reference: "",
     publicPrice,
@@ -75,6 +84,7 @@ export async function commitBooking(
     currency: commit.currency,
     kind: "booking",
     reference: commit.reference,
+    agentId: session.agentId,
     note: `${hotelName} · ${session.name}`,
   };
   await appendLedger(entry);
@@ -89,6 +99,8 @@ export async function commitBooking(
  */
 export async function releaseBooking(
   agencyId: string,
+  /** The account whose allocation the charge came out of — see `releaseHold`. */
+  agentId: string | undefined,
   reference: string,
   cost: number,
   retained: number,
@@ -110,6 +122,7 @@ export async function releaseBooking(
     currency,
     kind: "cancellation",
     reference,
+    agentId,
     note: retained > 0 ? "Cancelled — supplier fee retained" : "Cancelled — full release",
   });
 }

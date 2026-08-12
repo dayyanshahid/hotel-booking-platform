@@ -107,7 +107,7 @@ describe("what a hold does to the credit line", () => {
   it("gives the headroom back when the hold lapses", async () => {
     __resetAgencies({ agencies: [AGENCY] });
     await reserveForHold(SESSION, "NZ-HOLD-2", 400, "USD", "Test Hotel", "2026-08-01T00:00:00.000Z");
-    await releaseHold("agc_t", "NZ-HOLD-2", 400, "USD", "2026-08-02T00:00:00.000Z", "expired");
+    await releaseHold("agc_t", "agt_t", "NZ-HOLD-2", 400, "USD", "2026-08-02T00:00:00.000Z", "expired");
 
     const balance = await agencyBalance("agc_t");
     expect(balance?.available).toBe(10000);

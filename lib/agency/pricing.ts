@@ -51,8 +51,18 @@ export function agencyOfferView(
   currency: string,
   policy: MarkupPolicy,
   countryCode?: string,
+  /**
+   * The selling agent's own rule, when their parent set one.
+   *
+   * Wins outright over both the agency default and any country override. That
+   * is not an oversight: a rule attached to a person is the most specific thing
+   * anybody has said about how this account should sell, and it was set
+   * deliberately by whoever is accountable for their margin. Blending it with a
+   * country rule would produce a number no one chose.
+   */
+  sellerRule?: MarkupRule,
 ): AgencyOfferView {
-  const sell = applyAgencyMarkup(cost, ruleFor(policy, countryCode));
+  const sell = applyAgencyMarkup(cost, sellerRule ?? ruleFor(policy, countryCode));
   return { offerId, cost, sell, margin: sell - cost, currency };
 }
 
