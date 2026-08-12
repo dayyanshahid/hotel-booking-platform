@@ -1,0 +1,26 @@
+# What never needs to leave this machine.
+#
+# `vercel deploy` uploads the working directory, not the git tree, so anything
+# gitignored still ships unless it is named here. That is how 234 MB of local
+# supplier cache ended up traced into every serverless function and pushed
+# fourteen of them past the size limit — a failure that says "function too
+# large" and gives no hint that the cause is a directory the deployment never
+# reads.
+#
+# `.data` is the local catalogue cache. On serverless the runtime writes to
+# /tmp/nazil/data instead (lib/server/runtime.ts), so this directory is dead
+# weight in a deployment. `data-seed` is the committed seed and is deliberately
+# traced in by next.config.ts — it must not be listed here.
+#
+# One caveat, learned the hard way: this is incompatible with
+# `vercel deploy --prebuilt`. A local `next build` prerenders pages, which
+# touches the store and leaves `.data/agencies.json` referenced in the build
+# output; shipping that output without the directory fails with a bare
+# `ENOENT ... /vercel/path0/.data/agencies.json` that names no cause. Deploy
+# with a remote build — there is no `.data` on the builder, so nothing looks
+# for it.
+.data
+
+# Local harness output and scratch.
+.next/cache
+*.log
