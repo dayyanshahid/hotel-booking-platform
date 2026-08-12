@@ -253,6 +253,32 @@ async function main(): Promise<void> {
     return "hold off, non-refundable intact";
   });
 
+  await check("a right and an unchanged access flag can travel together", async () => {
+    if (gate()) return gate()!;
+    /*
+     * What the screen actually sends, since the front end and the API do not
+     * deploy as one unit: the capability being changed, plus `active` restated
+     * as it already is. A route that read those two as an either/or would apply
+     * one and drop the other — which is how a version-behind deployment came to
+     * suspend an agent that a newer screen only meant to withhold a right from.
+     */
+    const email = `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const created = await admin.api<{ agent?: { id: string } }>("/api/agency/agents", {
+      body: { email, name: "QA Both", permission: "issue", capabilities: { hold: true, nonRefundable: true } },
+    });
+    const agentId = created.data?.agent?.id;
+    if (!agentId) throw new Error("the new agent came back without an id");
+
+    const patched = await admin.api<{ agent?: { active?: boolean; capabilities?: Record<string, boolean> } }>(
+      "/api/agency/agents",
+      { method: "PATCH", body: { agentId, active: true, capabilities: { hold: false } } },
+    );
+    if (!patched.ok) throw new Error(`refused: ${patched.status} ${patched.error?.messageKey ?? ""}`);
+    if (patched.data?.agent?.active !== true) throw new Error("restating active as true suspended the account");
+    if (patched.data?.agent?.capabilities?.hold !== false) throw new Error("the capability was dropped");
+    return "right withdrawn, access untouched";
+  });
+
   await check("withdrawing a right does not reactivate a suspended account", async () => {
     if (gate()) return gate()!;
     /*

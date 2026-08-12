@@ -271,32 +271,39 @@ export async function PATCH(req: Request) {
   }
 
   /*
-   * A change to what somebody may do, without touching whether they are active.
+   * Suspension and adjustment are independent, and a missing field means
+   * "leave it alone" for both.
    *
-   * Raising or lowering what an account may do is the everyday action here —
-   * suspending them is the rare one — and the two must not be the same request,
-   * or demoting an agent would silently reactivate a suspended account.
+   * This used to be an either/or: a body carrying any adjustment took one
+   * branch, and everything else fell through to `active: Boolean(body.active)`.
+   * That made an absent `active` mean *suspended*, so any request the first
+   * branch did not recognise silently locked the account out. It is the bug
+   * that made an older deployment suspend an agent when a newer screen sent it
+   * a capability change it had never heard of.
+   *
+   * Read separately, the two cannot collide, and a client may send both — which
+   * is what lets a screen say "change this right, leave their access as it is"
+   * in one request that no version of this route can misread.
    */
-  const adjusts = body.permission || capabilities || markup || creditLimit !== undefined;
-  if (adjusts && body.active === undefined) {
-    const updated: Agent = {
-      ...agent,
-      permission: body.permission ? readPermission(body.permission) : agent.permission,
-      // Merged, not replaced: one switch at a time is how the screen sends it.
-      capabilities: capabilities ? { ...agent.capabilities, ...capabilities } : agent.capabilities,
-      creditLimit: creditLimit === undefined ? agent.creditLimit : creditLimit,
-      markup: markup ?? agent.markup,
-    };
-    await saveAgent(updated);
-    return ok({ agent: updated });
-  }
+  const suspending = typeof body.active === "boolean" ? body.active : agent.active;
 
   // Removing the last admin would lock the agency out of its own settings.
-  const admins = agents.filter((a) => a.role === "admin" && a.active);
-  if (agent.role === "admin" && !body.active && admins.length <= 1) {
-    return fail("policyRestriction", "agency.lastAdmin", locale, { status: 409, action: "contactSupport" });
+  if (agent.role === "admin" && agent.active && !suspending) {
+    const admins = agents.filter((a) => a.role === "admin" && a.active);
+    if (admins.length <= 1) {
+      return fail("policyRestriction", "agency.lastAdmin", locale, { status: 409, action: "contactSupport" });
+    }
   }
 
-  await saveAgent({ ...agent, active: Boolean(body.active) });
-  return ok({ agent: { ...agent, active: Boolean(body.active) } });
+  const updated: Agent = {
+    ...agent,
+    permission: body.permission ? readPermission(body.permission) : agent.permission,
+    // Merged, not replaced: one switch at a time is how the screen sends it.
+    capabilities: capabilities ? { ...agent.capabilities, ...capabilities } : agent.capabilities,
+    creditLimit: creditLimit === undefined ? agent.creditLimit : creditLimit,
+    markup: markup ?? agent.markup,
+    active: suspending,
+  };
+  await saveAgent(updated);
+  return ok({ agent: updated });
 }

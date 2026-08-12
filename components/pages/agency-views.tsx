@@ -1018,7 +1018,7 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
    * takes effect on their very next request, not when their session expires.
    */
   async function setPermissionFor(agent: Agent, next: AgentPermission) {
-    await patch({ agentId: agent.id, permission: next });
+    await adjust(agent, { permission: next });
   }
 
   /**
@@ -1030,11 +1030,27 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
    * would resurrect whichever one another admin had just removed.
    */
   async function setCapability(agent: Agent, right: keyof AgentCapabilities, next: boolean) {
-    await patch({ agentId: agent.id, capabilities: { [right]: next } });
+    await adjust(agent, { capabilities: { [right]: next } });
   }
 
   async function toggle(agent: Agent) {
     await patch({ agentId: agent.id, active: !agent.active });
+  }
+
+  /**
+   * Change what an account may do, and say out loud that its access is to stay
+   * exactly as it is.
+   *
+   * Restating `active` looks redundant against the route in this repository,
+   * which leaves a field it was not sent alone. It is not redundant against a
+   * route that is a version behind. An older deployment read "no `active` in
+   * the body" as `Boolean(undefined)` — false — so a screen sending it a
+   * capability change it had never heard of suspended the agent instead. The
+   * front end and the API do not deploy as one unit, and this is what makes
+   * the older of the two harmless rather than dangerous.
+   */
+  async function adjust(agent: Agent, fields: Record<string, unknown>) {
+    await patch({ agentId: agent.id, active: agent.active, ...fields });
   }
 
   async function patch(body: Record<string, unknown>) {
@@ -1210,7 +1226,7 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
                     locale={locale}
                     ceiling={poolLeft(agent.id)}
                     onSave={async (patchBody) => {
-                      await patch({ agentId: agent.id, ...patchBody });
+                      await adjust(agent, patchBody);
                       setEditing(null);
                     }}
                   />
