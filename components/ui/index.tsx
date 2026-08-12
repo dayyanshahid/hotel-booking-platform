@@ -8,6 +8,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
+  type Ref,
   type SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
@@ -411,7 +412,15 @@ export function Input({
   error,
   className,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  error?: boolean;
+  /**
+   * Forwarded to the element. React 19 passes `ref` through as an ordinary
+   * prop, but only if the type admits it — without this a caller wanting to
+   * focus a field has to reach for `document.getElementById`.
+   */
+  ref?: Ref<HTMLInputElement>;
+}) {
   return (
     <input
       {...props}

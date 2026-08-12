@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { useResource } from "@/components/providers/use-resource";
 import { PortalShell } from "@/components/agency/portal-shell";
@@ -13,6 +13,7 @@ import { arrivalBucket, bookingTotals } from "@/lib/agency/book";
 import { hoursLeftOnHold, isHoldUrgent } from "@/lib/agency/hold-policy";
 import { DataTable, LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
 import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/branding";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
@@ -52,6 +53,11 @@ function permissionLabel(t: (key: string) => string, permission: AgentPermission
  * Same two steps as the consumer flow — address, then a code — because an
  * agency counter is a shared machine and a password on a shared machine is a
  * password on a sticky note.
+ *
+ * Laid out as a canvas and a form rather than a card floating on a tinted
+ * page. This is the one screen a prospective agency sees before they have an
+ * account, and the one their staff open every morning: it should say what is
+ * behind the door, and then get out of the way of the two fields that open it.
  */
 export function AgencySignInView({ locale }: { locale: Locale }) {
   const { t } = useApp();
@@ -61,6 +67,26 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
   const [hint, setHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Seconds until another code may be asked for. Zero means "ask away". */
+  const [cooldown, setCooldown] = useState(0);
+  const codeRef = useRef<HTMLInputElement>(null);
+
+  /*
+   * The code field takes focus the moment it exists.
+   *
+   * An agent signing in every morning should be able to type their address,
+   * press Enter, and type the code without touching the mouse. Landing on the
+   * step with nothing focused breaks that halfway through.
+   */
+  useEffect(() => {
+    if (stage === "code") codeRef.current?.focus();
+  }, [stage]);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((left) => left - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   async function send() {
     setBusy(true);
@@ -93,6 +119,7 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
       return;
     }
     setStage("code");
+    setCooldown(30);
     // Demo environment only — the endpoint returns the code so the flow can be
     // walked without a mailbox. A real deployment sends it and returns nothing.
     setHint(body.data?.demoCode ?? null);
@@ -117,61 +144,227 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
     window.location.assign(href(locale, "/agency"));
   }
 
+  /** Back to the first step with the address intact, for a typo in it. */
+  function changeEmail() {
+    setStage("email");
+    setCode("");
+    setHint(null);
+    setError(null);
+  }
+
   return (
-    <div className="mx-auto max-w-md space-y-5 py-8">
-      <div className="space-y-2 text-center">
-        <Wordmark />
-        <h1 className="text-xl font-bold">{t("agency.signIn")}</h1>
-        <p className="text-muted text-sm">{t("agency.signInBody")}</p>
+    /*
+     * A contained sheet rather than a full-bleed split.
+     *
+     * The layout above caps every page at a reading measure, and fighting that
+     * with negative margins gives an edge-to-edge panel on one screen and a
+     * lopsided one on the next. Bounded, the split reads as a deliberate object
+     * on the page instead of a layout that escaped.
+     */
+    <div className="mx-auto w-full max-w-5xl py-2 sm:py-6">
+      <div className="surface hairline grid overflow-hidden rounded-[var(--radius-sheet)] border shadow-[var(--shadow-card)] lg:min-h-[34rem] lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)]">
+        <SignInCanvas />
+
+        {/*
+          No card around the form. The split is already the separation, and a
+          second outline inside it would be a box drawn on a box — costing the
+          two fields the room they have to breathe in.
+        */}
+        <div className="flex items-center justify-center px-5 py-10 sm:px-10 sm:py-12">
+          <div className="w-full max-w-sm space-y-6">
+            <div className="space-y-2 lg:hidden">
+              <Wordmark />
+            </div>
+
+            <div className="space-y-1.5">
+              <h1 className="text-2xl font-bold">{t("agency.signIn")}</h1>
+              <p className="text-muted text-sm leading-relaxed">{t("agency.signInBody")}</p>
+            </div>
+
+            {error && <Alert tone="critical">{error}</Alert>}
+
+            {/*
+              A real form, so Enter submits.
+              Everybody types their address and hits Enter. Without this the key
+              did nothing at all, on the one screen where reaching for the mouse
+              is most obviously a waste of a keystroke.
+            */}
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (busy) return;
+                if (stage === "email") {
+                  if (email) void send();
+                } else if (code) {
+                  void verify();
+                }
+              }}
+            >
+              {stage === "email" ? (
+                <>
+                  <Field label={t("agency.workEmail")} htmlFor="agency-email">
+                    <Input
+                      id="agency-email"
+                      type="email"
+                      autoComplete="email"
+                      autoFocus
+                      placeholder="you@agency.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </Field>
+                  <Button type="submit" loading={busy} disabled={!email} className="w-full">
+                    {t("agency.sendCode")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/*
+                    The address as a fact you can correct, not a greyed-out box.
+                    A disabled field says "this is over"; the commonest reason to
+                    look at it here is having mistyped it.
+                  */}
+                  <div className="surface hairline flex items-center justify-between gap-3 rounded-[var(--radius-control)] border px-3.5 py-2.5">
+                    <span className="min-w-0 truncate text-sm">{email}</span>
+                    <button
+                      type="button"
+                      onClick={changeEmail}
+                      className="text-brand-600 shrink-0 text-sm font-medium underline underline-offset-2"
+                    >
+                      {t("agency.changeEmail")}
+                    </button>
+                  </div>
+
+                  <p className="text-muted text-sm">{t("agency.codeSent")}</p>
+
+                  <Field label={t("agency.code")} htmlFor="agency-code">
+                    <Input
+                      id="agency-code"
+                      ref={codeRef}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      className="text-center font-mono text-lg tracking-[0.4em]"
+                    />
+                  </Field>
+
+                  {/*
+                    A demo affordance, dressed as one.
+                    It used to be an info alert, which is the same shape this app
+                    uses to tell an agent something has gone wrong with a rate.
+                    Nothing here is wrong: this deployment has no mailbox, so it
+                    hands the code over and offers to type it for you.
+                  */}
+                  {hint && (
+                    <div className="surface-sunken flex items-center justify-between gap-3 rounded-[var(--radius-control)] px-3.5 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-muted text-[11px] font-medium tracking-wide uppercase">
+                          {t("agency.demoCodeLabel")}
+                        </p>
+                        <p className="font-mono text-sm tracking-[0.2em]">{hint}</p>
+                      </div>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => setCode(hint)}>
+                        {t("agency.useCode")}
+                      </Button>
+                    </div>
+                  )}
+
+                  <Button type="submit" loading={busy} disabled={!code} className="w-full">
+                    {t("agency.verify")}
+                  </Button>
+
+                  {/*
+                    A code that never arrives is otherwise a dead end — the only
+                    way out is a reload, which loses the address as well.
+                  */}
+                  <p className="text-muted text-center text-sm">
+                    {cooldown > 0 ? (
+                      t("agency.resendIn", { seconds: cooldown })
+                    ) : (
+                      <button type="button" onClick={() => void send()} className="underline underline-offset-2">
+                        {t("agency.resendCode")}
+                      </button>
+                    )}
+                  </p>
+                </>
+              )}
+            </form>
+
+            <div className="hairline border-t pt-5">
+              <Link href={href(locale, "/")} className="text-muted text-sm underline underline-offset-2">
+                {t("agency.notAgent")}
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The half of the screen that is not a form.
+ *
+ * Deliberately dark, and deliberately the only dark surface in the app. The
+ * chrome band was taken off every other page because a dark strip across the
+ * top is what dates a design; a full canvas behind a sign-in is a different
+ * object, and it is the one moment where the brand should be the loudest thing
+ * on screen rather than a wordmark in the corner.
+ *
+ * What it says is three things the portal actually does, not adjectives. An
+ * agency deciding whether to open an account, and a new starter on their first
+ * morning, are both better served by "hold a room before you commit" than by
+ * anything with the word "seamless" in it.
+ */
+function SignInCanvas() {
+  const { t } = useApp();
+  const points: { icon: IconName; text: string }[] = [
+    { icon: "tag", text: t("agency.pitchRates") },
+    { icon: "card", text: t("agency.pitchCredit") },
+    { icon: "clock", text: t("agency.pitchHold") },
+  ];
+
+  return (
+    <div className="text-ink-100 bg-ink-950 relative hidden flex-col justify-between overflow-hidden p-10 lg:flex xl:p-14">
+      {/*
+        One warm bloom off the leading edge, keyed to the brand.
+
+        Flat ink behind white type is a slab; this gives the panel a light
+        source for the price of a gradient. Drawn as its own element rather
+        than a background on the panel because a gradient position is physical
+        — `at 0% 0%` is the top *left* whatever the writing direction — and in
+        Arabic that put the light on the far side from the wordmark it is meant
+        to be lifting. Logical inset properties flip; gradient stops do not.
+      */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-0 start-0 size-[36rem] -translate-x-1/2 -translate-y-1/2 rtl:translate-x-1/2"
+        style={{
+          background:
+            "radial-gradient(closest-side, rgb(242 98 27 / 0.30) 0%, rgb(242 98 27 / 0.10) 45%, transparent 75%)",
+        }}
+      />
+
+      <Wordmark tone="inverse" showSince className="relative" />
+
+      <div className="relative max-w-md space-y-8 py-10">
+        <h2 className="text-3xl font-bold leading-tight xl:text-4xl">{t("agency.pitchTitle")}</h2>
+        <ul className="space-y-4">
+          {points.map((point) => (
+            <li key={point.icon} className="flex items-start gap-3">
+              <span className="bg-brand-500/15 text-brand-300 mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--radius-control)]">
+                <Icon name={point.icon} size={16} />
+              </span>
+              <span className="text-ink-200 text-[15px] leading-relaxed">{point.text}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
-      <Card className="space-y-4 p-5">
-        {error && <Alert tone="critical">{error}</Alert>}
-
-        <Field label={t("agency.workEmail")} htmlFor="agency-email">
-          <Input
-            id="agency-email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={stage === "code"}
-          />
-        </Field>
-
-        {stage === "email" ? (
-          <Button onClick={send} loading={busy} disabled={!email} className="w-full">
-            {t("agency.sendCode")}
-          </Button>
-        ) : (
-          <>
-            <p className="text-muted text-sm">{t("agency.codeSent")}</p>
-            {hint && (
-              <Alert tone="info">
-                <span className="font-mono text-sm">{hint}</span>
-              </Alert>
-            )}
-            <Field label={t("agency.code")} htmlFor="agency-code">
-              <Input
-                id="agency-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-            </Field>
-            <Button onClick={verify} loading={busy} disabled={!code} className="w-full">
-              {t("agency.verify")}
-            </Button>
-          </>
-        )}
-      </Card>
-
-      <p className="text-center text-sm">
-        <Link href={href(locale, "/")} className="underline">
-          {t("agency.notAgent")}
-        </Link>
-      </p>
+      <p className="text-ink-400 relative text-xs">{t("agency.pitchFoot")}</p>
     </div>
   );
 }
