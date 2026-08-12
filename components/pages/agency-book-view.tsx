@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import { may, refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
+import { can, may, refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
 import { canHold } from "@/lib/agency/hold-policy";
 import { Alert, Button, Card, Checkbox, Field, Input, SectionHeading, Skeleton } from "@/components/ui";
 import { formatDate, formatDeadline, formatMoney } from "@/lib/format";
@@ -323,10 +323,22 @@ function TradeCheckout({
    */
   const holdable =
     may(context, "booking") &&
+    can(context, "hold") &&
     canHold({
       refundable: session.cancellation.refundable,
       freeCancellationUntil: session.cancellation.freeUntil,
     }).ok;
+
+  /*
+   * Said out loud rather than left as a dead button.
+   *
+   * The rate is fine and the credit is there; the account is not allowed to
+   * commit to something that cannot be handed back. A Confirm that greys out
+   * with the rest of the form reads as "something is wrong with this booking",
+   * and sends an agent looking for the fault in the wrong place.
+   */
+  const nonRefundableBlocked =
+    Boolean(context) && !session.cancellation.refundable && !can(context, "nonRefundable");
 
   async function book(asHold = false) {
     if (!session || session === "gone") return;
@@ -605,6 +617,7 @@ function TradeCheckout({
             )}
 
             {!affordable && <Alert tone="critical">{t("agency.creditExceeded")}</Alert>}
+            {nonRefundableBlocked && <Alert tone="critical">{t("agency.nonRefundableNotPermitted")}</Alert>}
             {error && <Alert tone="critical">{error}</Alert>}
 
             <Button
@@ -617,6 +630,7 @@ function TradeCheckout({
                 // A property cannot check in a guest we never named.
                 others.some((guest) => !guest.firstName.trim()) ||
                 !affordable ||
+                nonRefundableBlocked ||
                 rechecking ||
                 // A rate that has moved or vanished cannot be sold until the
                 // agent has dealt with it.

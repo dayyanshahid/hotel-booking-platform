@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { canAtLeast } from "@/lib/agency/types";
+import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import type {
   Agency,
   AgencyBalance,
   AgencyOfferView,
   AgencySession,
+  AgentCapabilities,
   AgentPermission,
 } from "@/lib/agency/types";
 
@@ -39,6 +40,19 @@ export interface AgencyContext {
 export function may(context: AgencyContext | null, required: AgentPermission): boolean {
   if (!context) return false;
   return canAtLeast(context.session.permission ?? "issue", required);
+}
+
+/**
+ * The rights that are not rungs on the same ladder.
+ *
+ * Same contract as {@link may} and the same disclaimer: the server refuses
+ * regardless. Resolved through {@link capabilitiesOf} rather than read off the
+ * session directly, so the screen and the route cannot disagree about what an
+ * older account without the field is allowed to do.
+ */
+export function can(context: AgencyContext | null, right: keyof AgentCapabilities): boolean {
+  if (!context) return false;
+  return capabilitiesOf(context.session)[right];
 }
 
 /**

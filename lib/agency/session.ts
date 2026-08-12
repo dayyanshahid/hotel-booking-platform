@@ -2,7 +2,7 @@ import "server-only";
 import { sessionCookiePolicy } from "@/lib/server/cookie-policy";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { canAtLeast, permissionOf, type AgencySession, type AgentPermission } from "./types";
+import { canAtLeast, capabilitiesOf, permissionOf, type AgencySession, type AgentPermission } from "./types";
 import { getAgency, getAgentByEmail } from "./store";
 
 /**
@@ -127,7 +127,12 @@ export async function activeAgent(): Promise<AgencySession | null> {
    * view-only has to stop the next request, not wait for a twelve-hour session
    * to expire. The same reasoning already applied to the operator allowlist.
    */
-  return { ...session, permission: permissionOf(agent), ops: isOpsEmail(session.email) };
+  return {
+    ...session,
+    permission: permissionOf(agent),
+    capabilities: capabilitiesOf(agent),
+    ops: isOpsEmail(session.email),
+  };
 }
 
 /**

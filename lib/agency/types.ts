@@ -65,6 +65,11 @@ export interface Agent {
    * existed, which {@link permissionOf} resolves from the role.
    */
   permission?: AgentPermission;
+  /**
+   * Rights that sit beside the ladder rather than on it. Absent means "as
+   * before" — see {@link capabilitiesOf}.
+   */
+  capabilities?: Partial<AgentCapabilities>;
   /** Suspended agents keep their bookings but cannot sign in or book. */
   active: boolean;
   createdAt: string;
@@ -80,6 +85,69 @@ export interface Agent {
  */
 export function permissionOf(agent: Pick<Agent, "role" | "permission">): AgentPermission {
   return agent.permission ?? "issue";
+}
+
+/**
+ * Rights that are not steps on the ladder.
+ *
+ * `viewOnly < booking < issue` answers "how far up the chain is this account",
+ * which is the right question for most things and the wrong shape for these
+ * two. An agency may trust a counter agent to reserve a room and not to commit
+ * money that cannot be recovered; it may trust a senior agent to issue and
+ * still want non-refundable inventory going through one person. A ladder
+ * cannot say either of those — every rung implies the ones below it — so these
+ * ride alongside it rather than inside it.
+ *
+ * Both are risks rather than tasks, which is why they are the two that got
+ * separated out. A hold is a real supplier booking that somebody has to
+ * remember to issue or cancel; non-refundable is money the agency cannot get
+ * back if the customer changes their mind.
+ */
+export interface AgentCapabilities {
+  /** May reserve a room without committing to it. */
+  hold: boolean;
+  /** May book or issue inventory that cannot be cancelled. */
+  nonRefundable: boolean;
+}
+
+/**
+ * What an account may actually do, stored value first.
+ *
+ * Absent means "as before". An account that could already book could already
+ * book a non-refundable rate and could already hold one, so silence resolves
+ * to permissive for anyone at booking level or above — migrating an existing
+ * agent *down* would quietly remove something their agency relies on, which is
+ * the same reasoning `permissionOf` uses for the ladder itself.
+ *
+ * A view-only account gets neither, because it cannot book at all; granting it
+ * a booking right would be a contradiction the UI would then have to explain.
+ */
+/**
+ * A capability record as it arrives from a request, or nothing.
+ *
+ * Deliberately partial. A screen that flips one switch sends one key, and
+ * coercing the absent one to `false` would have a hold being withdrawn every
+ * time somebody changed a different setting. Absence means "leave it alone"
+ * here and "as before" in {@link capabilitiesOf}; nothing else reads it.
+ */
+export function readCapabilities(value: unknown): Partial<AgentCapabilities> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Record<string, unknown>;
+  const next: Partial<AgentCapabilities> = {};
+  if (typeof input.hold === "boolean") next.hold = input.hold;
+  if (typeof input.nonRefundable === "boolean") next.nonRefundable = input.nonRefundable;
+  return Object.keys(next).length ? next : undefined;
+}
+
+export function capabilitiesOf(
+  agent: Pick<Agent, "role" | "permission" | "capabilities">,
+): AgentCapabilities {
+  const canBook = canAtLeast(permissionOf(agent), "booking");
+  if (!canBook) return { hold: false, nonRefundable: false };
+  return {
+    hold: agent.capabilities?.hold ?? true,
+    nonRefundable: agent.capabilities?.nonRefundable ?? true,
+  };
 }
 
 /**
@@ -264,6 +332,11 @@ export interface AgencySession {
    * cookie: a demotion has to bite immediately.
    */
   permission?: AgentPermission;
+  /**
+   * Resolved the same way and for the same reason. Withdrawing the right to
+   * hold or to sell non-refundable stock is a demotion by another name.
+   */
+  capabilities?: AgentCapabilities;
   agencyName: string;
   /**
    * Our own staff, identified by an allowlist rather than a row anyone can

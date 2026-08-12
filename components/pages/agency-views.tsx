@@ -6,7 +6,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { useResource } from "@/components/providers/use-resource";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { refreshAgency, type AgencyContext } from "@/components/agency/use-agency";
-import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, cx } from "@/components/ui";
+import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Select, Toggle, cx } from "@/components/ui";
 import { arrivalBucket, bookingTotals } from "@/lib/agency/book";
 // From the policy module, not `holds.ts`: that one is server-only and
 // importing it here would throw the moment this component hydrated.
@@ -17,8 +17,10 @@ import { DocumentBrand, DocumentFooter } from "@/components/agency/document-bran
 import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/branding";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
+import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
 import type {
   Agent,
+  AgentCapabilities,
   AgentPermission,
   AgencyBooking,
   AgencyProfile,
@@ -717,6 +719,8 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Agent["role"]>("agent");
   const [permission, setPermission] = useState<AgentPermission>("issue");
+  const [mayHold, setMayHold] = useState(true);
+  const [mayNonRefundable, setMayNonRefundable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const isAdmin = context.session.role === "admin";
@@ -736,7 +740,13 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     const body = await apiFetch<unknown>("/api/agency/agents", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, email, role, permission }),
+      body: JSON.stringify({
+        name,
+        email,
+        role,
+        permission,
+        capabilities: { hold: mayHold, nonRefundable: mayNonRefundable },
+      }),
     });
     setBusy(false);
     if (!body.ok) {
@@ -745,6 +755,8 @@ function TeamPanel({ context }: { context: AgencyContext }) {
     }
     setName("");
     setEmail("");
+    setMayHold(true);
+    setMayNonRefundable(true);
     await reload();
   }
 
@@ -760,6 +772,24 @@ function TeamPanel({ context }: { context: AgencyContext }) {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ agentId: agent.id, permission: next }),
+    });
+    if (!body.ok) setError(body.error?.message ?? t("error.validation"));
+    await reload();
+  }
+
+  /**
+   * A right withdrawn without touching the rest of the account.
+   *
+   * Sent as a partial, one switch at a time, so flipping "may hold" cannot
+   * silently rewrite whether the same person may sell non-refundable stock —
+   * the two are separate grants and a screen that posts both on every change
+   * would resurrect whichever one another admin had just removed.
+   */
+  async function setCapability(agent: Agent, right: keyof AgentCapabilities, next: boolean) {
+    const body = await apiFetch<unknown>("/api/agency/agents", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agentId: agent.id, capabilities: { [right]: next } }),
     });
     if (!body.ok) setError(body.error?.message ?? t("error.validation"));
     await reload();
@@ -790,39 +820,98 @@ function TeamPanel({ context }: { context: AgencyContext }) {
       {team.failed && <LoadFailed title={t("agency.teamUnavailable")} onRetry={team.reload} />}
       {agents && (
         <Card className="divide-ink-100 divide-y">
-          {agents.map((agent) => (
-            <div key={agent.id} className="flex flex-wrap items-center justify-between gap-2 p-3.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
-                <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
+          {agents.map((agent) => {
+            const rights = capabilitiesOf(agent);
+            const canBook = canAtLeast(agent.permission ?? "issue", "booking");
+            const editable = isAdmin && agent.id !== context.session.agentId;
+            /*
+             * Nothing to offer on an account that cannot book at all.
+             *
+             * A view-only agent's hold switch would be a control that cannot
+             * take effect, and the honest place to change that is the
+             * permission beside it — so the row says what it can do and stops.
+             */
+            const editableRights = editable && canBook;
+            return (
+              <div
+                key={agent.id}
+                className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 p-3.5"
+              >
+                <div className="min-w-0 space-y-1.5">
+                  <div>
+                    <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
+                    <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
+                  </div>
+
+                  {/*
+                    Kept in the same column as the name, not on a strip of its
+                    own beneath the row. These are facts about a person, and
+                    read as a caption under their name in a way a full-width
+                    band floating between two people does not.
+                  */}
+                  {editableRights ? (
+                    <div className="-mb-1.5 flex flex-wrap items-center gap-x-5">
+                      <Toggle
+                        checked={rights.hold}
+                        onChange={(next) => setCapability(agent, "hold", next)}
+                        label={t("agency.mayHold")}
+                      />
+                      <Toggle
+                        checked={rights.nonRefundable}
+                        onChange={(next) => setCapability(agent, "nonRefundable", next)}
+                        label={t("agency.mayBookNonRefundable")}
+                      />
+                    </div>
+                  ) : (
+                    /*
+                     * Withheld rights are still stated on a row nobody can
+                     * edit — an agent reading their own line needs to know why
+                     * the hold button is missing, and no switches at all would
+                     * read as no rule at all.
+                     */
+                    canBook &&
+                    (!rights.hold || !rights.nonRefundable) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {!rights.hold && <Badge tone="neutral">{t("agency.mayNotHold")}</Badge>}
+                        {!rights.nonRefundable && (
+                          <Badge tone="neutral">{t("agency.mayNotBookNonRefundable")}</Badge>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
+                    {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
+                  </Badge>
+                  {editable ? (
+                    <Select
+                      aria-label={t("agency.permission")}
+                      // Both bangs earn their keep: `CONTROL` sets `w-full` and
+                      // `min-h-11`, and a plain `w-auto` loses to it on
+                      // stylesheet order, which stacked the row into three lines.
+                      className="!min-h-9 !w-auto"
+                      value={agent.permission ?? "issue"}
+                      onChange={(e) => setPermissionFor(agent, e.target.value as AgentPermission)}
+                    >
+                      <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
+                      <option value="booking">{t("agency.permissionBooking")}</option>
+                      <option value="issue">{t("agency.permissionIssue")}</option>
+                    </Select>
+                  ) : (
+                    <Badge tone="neutral">{permissionLabel(t, agent.permission ?? "issue")}</Badge>
+                  )}
+                  {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
+                  {editable && (
+                    <Button variant="ghost" size="sm" onClick={() => toggle(agent)}>
+                      {agent.active ? t("agency.suspend") : t("agency.restore")}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
-                  {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
-                </Badge>
-                {isAdmin && agent.id !== context.session.agentId ? (
-                  <Select
-                    aria-label={t("agency.permission")}
-                    className="!min-h-9 w-auto"
-                    value={agent.permission ?? "issue"}
-                    onChange={(e) => setPermissionFor(agent, e.target.value as AgentPermission)}
-                  >
-                    <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
-                    <option value="booking">{t("agency.permissionBooking")}</option>
-                    <option value="issue">{t("agency.permissionIssue")}</option>
-                  </Select>
-                ) : (
-                  <Badge tone="neutral">{permissionLabel(t, agent.permission ?? "issue")}</Badge>
-                )}
-                {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
-                {isAdmin && agent.id !== context.session.agentId && (
-                  <Button variant="ghost" size="sm" onClick={() => toggle(agent)}>
-                    {agent.active ? t("agency.suspend") : t("agency.restore")}
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       )}
 
@@ -864,6 +953,22 @@ function TeamPanel({ context }: { context: AgencyContext }) {
               </Select>
             </Field>
           </div>
+          {/*
+            Set at the point the account is created, not afterwards.
+            Leaving both on and expecting an administrator to come back and
+            withdraw one means the new starter has the wider rights for however
+            long that takes, which is the window that matters.
+          */}
+          {canAtLeast(permission, "booking") && (
+            <div className="border-ink-100 flex flex-wrap items-center gap-x-5 border-t pt-2">
+              <Toggle checked={mayHold} onChange={setMayHold} label={t("agency.mayHold")} />
+              <Toggle
+                checked={mayNonRefundable}
+                onChange={setMayNonRefundable}
+                label={t("agency.mayBookNonRefundable")}
+              />
+            </div>
+          )}
           <Button onClick={invite} loading={busy} disabled={!name || !email}>
             {t("agency.invite")}
           </Button>

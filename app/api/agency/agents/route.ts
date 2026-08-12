@@ -1,7 +1,8 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import { getAgentByEmail, listAgents, saveAgent } from "@/lib/agency/store";
-import type { Agent, AgentPermission } from "@/lib/agency/types";
+import { readCapabilities } from "@/lib/agency/types";
+import type { Agent, AgentCapabilities, AgentPermission } from "@/lib/agency/types";
 
 /** Anything we do not recognise is the least a login can be given. */
 function readPermission(value: unknown): AgentPermission {
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
     name: string;
     role?: Agent["role"];
     permission?: AgentPermission;
+    capabilities?: Partial<AgentCapabilities>;
   }>(req);
   if (!body?.email || !isEmail(body.email) || !body.name?.trim()) {
     return fail("validation", "error.validation", locale, { status: 422, fields: { email: "invalid" } });
@@ -48,6 +50,7 @@ export async function POST(req: Request) {
     name: sanitize(body.name, 60),
     role: body.role === "admin" ? "admin" : "agent",
     permission: readPermission(body.permission),
+    capabilities: readCapabilities(body.capabilities),
     active: true,
     createdAt: new Date().toISOString(),
   };
@@ -55,6 +58,7 @@ export async function POST(req: Request) {
     agent.name = sanitize(body.name, 60);
     agent.role = body.role === "admin" ? "admin" : "agent";
     agent.permission = readPermission(body.permission);
+    agent.capabilities = { ...agent.capabilities, ...readCapabilities(body.capabilities) };
     agent.active = true;
   }
   await saveAgent(agent);
@@ -70,7 +74,12 @@ export async function PATCH(req: Request) {
     return fail("policyRestriction", "agency.adminOnly", locale, { status: 403, action: "contactSupport" });
   }
 
-  const body = await readJson<{ agentId: string; active?: boolean; permission?: AgentPermission }>(req);
+  const body = await readJson<{
+    agentId: string;
+    active?: boolean;
+    permission?: AgentPermission;
+    capabilities?: Partial<AgentCapabilities>;
+  }>(req);
   if (!body?.agentId) return fail("validation", "error.validation", locale, { status: 400 });
   const agents = await listAgents(session.agencyId);
   const agent = agents.find((a) => a.id === body.agentId);
@@ -83,8 +92,14 @@ export async function PATCH(req: Request) {
    * suspending them is the rare one — and the two must not be the same request,
    * or demoting an agent would silently reactivate a suspended account.
    */
-  if (body.permission && body.active === undefined) {
-    const updated = { ...agent, permission: readPermission(body.permission) };
+  const capabilities = readCapabilities(body.capabilities);
+  if ((body.permission || capabilities) && body.active === undefined) {
+    const updated: Agent = {
+      ...agent,
+      permission: body.permission ? readPermission(body.permission) : agent.permission,
+      // Merged, not replaced: one switch at a time is how the screen sends it.
+      capabilities: capabilities ? { ...agent.capabilities, ...capabilities } : agent.capabilities,
+    };
     await saveAgent(updated);
     return ok({ agent: updated });
   }

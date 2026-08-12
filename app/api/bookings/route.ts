@@ -23,7 +23,7 @@ import { getHotelContent } from "@/lib/server/hotelbeds/content";
 import { tourmindBook, tourmindPrebook } from "@/lib/server/tourmind/operations";
 import { isIndeterminate, logTourmindError, mapTourmindError } from "@/lib/server/tourmind/errors";
 import { activeAgent } from "@/lib/agency/session";
-import { canAtLeast } from "@/lib/agency/types";
+import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
 import { canHold, reserveForHold } from "@/lib/agency/holds";
 import { commitBooking, hasHeadroom, priceForAgency, type AgencyCommit } from "@/lib/agency/bookings";
 import { saveAgencyBooking } from "@/lib/agency/store";
@@ -257,6 +257,41 @@ export async function POST(req: Request) {
    */
   if (agent && !canAtLeast(agent.permission ?? "issue", "booking")) {
     return fail("accountSecurity", "agency.notPermitted", locale, { status: 403 });
+  }
+
+  /*
+   * The two rights that sit beside the ladder rather than on it.
+   *
+   * Checked here, on the same side of the wire as the credit gate and the
+   * view-only rule, because a permission enforced only by a disabled button is
+   * a suggestion. The screen hides what an agent may not do as a courtesy; this
+   * is what makes it true when somebody replays the request.
+   */
+  const rights = agent ? capabilitiesOf(agent) : { hold: true, nonRefundable: true };
+
+  if (agent && body.hold && !rights.hold) {
+    /*
+     * Refused here rather than beside the hold window further down, which runs
+     * after the supplier order exists. A refusal that arrives once the room is
+     * booked is not a refusal; it is a booking plus an apology.
+     *
+     * Kept separate from "this rate cannot be held" for the same reason the
+     * credit gate is separate: the two lead somewhere different. One means find
+     * another rate, the other means find the person who is allowed.
+     */
+    return fail("policyRestriction", "agency.holdNotPermitted", locale, { status: 403, action: "contactSupport" });
+  }
+
+  if (agent && !rights.nonRefundable && !session.cancellation.refundable) {
+    /*
+     * The right the ladder could not express.
+     *
+     * An agent may be trusted to spend the agency's credit and still not be
+     * trusted to spend it on a room nobody can hand back — that is the whole
+     * distinction, and it can only be checked against the rate in front of us,
+     * so it lives here rather than in the session gate.
+     */
+    return fail("policyRestriction", "agency.nonRefundableNotPermitted", locale, { status: 403, action: "selectAlternative" });
   }
   let agencyCommit: AgencyCommit | null = null;
   if (agent) {

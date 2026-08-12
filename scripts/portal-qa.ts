@@ -222,6 +222,61 @@ async function main(): Promise<void> {
     return `${email} added`;
   });
 
+  await check("a right can be withdrawn, and only that right", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The merge, end to end. A screen flips one switch and sends one key; if
+     * the absent key were read as `false`, withdrawing the right to hold would
+     * also withdraw the right to sell non-refundable stock, and nobody would
+     * see it happen until an agent was refused at the counter.
+     */
+    const email = `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const created = await admin.api<{ agent?: { id: string } }>("/api/agency/agents", {
+      body: {
+        email,
+        name: "QA Rights",
+        permission: "issue",
+        capabilities: { hold: true, nonRefundable: true },
+      },
+    });
+    const agentId = created.data?.agent?.id;
+    if (!agentId) throw new Error("the new agent came back without an id");
+
+    const patched = await admin.api<{ agent?: { capabilities?: Record<string, boolean> } }>("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId, capabilities: { hold: false } },
+    });
+    if (!patched.ok) throw new Error(`withdrawing the hold right was refused: ${patched.status}`);
+    const rights = patched.data?.agent?.capabilities;
+    if (rights?.hold !== false) throw new Error("the hold right survived being withdrawn");
+    if (rights?.nonRefundable !== true) throw new Error("withdrawing one right took the other with it");
+    return "hold off, non-refundable intact";
+  });
+
+  await check("withdrawing a right does not reactivate a suspended account", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The same hazard the permission branch was written for. A capability
+     * change that fell through to the active/inactive path would quietly
+     * restore access to somebody who had been suspended that morning.
+     */
+    const email = `qa-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const created = await admin.api<{ agent?: { id: string } }>("/api/agency/agents", {
+      body: { email, name: "QA Suspended", permission: "issue" },
+    });
+    const agentId = created.data?.agent?.id;
+    if (!agentId) throw new Error("the new agent came back without an id");
+
+    await admin.api("/api/agency/agents", { method: "PATCH", body: { agentId, active: false } });
+    const patched = await admin.api<{ agent?: { active?: boolean } }>("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId, capabilities: { nonRefundable: false } },
+    });
+    if (!patched.ok) throw new Error(`the change was refused: ${patched.status}`);
+    if (patched.data?.agent?.active !== false) throw new Error("a suspended account was restored by a rights change");
+    return "still suspended";
+  });
+
   /* ---------------------------------------------------------------------- */
   section("Settings");
 

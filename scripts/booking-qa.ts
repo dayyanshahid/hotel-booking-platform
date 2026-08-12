@@ -248,6 +248,46 @@ async function freshOffer(predicate: (card: Card) => boolean = () => true): Prom
   throw new SupplyUnavailable("no unused offer matching what this case needs");
 }
 
+/**
+ * The first non-refundable rate live supply will admit to, from anywhere.
+ *
+ * Returns `null` rather than throwing: "nobody is selling one today" is a fact
+ * about the suppliers, not a defect in the route under test, and the caller
+ * says so in its own words.
+ */
+async function nonRefundableCard(): Promise<Card | null> {
+  for (const [destinationId, destinationDisplay] of [
+    ["dest-dubai", "Dubai"],
+    ["dest-london", "London"],
+    ["dest-cairo", "Cairo"],
+  ] as const) {
+    const res = await api<SearchResponse>("/api/hotels/search", {
+      body: {
+        intent: {
+          destinationId,
+          destinationDisplay,
+          destinationType: "city",
+          checkIn: iso(30),
+          checkOut: iso(33),
+          flexibility: "exact",
+          rooms: [{ adults: 2, childrenAges: [] }],
+          accessibleRoom: false,
+          locale: "en",
+          currency: "USD",
+        },
+        supply: "live",
+        pageSize: 12,
+      },
+    });
+    const card = res.data?.results.find((c) => !c.offerSummary.refundable && !spent.has(c.offerSummary.offerId));
+    if (card) {
+      spent.add(card.offerSummary.offerId);
+      return card;
+    }
+  }
+  return null;
+}
+
 async function sessionFor(card: Card, over: Record<string, unknown> = {}): Promise<CheckoutSession> {
   const res = await api<CheckoutSession>("/api/checkout/sessions", {
     body: { offerId: card.offerSummary.offerId, ...over },
@@ -1051,6 +1091,99 @@ async function main(): Promise<void> {
     if (res.ok) throw new Error("a booking-only account issued a hold");
     if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
     return "403";
+  });
+
+  await check("an account without the hold right is refused, before any supplier is called", async () => {
+    /*
+     * The right that is not a rung.
+     *
+     * This account may issue — it is trusted with the credit line — and still
+     * may not reserve a room it has not committed to. The ladder cannot say
+     * that, which is why the capability exists, and a capability the route
+     * does not check is a checkbox.
+     *
+     * A throwaway account rather than the seeded groups desk: a run that dies
+     * between withdrawing a right and restoring it would leave the demo data
+     * quietly broken for whoever looked at it next.
+     */
+    const admin = await api<{ demoCode?: string }>("/api/agency/session", { body: { email: AGENT } });
+    if (!admin.data?.demoCode) return "SKIP: no code echoed";
+    await api("/api/agency/session", { method: "PUT", body: { email: AGENT, code: admin.data.demoCode } });
+
+    const email = `qa-nohold-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const made = await api("/api/agency/agents", {
+      body: { email, name: "QA No Hold", permission: "issue", capabilities: { hold: false } },
+    });
+    if (!made.ok) return `SKIP: could not create the account (${made.status})`;
+
+    const start = await api<{ demoCode?: string }>("/api/agency/session", { body: { email } });
+    if (!start.data?.demoCode) return "SKIP: no code echoed";
+    const signedIn = await api("/api/agency/session", {
+      method: "PUT",
+      body: { email, code: start.data.demoCode },
+    });
+    if (!signedIn.ok) return `SKIP: the new account could not sign in (${signedIn.status})`;
+
+    const card = await freshOffer((c) => c.offerSummary.refundable);
+    const session = await sessionFor(card).catch(() => null);
+    if (!session) return "SKIP: checkout refused the offer";
+
+    const res = await api(`/api/bookings`, {
+      body: bookingBody(session.checkoutSessionId, { hold: true }),
+    });
+    if (res.ok) throw new Error("an account with the hold right withdrawn placed a hold");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status} ${res.error?.messageKey ?? ""}`);
+    if (res.error?.messageKey !== "agency.holdNotPermitted") {
+      /*
+       * Told apart from "this rate cannot be held" on purpose. The two lead
+       * somewhere different — one to another rate, the other to whoever can
+       * grant the right — and a shared message sends half of them the wrong way.
+       */
+      throw new Error(`refused for the wrong reason: ${res.error?.messageKey}`);
+    }
+    return `403 · ${res.error.messageKey}`;
+  });
+
+  await check("an account barred from non-refundable stock cannot buy it", async () => {
+    /*
+     * Refused before the supplier order, not after. The check sits with the
+     * credit gate rather than beside the hold window further down the route,
+     * because a refusal that arrives once the room is booked is a booking with
+     * an apology attached.
+     */
+    const admin = await api<{ demoCode?: string }>("/api/agency/session", { body: { email: AGENT } });
+    if (!admin.data?.demoCode) return "SKIP: no code echoed";
+    await api("/api/agency/session", { method: "PUT", body: { email: AGENT, code: admin.data.demoCode } });
+
+    const email = `qa-nonref-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const made = await api("/api/agency/agents", {
+      body: { email, name: "QA No NonRef", permission: "issue", capabilities: { nonRefundable: false } },
+    });
+    if (!made.ok) return `SKIP: could not create the account (${made.status})`;
+
+    const start = await api<{ demoCode?: string }>("/api/agency/session", { body: { email } });
+    if (!start.data?.demoCode) return "SKIP: no code echoed";
+    await api("/api/agency/session", { method: "PUT", body: { email, code: start.data.demoCode } });
+
+    /*
+     * Cast wider than the rest of the harness, which lives in Dubai.
+     *
+     * Non-refundable headline rates are genuinely scarce there — 12 cards, none
+     * of them — so a check bound to that one city would report SKIP on every
+     * run and quietly prove nothing at all.
+     */
+    const card = await nonRefundableCard();
+    if (!card) return "SKIP: no non-refundable rate in live supply anywhere we looked";
+    const session = await sessionFor(card).catch(() => null);
+    if (!session) return "SKIP: checkout refused the offer";
+
+    const res = await api(`/api/bookings`, { body: bookingBody(session.checkoutSessionId) });
+    if (res.ok) throw new Error("an account barred from non-refundable stock bought some");
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status} ${res.error?.messageKey ?? ""}`);
+    if (res.error?.messageKey !== "agency.nonRefundableNotPermitted") {
+      throw new Error(`refused for the wrong reason: ${res.error?.messageKey}`);
+    }
+    return `403 · ${res.error.messageKey}`;
   });
 
   await check("a view-only agent cannot book at all", async () => {
