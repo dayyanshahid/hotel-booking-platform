@@ -332,6 +332,26 @@ async function main(): Promise<void> {
     return `422 · ${res.error.messageKey}`;
   });
 
+  await check("the branch cannot create somebody with no cap at all", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * The quiet version of over-allocating. An account with no limit is bounded
+     * by the agency line, so a branch on 4,000 creating one would hand their
+     * sub-agent the whole 25,000 and make their own cap decorative. An
+     * administrator adding a colleague to the agency's own line is a different
+     * thing and is still allowed — the invariant is that a *capped* parent
+     * cannot have an uncapped child.
+     */
+    const res = await branch.api("/api/agency/agents", {
+      body: { email: `qa-uncapped-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Uncapped", permission: "booking" },
+    });
+    if (res.ok) throw new Error("a capped branch created an uncapped sub-agent");
+    if (res.error?.messageKey !== "agency.allocationRequired") {
+      throw new Error(`refused for the wrong reason: ${res.status} ${res.error?.messageKey}`);
+    }
+    return `422 · ${res.error.messageKey}`;
+  });
+
   await check("the branch cannot promote somebody above itself", async () => {
     if (!branchId) return "SKIP: no branch";
     /*

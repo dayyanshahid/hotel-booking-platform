@@ -123,12 +123,9 @@ export async function POST(req: Request) {
    * so is not optional — an agent who could nominate someone else's parent
    * could spend someone else's allocation.
    */
-  const parentId = actor.role === "admin" ? body.parentId : actor.id;
-  const parent = parentId ? agents.find((a) => a.id === parentId) : undefined;
-  if (parentId && !parent) return fail("validation", "error.notFound", locale, { status: 404 });
-  if (!parent && actor.role !== "admin") {
-    return fail("policyRestriction", "agency.adminOnly", locale, { status: 403, action: "contactSupport" });
-  }
+  const parentId = actor.role === "admin" ? (body.parentId ?? actor.id) : actor.id;
+  const parent = agents.find((a) => a.id === parentId);
+  if (!parent) return fail("validation", "error.notFound", locale, { status: 404 });
   /*
    * You cannot share a pool you were never given.
    *
@@ -155,18 +152,21 @@ export async function POST(req: Request) {
   }
 
   /*
-   * A sub-agent must be given a number.
+   * A capped parent cannot have an uncapped child.
    *
-   * Left blank they would inherit the agency line, which is the one thing a
-   * parent handing out a slice of their own pool cannot have meant. Top-level
-   * accounts keep working exactly as they always have, with no allocation and
-   * no cap beyond the agency's.
+   * That is the precise invariant, and it is narrower than "every sub-agent
+   * needs a number". An administrator adding a colleague to the agency's own
+   * line is not allocating anything — the colleague is bounded by the agency
+   * balance exactly as everybody was before this existed, and demanding a
+   * figure would turn "add a colleague" into a budgeting exercise. But a branch
+   * on 4,000 creating somebody with no cap would hand them the whole line, and
+   * the branch's own cap would be worth nothing.
    */
   const creditLimit = readAllocation(body.creditLimit);
-  if (parent) {
-    if (creditLimit === undefined) {
-      return fail("validation", "agency.allocationRequired", locale, { status: 422, fields: { creditLimit: "required" } });
-    }
+  if (creditLimit === undefined && parent.creditLimit !== undefined) {
+    return fail("validation", "agency.allocationRequired", locale, { status: 422, fields: { creditLimit: "required" } });
+  }
+  if (creditLimit !== undefined) {
     const ceiling = allocatableBy(parent, agents, agencyLimit);
     if (creditLimit > ceiling) {
       return fail("policyRestriction", "agency.allocationTooLarge", locale, {
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
     role: body.role === "admin" ? "admin" : "agent",
     permission,
     capabilities,
-    parentId: parent?.id,
+    parentId: parent.id,
     creditLimit,
     markup: readMarkup(body.markup),
     active: true,
@@ -205,7 +205,7 @@ export async function POST(req: Request) {
     agent.role = body.role === "admin" ? "admin" : "agent";
     agent.permission = permission;
     agent.capabilities = { ...agent.capabilities, ...capabilities };
-    if (parent) agent.parentId = parent.id;
+    agent.parentId = parent.id;
     if (creditLimit !== undefined) agent.creditLimit = creditLimit;
     const markup = readMarkup(body.markup);
     if (markup) agent.markup = markup;

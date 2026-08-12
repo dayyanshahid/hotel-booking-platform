@@ -18,6 +18,7 @@ import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/bran
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
+import { allocatableBy, allocatedToChildren, descendantsOf, poolOf } from "@/lib/agency/subagents";
 import type {
   Agent,
   AgentCapabilities,
@@ -710,10 +711,10 @@ function Statement({ locale }: { locale: Locale }) {
 /* ---------------------------------------------------------------- team */
 
 export function AgencyTeamView({ locale }: { locale: Locale }) {
-  return <PortalShell locale={locale}>{(context) => <TeamPanel context={context} />}</PortalShell>;
+  return <PortalShell locale={locale}>{(context) => <TeamPanel locale={locale} context={context} />}</PortalShell>;
 }
 
-function TeamPanel({ context }: { context: AgencyContext }) {
+function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -721,8 +722,13 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const [permission, setPermission] = useState<AgentPermission>("issue");
   const [mayHold, setMayHold] = useState(true);
   const [mayNonRefundable, setMayNonRefundable] = useState(true);
+  const [allocation, setAllocation] = useState("");
+  const [markupMode, setMarkupMode] = useState<"inherit" | "percent" | "fixed">("inherit");
+  const [markupValue, setMarkupValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Which row has its allocation and margin open for editing. One at a time. */
+  const [editing, setEditing] = useState<string | null>(null);
   const isAdmin = context.session.role === "admin";
 
   /*
@@ -733,6 +739,52 @@ function TeamPanel({ context }: { context: AgencyContext }) {
   const team = useResource<{ agents: Agent[] }>("/api/agency/agents");
   const agents = team.data?.agents ?? null;
   const reload = team.reload;
+
+  /*
+   * Narrowed once, here. `CreditTerms.currency` is a plain string because it is
+   * whatever an operator agreed with the agency, and every formatter on this
+   * screen wants the catalogue union — casting at each call site would be the
+   * same assertion made six times.
+   */
+  const currency = context.agency.credit.currency as CurrencyCode;
+  const agencyLimit = context.agency.credit.limit;
+  const me = agents?.find((a) => a.id === context.session.agentId) ?? null;
+
+  /*
+   * What is left to hand out, and to whom it belongs.
+   *
+   * An administrator shares the agency line; anybody else shares the slice they
+   * were given. Computed here rather than fetched because the server enforces
+   * the same rule from the same function — this is the number that stops
+   * somebody typing an allocation only to have it refused.
+   */
+  const poolLeft = (excludeId?: string) =>
+    me && agents ? allocatableBy(me, agents, agencyLimit, excludeId) : 0;
+
+  /*
+   * You cannot share a pool you were never given.
+   *
+   * The server says the same, but a form that lets somebody fill it in and then
+   * refuses is a form that wasted their time and taught them nothing.
+   */
+  const canCreate = isAdmin || (me?.creditLimit !== undefined);
+
+  function markupOf(mode: "inherit" | "percent" | "fixed", value: string): MarkupRule | undefined {
+    if (mode === "inherit") return undefined;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+    return { mode, value: parsed, currency: mode === "fixed" ? currency : undefined };
+  }
+
+  function resetForm() {
+    setName("");
+    setEmail("");
+    setMayHold(true);
+    setMayNonRefundable(true);
+    setAllocation("");
+    setMarkupMode("inherit");
+    setMarkupValue("");
+  }
 
   async function invite() {
     setBusy(true);
@@ -746,6 +798,14 @@ function TeamPanel({ context }: { context: AgencyContext }) {
         role,
         permission,
         capabilities: { hold: mayHold, nonRefundable: mayNonRefundable },
+        /*
+         * Sent only when it was typed. An empty box means "no separate cap",
+         * which is a real answer for a colleague at the top of the agency and
+         * refused outright for a sub-agent — the server decides which, because
+         * it is the same rule that governs every other way in.
+         */
+        ...(allocation.trim() ? { creditLimit: Number(allocation) } : {}),
+        ...(markupOf(markupMode, markupValue) ? { markup: markupOf(markupMode, markupValue) } : {}),
       }),
     });
     setBusy(false);
@@ -753,10 +813,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
       setError(body.error?.message ?? t("error.validation"));
       return;
     }
-    setName("");
-    setEmail("");
-    setMayHold(true);
-    setMayNonRefundable(true);
+    resetForm();
     await reload();
   }
 
@@ -768,13 +825,7 @@ function TeamPanel({ context }: { context: AgencyContext }) {
    * takes effect on their very next request, not when their session expires.
    */
   async function setPermissionFor(agent: Agent, next: AgentPermission) {
-    const body = await apiFetch<unknown>("/api/agency/agents", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ agentId: agent.id, permission: next }),
-    });
-    if (!body.ok) setError(body.error?.message ?? t("error.validation"));
-    await reload();
+    await patch({ agentId: agent.id, permission: next });
   }
 
   /**
@@ -786,29 +837,55 @@ function TeamPanel({ context }: { context: AgencyContext }) {
    * would resurrect whichever one another admin had just removed.
    */
   async function setCapability(agent: Agent, right: keyof AgentCapabilities, next: boolean) {
-    const body = await apiFetch<unknown>("/api/agency/agents", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ agentId: agent.id, capabilities: { [right]: next } }),
-    });
-    if (!body.ok) setError(body.error?.message ?? t("error.validation"));
-    await reload();
+    await patch({ agentId: agent.id, capabilities: { [right]: next } });
   }
 
   async function toggle(agent: Agent) {
-    const body = await apiFetch<unknown>("/api/agency/agents", {
+    await patch({ agentId: agent.id, active: !agent.active });
+  }
+
+  async function patch(body: Record<string, unknown>) {
+    setError(null);
+    const res = await apiFetch<unknown>("/api/agency/agents", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ agentId: agent.id, active: !agent.active }),
+      body: JSON.stringify(body),
     });
-    if (!body.ok) setError(body.error?.message ?? t("error.validation"));
+    if (!res.ok) setError(res.error?.message ?? t("error.validation"));
     await reload();
   }
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("agency.team")} description={t("agency.teamBody")} />
+      <PageHeader title={t("agency.subAgents")} description={t("agency.subAgentsBody")} />
       {error && <Alert tone="critical">{error}</Alert>}
+
+      {/*
+        The pool, before anybody types a number into a box.
+        "You have 2,500 left to allocate" is the fact that makes the rest of
+        this screen make sense; discovering it from a refusal does not.
+      */}
+      {me && agents && (
+        <Card className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 p-4">
+          <div>
+            <p className="text-muted text-xs">{t("agency.poolYours")}</p>
+            <Money amount={poolOf(me, agencyLimit)} currency={currency} locale={locale} size="lg" />
+          </div>
+          <div>
+            <p className="text-muted text-xs">{t("agency.poolPromised")}</p>
+            <Money amount={allocatedToChildren(me.id, agents)} currency={currency} locale={locale} />
+          </div>
+          <div>
+            <p className="text-muted text-xs">{t("agency.poolLeft")}</p>
+            <Money
+              amount={poolLeft()}
+              currency={currency}
+              locale={locale}
+              tone={poolLeft() > 0 ? "positive" : "muted"}
+            />
+          </div>
+        </Card>
+      )}
 
       {team.loading && <TableSkeleton rows={3} />}
       {/*
@@ -823,101 +900,137 @@ function TeamPanel({ context }: { context: AgencyContext }) {
           {agents.map((agent) => {
             const rights = capabilitiesOf(agent);
             const canBook = canAtLeast(agent.permission ?? "issue", "booking");
-            const editable = isAdmin && agent.id !== context.session.agentId;
-            /*
-             * Nothing to offer on an account that cannot book at all.
-             *
-             * A view-only agent's hold switch would be a control that cannot
-             * take effect, and the honest place to change that is the
-             * permission beside it — so the row says what it can do and stops.
-             */
-            const editableRights = editable && canBook;
+            const editable = isAdmin || descendantsOf(context.session.agentId, agents).some((a) => a.id === agent.id);
+            const editableRights = editable && agent.id !== context.session.agentId && canBook;
+            const manages = editable && agent.id !== context.session.agentId;
+            const parent = agent.parentId ? agents.find((a) => a.id === agent.parentId) : undefined;
             return (
-              <div
-                key={agent.id}
-                className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 p-3.5"
-              >
-                <div className="min-w-0 space-y-1.5">
-                  <div>
-                    <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
-                    <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
+              <div key={agent.id} className="space-y-2 p-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+                  <div className="min-w-0 space-y-1.5">
+                    <div>
+                      <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
+                      <p className="text-muted text-xs wrap-anywhere">
+                        {agent.email}
+                        {/* Who they answer to, said on their own row — a hierarchy
+                            you have to reconstruct from a list is not a hierarchy. */}
+                        {parent && <> · {t("agency.reportsTo")} {parent.name}</>}
+                      </p>
+                    </div>
+
+                    {/*
+                      Kept in the same column as the name, not on a strip of its
+                      own beneath the row. These are facts about a person, and
+                      read as a caption under their name in a way a full-width
+                      band floating between two people does not.
+                    */}
+                    {editableRights ? (
+                      <div className="-mb-1.5 flex flex-wrap items-center gap-x-5">
+                        <Toggle
+                          checked={rights.hold}
+                          onChange={(next) => setCapability(agent, "hold", next)}
+                          label={t("agency.mayHold")}
+                        />
+                        <Toggle
+                          checked={rights.nonRefundable}
+                          onChange={(next) => setCapability(agent, "nonRefundable", next)}
+                          label={t("agency.mayBookNonRefundable")}
+                        />
+                      </div>
+                    ) : (
+                      /*
+                       * Withheld rights are still stated on a row nobody can
+                       * edit — an agent reading their own line needs to know why
+                       * the hold button is missing, and no switches at all would
+                       * read as no rule at all.
+                       */
+                      canBook &&
+                      (!rights.hold || !rights.nonRefundable) && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {!rights.hold && <Badge tone="neutral">{t("agency.mayNotHold")}</Badge>}
+                          {!rights.nonRefundable && (
+                            <Badge tone="neutral">{t("agency.mayNotBookNonRefundable")}</Badge>
+                          )}
+                        </div>
+                      )
+                    )}
                   </div>
 
-                  {/*
-                    Kept in the same column as the name, not on a strip of its
-                    own beneath the row. These are facts about a person, and
-                    read as a caption under their name in a way a full-width
-                    band floating between two people does not.
-                  */}
-                  {editableRights ? (
-                    <div className="-mb-1.5 flex flex-wrap items-center gap-x-5">
-                      <Toggle
-                        checked={rights.hold}
-                        onChange={(next) => setCapability(agent, "hold", next)}
-                        label={t("agency.mayHold")}
-                      />
-                      <Toggle
-                        checked={rights.nonRefundable}
-                        onChange={(next) => setCapability(agent, "nonRefundable", next)}
-                        label={t("agency.mayBookNonRefundable")}
-                      />
-                    </div>
-                  ) : (
-                    /*
-                     * Withheld rights are still stated on a row nobody can
-                     * edit — an agent reading their own line needs to know why
-                     * the hold button is missing, and no switches at all would
-                     * read as no rule at all.
-                     */
-                    canBook &&
-                    (!rights.hold || !rights.nonRefundable) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {!rights.hold && <Badge tone="neutral">{t("agency.mayNotHold")}</Badge>}
-                        {!rights.nonRefundable && (
-                          <Badge tone="neutral">{t("agency.mayNotBookNonRefundable")}</Badge>
-                        )}
-                      </div>
-                    )
-                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {/* The two commercial facts, read at a glance across the list. */}
+                    {agent.creditLimit !== undefined && (
+                      <Badge tone="neutral">
+                        {formatMoney(agent.creditLimit, currency, locale)}
+                      </Badge>
+                    )}
+                    {agent.markup && (
+                      <Badge tone="neutral">
+                        {agent.markup.mode === "percent"
+                          ? `+${agent.markup.value}%`
+                          : /* A fixed rule carries the currency it was set in; the
+                               agency's own is the fallback for older records. */
+                            `+${formatMoney(agent.markup.value, (agent.markup.currency as CurrencyCode) ?? currency, locale)}`}
+                      </Badge>
+                    )}
+                    <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
+                      {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
+                    </Badge>
+                    {manages ? (
+                      <Select
+                        aria-label={t("agency.permission")}
+                        // Both bangs earn their keep: `CONTROL` sets `w-full` and
+                        // `min-h-11`, and a plain `w-auto` loses to it on
+                        // stylesheet order, which stacked the row into three lines.
+                        className="!min-h-9 !w-auto"
+                        value={agent.permission ?? "issue"}
+                        onChange={(e) => setPermissionFor(agent, e.target.value as AgentPermission)}
+                      >
+                        <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
+                        <option value="booking">{t("agency.permissionBooking")}</option>
+                        <option value="issue">{t("agency.permissionIssue")}</option>
+                      </Select>
+                    ) : (
+                      <Badge tone="neutral">{permissionLabel(t, agent.permission ?? "issue")}</Badge>
+                    )}
+                    {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
+                    {manages && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditing(editing === agent.id ? null : agent.id)}
+                        >
+                          {editing === agent.id ? t("common.cancel") : t("agency.editAllocation")}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => toggle(agent)}>
+                          {agent.active ? t("agency.suspend") : t("agency.restore")}
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
-                    {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
-                  </Badge>
-                  {editable ? (
-                    <Select
-                      aria-label={t("agency.permission")}
-                      // Both bangs earn their keep: `CONTROL` sets `w-full` and
-                      // `min-h-11`, and a plain `w-auto` loses to it on
-                      // stylesheet order, which stacked the row into three lines.
-                      className="!min-h-9 !w-auto"
-                      value={agent.permission ?? "issue"}
-                      onChange={(e) => setPermissionFor(agent, e.target.value as AgentPermission)}
-                    >
-                      <option value="viewOnly">{t("agency.permissionViewOnly")}</option>
-                      <option value="booking">{t("agency.permissionBooking")}</option>
-                      <option value="issue">{t("agency.permissionIssue")}</option>
-                    </Select>
-                  ) : (
-                    <Badge tone="neutral">{permissionLabel(t, agent.permission ?? "issue")}</Badge>
-                  )}
-                  {!agent.active && <Badge tone="caution">{t("agency.suspended.badge")}</Badge>}
-                  {editable && (
-                    <Button variant="ghost" size="sm" onClick={() => toggle(agent)}>
-                      {agent.active ? t("agency.suspend") : t("agency.restore")}
-                    </Button>
-                  )}
-                </div>
+                {editing === agent.id && (
+                  <AllocationEditor
+                    agent={agent}
+                    currency={currency}
+                    locale={locale}
+                    ceiling={poolLeft(agent.id)}
+                    onSave={async (patchBody) => {
+                      await patch({ agentId: agent.id, ...patchBody });
+                      setEditing(null);
+                    }}
+                  />
+                )}
               </div>
             );
           })}
         </Card>
       )}
 
-      {isAdmin ? (
+      {canCreate ? (
         <Card className="space-y-3 p-5">
-          <h2 className="font-semibold">{t("agency.invite")}</h2>
+          <h2 className="font-semibold">{t("agency.addSubAgent")}</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label={t("agency.inviteName")} htmlFor="agent-name">
               <Input id="agent-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -925,12 +1038,35 @@ function TeamPanel({ context }: { context: AgencyContext }) {
             <Field label={t("agency.workEmail")} htmlFor="agent-email">
               <Input id="agent-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
-            <Field label={t("agency.role")} htmlFor="agent-role">
-              <Select id="agent-role" value={role} onChange={(e) => setRole(e.target.value as Agent["role"])}>
-                <option value="agent">{t("agency.roleAgent")}</option>
-                <option value="admin">{t("agency.roleAdmin")}</option>
-              </Select>
-            </Field>
+            {/*
+              Only an administrator picks a role. A branch manager building
+              their own desk is not choosing whether that person runs the
+              agency — they are choosing what part of their own job to hand over.
+            */}
+            {isAdmin ? (
+              <Field label={t("agency.role")} htmlFor="agent-role">
+                <Select id="agent-role" value={role} onChange={(e) => setRole(e.target.value as Agent["role"])}>
+                  <option value="agent">{t("agency.roleAgent")}</option>
+                  <option value="admin">{t("agency.roleAdmin")}</option>
+                </Select>
+              </Field>
+            ) : (
+              <Field
+                label={t("agency.creditAllocation")}
+                htmlFor="agent-allocation"
+                hint={t("agency.allocationHint", { amount: formatMoney(poolLeft(), currency, locale) })}
+              >
+                <Input
+                  id="agent-allocation"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={poolLeft()}
+                  value={allocation}
+                  onChange={(e) => setAllocation(e.target.value)}
+                />
+              </Field>
+            )}
             <Field
               label={t("agency.permission")}
               htmlFor="agent-permission"
@@ -952,7 +1088,50 @@ function TeamPanel({ context }: { context: AgencyContext }) {
                 <option value="issue">{t("agency.permissionIssue")}</option>
               </Select>
             </Field>
+            {isAdmin && (
+              <Field
+                label={t("agency.creditAllocation")}
+                htmlFor="agent-allocation-admin"
+                hint={t("agency.allocationHint", { amount: formatMoney(poolLeft(), currency, locale) })}
+              >
+                <Input
+                  id="agent-allocation-admin"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={poolLeft()}
+                  value={allocation}
+                  onChange={(e) => setAllocation(e.target.value)}
+                />
+              </Field>
+            )}
+            <Field label={t("agency.sellsAt")} htmlFor="agent-markup-mode">
+              <div className="flex gap-2">
+                <Select
+                  id="agent-markup-mode"
+                  className="!w-auto grow"
+                  value={markupMode}
+                  onChange={(e) => setMarkupMode(e.target.value as typeof markupMode)}
+                >
+                  <option value="inherit">{t("agency.markupInherit")}</option>
+                  <option value="percent">{t("agency.markupPercent")}</option>
+                  <option value="fixed">{t("agency.markupFixed")}</option>
+                </Select>
+                {markupMode !== "inherit" && (
+                  <Input
+                    aria-label={t("agency.sellsAt")}
+                    className="!w-24"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={markupValue}
+                    onChange={(e) => setMarkupValue(e.target.value)}
+                  />
+                )}
+              </div>
+            </Field>
           </div>
+
           {/*
             Set at the point the account is created, not afterwards.
             Leaving both on and expecting an administrator to come back and
@@ -970,12 +1149,115 @@ function TeamPanel({ context }: { context: AgencyContext }) {
             </div>
           )}
           <Button onClick={invite} loading={busy} disabled={!name || !email}>
-            {t("agency.invite")}
+            {t("agency.addSubAgent")}
           </Button>
         </Card>
       ) : (
-        <p className="text-muted text-sm">{t("agency.adminNote")}</p>
+        <p className="text-muted text-sm">{t("agency.noPoolToShare")}</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * The two commercial settings, edited in place.
+ *
+ * Kept out of the row itself because they are the rare change — a permission
+ * moves when somebody is promoted, an allocation moves when the arrangement
+ * does — and two number boxes on every row would bury the switches that get
+ * used daily.
+ */
+function AllocationEditor({
+  agent,
+  currency,
+  locale,
+  ceiling,
+  onSave,
+}: {
+  agent: Agent;
+  currency: CurrencyCode;
+  locale: Locale;
+  ceiling: number;
+  onSave: (body: Record<string, unknown>) => Promise<void>;
+}) {
+  const { t } = useApp();
+  const [limit, setLimit] = useState(agent.creditLimit === undefined ? "" : String(agent.creditLimit));
+  const [mode, setMode] = useState<"inherit" | "percent" | "fixed">(agent.markup?.mode ?? "inherit");
+  const [value, setValue] = useState(agent.markup ? String(agent.markup.value) : "");
+  const [saving, setSaving] = useState(false);
+
+  const asked = Number(limit);
+  const overCeiling = Boolean(limit.trim()) && Number.isFinite(asked) && asked > ceiling;
+
+  return (
+    <div className="border-ink-100 grid gap-3 border-t pt-3 sm:grid-cols-3">
+      <Field
+        label={t("agency.creditAllocation")}
+        htmlFor={`limit-${agent.id}`}
+        hint={t("agency.allocationHint", { amount: formatMoney(ceiling, currency, locale) })}
+        error={overCeiling ? t("agency.allocationTooLarge") : undefined}
+      >
+        <Input
+          id={`limit-${agent.id}`}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={ceiling}
+          value={limit}
+          error={overCeiling}
+          onChange={(e) => setLimit(e.target.value)}
+        />
+      </Field>
+      <Field label={t("agency.sellsAt")} htmlFor={`markup-${agent.id}`}>
+        <div className="flex gap-2">
+          <Select
+            id={`markup-${agent.id}`}
+            className="!w-auto grow"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as typeof mode)}
+          >
+            <option value="inherit">{t("agency.markupInherit")}</option>
+            <option value="percent">{t("agency.markupPercent")}</option>
+            <option value="fixed">{t("agency.markupFixed")}</option>
+          </Select>
+          {mode !== "inherit" && (
+            <Input
+              aria-label={t("agency.sellsAt")}
+              className="!w-24"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          )}
+        </div>
+      </Field>
+      <div className="flex items-end">
+        <Button
+          size="sm"
+          loading={saving}
+          disabled={overCeiling}
+          onClick={async () => {
+            setSaving(true);
+            await onSave({
+              ...(limit.trim() ? { creditLimit: Number(limit) } : {}),
+              ...(mode === "inherit"
+                ? {}
+                : {
+                    markup: {
+                      mode,
+                      value: Number(value),
+                      ...(mode === "fixed" ? { currency } : {}),
+                    },
+                  }),
+            });
+            setSaving(false);
+          }}
+        >
+          {t("common.save")}
+        </Button>
+      </div>
     </div>
   );
 }

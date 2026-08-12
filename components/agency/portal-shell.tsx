@@ -110,7 +110,7 @@ export function PortalShell({
    * task an agent does twice a year.
    */
   const accountItems: NavItem[] = [
-    { path: "/agency/team", label: t("agency.team"), icon: "users" },
+    { path: "/agency/team", label: t("agency.subAgents"), icon: "users" },
     { path: "/agency/settings", label: t("agency.settings"), icon: "settings" },
   ];
 
