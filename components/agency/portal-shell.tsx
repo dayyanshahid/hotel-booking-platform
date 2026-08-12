@@ -48,40 +48,6 @@ export function PortalShell({
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  /**
-   * Whether the rail is down to icons.
-   *
-   * Two hundred and forty pixels of permanent navigation is a quarter of a
-   * laptop's width spent on a list an agent reads once a session and then
-   * knows by heart — and it is taken from the results, which is the part of
-   * the screen the job actually happens in.
-   *
-   * Remembered per browser rather than per account: it is a preference about
-   * this screen on this machine, and an agent who collapses it on a small
-   * laptop does not want it collapsed on the desk they sit at tomorrow.
-   */
-  const [railClosed, setRailClosed] = useState(false);
-
-  useEffect(() => {
-    try {
-      setRailClosed(localStorage.getItem("nz_agency_rail") === "closed");
-    } catch {
-      /* private mode — the rail simply starts open */
-    }
-  }, []);
-
-  function toggleRail() {
-    setRailClosed((closed) => {
-      const next = !closed;
-      try {
-        localStorage.setItem("nz_agency_rail", next ? "closed" : "open");
-      } catch {
-        /* not remembering it is survivable; not toggling it is not */
-      }
-      return next;
-    });
-  }
-
   // A route change should not leave the drawer sitting open over the new page.
   useEffect(() => {
     setMenuOpen(false);
@@ -133,13 +99,19 @@ export function PortalShell({
         { path: "/agency/reports", label: t("agency.reports"), icon: "list" },
       ],
     },
-    {
-      label: t("agency.navAccount"),
-      items: [
-        { path: "/agency/team", label: t("agency.team"), icon: "users" },
-        { path: "/agency/settings", label: t("agency.settings"), icon: "settings" },
-      ],
-    },
+  ];
+
+  /*
+   * Account-level, and therefore not in the bar.
+   *
+   * Team and Settings are things you configure, not places you go while
+   * selling. In a horizontal bar every item competes with the work for the
+   * same strip of pixels, and these two would be competing on behalf of a
+   * task an agent does twice a year.
+   */
+  const accountItems: NavItem[] = [
+    { path: "/agency/team", label: t("agency.team"), icon: "users" },
+    { path: "/agency/settings", label: t("agency.settings"), icon: "settings" },
   ];
 
   async function signOut() {
@@ -149,27 +121,20 @@ export function PortalShell({
   }
 
   /**
-   * The same navigation at two widths.
+   * The navigation as a column, for the drawer.
    *
-   * Collapsed, the label leaves the flow but not the accessibility tree: the
-   * link keeps its accessible name and gains a native tooltip, so an icon rail
-   * is still navigable by screen reader and still identifiable by anyone who
-   * has not memorised nine glyphs.
+   * This used to render at two widths because the desktop rail could collapse
+   * to icons; the rail is gone and the bar has its own renderer, so what is
+   * left is the one shape a drawer wants.
    */
-  function navList(compact: boolean) {
+  function navList() {
     return (
-      <nav aria-label={t("agency.portal")} className={compact ? "space-y-2" : "space-y-5"}>
+      <nav aria-label={t("agency.portal")} className="space-y-5">
         {groups.map((group) => (
           <div key={group.label} className="space-y-1">
-            {compact ? (
-              // A heading with no room for its words becomes a rule instead —
-              // the grouping is still legible, the label is not pretending.
-              <div className="hairline mx-2 border-t pt-2" aria-hidden />
-            ) : (
-              <p className="text-muted px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
-                {group.label}
-              </p>
-            )}
+            <p className="text-muted px-3 pt-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+              {group.label}
+            </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const target = href(locale, item.path);
@@ -179,32 +144,21 @@ export function PortalShell({
                     <Link
                       href={target}
                       aria-current={active ? "page" : undefined}
-                      title={compact ? item.label : undefined}
                       className={cx(
-                        "relative flex items-center rounded-[var(--radius-control)] text-sm transition-colors",
-                        compact ? "justify-center px-0 py-2.5" : "gap-2.5 px-3 py-2",
-                        /*
-                          Weight as well as colour, and a mark on the edge.
-                          The active item was a pale wash the same shape as the
-                          hover state, so "where am I" and "what is under the
-                          pointer" looked alike — and on the two screens where
-                          the tint sits behind a hover at the same time, alike
-                          enough to misread. Colour is doing the least of the
-                          work here, which is the point.
-                        */
+                        "relative flex items-center gap-2.5 rounded-[var(--radius-control)] px-3 py-2 text-sm transition-colors",
                         active
                           ? "bg-brand-50 text-brand-700 font-semibold"
                           : "text-muted hover:bg-ink-50 hover:text-ink-900 font-medium",
                       )}
                     >
-                      {active && !compact && (
+                      {active && (
                         <span
                           aria-hidden
                           className="bg-brand-600 absolute inset-y-1.5 start-0 w-[3px] rounded-e-full"
                         />
                       )}
-                      <Icon name={item.icon} size={compact ? 18 : 16} className={active ? undefined : "opacity-80"} />
-                      {compact ? <span className="sr-only">{item.label}</span> : item.label}
+                      <Icon name={item.icon} size={16} className={active ? undefined : "opacity-80"} />
+                      {item.label}
                     </Link>
                   </li>
                 );
@@ -216,150 +170,82 @@ export function PortalShell({
     );
   }
 
-  const nav = navList(false);
+  const nav = navList();
+
+  /**
+   * The same destinations, in a row.
+   *
+   * Icons stay: they are what makes a horizontal bar scannable at a glance
+   * rather than a line of similar-length words. The groups become a hairline
+   * rather than headings — "SELL" and "MANAGE" have nowhere to live in a
+   * single row, and the division between selling and managing is still worth
+   * showing even when it cannot be named.
+   */
+  function navBar() {
+    return (
+      <nav aria-label={t("agency.portal")} className="hidden min-w-0 flex-1 lg:block">
+        <ul className="flex items-center gap-0.5">
+          {groups.map((group, groupIndex) => (
+            <li key={group.label} className="contents">
+              {groupIndex > 0 && (
+                <span aria-hidden className="bg-ink-100 mx-1.5 h-5 w-px shrink-0 rounded-full" />
+              )}
+              {group.items.map((item) => {
+                const target = href(locale, item.path);
+                const active = item.path === "/agency" ? pathname === target : pathname.startsWith(target);
+                return (
+                  <Link
+                    key={item.path}
+                    href={target}
+                    aria-current={active ? "page" : undefined}
+                    className={cx(
+                      "flex shrink-0 items-center gap-1.5 rounded-[var(--radius-control)] px-2.5 py-1.5 text-sm transition-colors",
+                      active
+                        ? "bg-brand-50 text-brand-700 font-semibold"
+                        : "text-muted hover:bg-ink-50 hover:text-ink-900 font-medium",
+                    )}
+                  >
+                    <Icon name={item.icon} size={15} className={active ? undefined : "opacity-80"} />
+                    {/*
+                      Below `xl` the labels go and the icons stay. Seven words
+                      plus a brand plus the credit line plus the basket do not
+                      fit a 1280 window, and a bar that wraps to two rows is a
+                      bar you have to read twice.
+
+                      One span that unhides, not a visible one plus a screen
+                      reader one: two of them read as "Search staysSearch
+                      stays" to anybody listening rather than looking.
+                    */}
+                    <span className="sr-only xl:not-sr-only">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </li>
+          ))}
+        </ul>
+      </nav>
+    );
+  }
 
   return (
     <CartProvider>
-      <div className="lg:flex lg:gap-6">
       {/*
-        Desktop rail. Sticky, so navigation never scrolls away mid-task, and
-        collapsible, because the results are what the agent is here for and the
-        rail was taking a quarter of the width to say things they know.
+        Navigation across the top, not down the side.
+
+        The rail cost 280 pixels of every screen — a quarter of a laptop — to
+        hold nine links an agent reads once and then knows by heart, and it was
+        taken from the results, which is the part of the window the job happens
+        in. Across the top the same nine cost about fifty pixels of height, and
+        the search and its results get the whole width back.
+
+        Two of them are not here. Team and Settings are account-level rather
+        than places you go while selling, and they sit in the account menu at
+        the end of the bar, which is both where people look for them and two
+        fewer things competing with the work.
       */}
-      <aside
-        className={cx(
-          "no-print hidden shrink-0 transition-[width] duration-200 ease-[var(--ease-out)] lg:block",
-          /*
-            256, not 240. The lockup is 34px of globe plus two lines of
-            non-wrapping type, and with the collapse button beside it the row
-            needed about ten pixels more than w-60 gave — so the brand rendered
-            as "TRAVEL & MOR". Clipping a company's own name in its own
-            product is not a rounding error.
-          */
-          railClosed ? "w-16" : "w-64",
-        )}
-      >
-        {/*
-          A plane of its own, rather than text floating on the page.
-
-          The rail was transparent over the same tint as the content, held apart
-          by a single hairline — so nine links, three headings and the credit
-          line read as loose furniture at the left edge rather than as one
-          region you navigate from. Everything else on this screen that groups
-          things is a card on that tint: the filter rail, the KPI tiles, the
-          results. The navigation was the only structural element not speaking
-          the language, and giving it the same surface costs nothing and settles
-          it.
-
-          It also scrolls inside itself now. Sticky alone meant a laptop short
-          enough — and 800px of viewport is ordinary — pushed Settings off the
-          bottom with no way to reach it but scrolling the results.
-        */}
-        <div
-          className={cx(
-            "surface hairline sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col gap-4",
-            "overflow-y-auto rounded-[var(--radius-card)] border shadow-[var(--shadow-card)]",
-            railClosed ? "p-2" : "p-3",
-          )}
-        >
-          <div className={cx("flex items-center", railClosed ? "justify-center" : "justify-between gap-2")}>
-            <Link href={href(locale, "/agency")} className="block min-w-0 overflow-hidden">
-              <Wordmark markOnly={railClosed} />
-            </Link>
-            {!railClosed && (
-              /*
-                A 28px control, not a 44px one.
-
-                The lockup needs 187 pixels and the row had 178 to give it, so
-                the brand rendered as "TRAVEL & MOR" — the exact clipping the
-                width comment above was written about, reintroduced by the
-                card's own padding. A ghost Button at `size="sm"` was 44 pixels
-                wide for a chevron; at 28 the name fits with room to spare, and
-                a control this secondary should not have been carrying a
-                primary button's dimensions next to the company's name in the
-                first place. Comfortably past the 24px minimum, and this rail is
-                desktop-only — the phone gets the drawer.
-              */
-              <button
-                type="button"
-                onClick={toggleRail}
-                aria-label={t("agency.collapseNav")}
-                title={t("agency.collapseNav")}
-                aria-expanded
-                className="hover:bg-ink-50 text-muted hover:text-ink-900 grid size-7 shrink-0 place-items-center rounded-[var(--radius-control)] transition-colors"
-              >
-                <Icon name="chevronRight" size={16} className="rotate-180 rtl:rotate-0" />
-              </button>
-            )}
-          </div>
-
-          {railClosed ? (
-            /*
-              Collapsed, the one thing that still has to be visible is the
-              money — a credit line an agent cannot see is a credit line they
-              overspend.
-
-              This is what the comment here has always claimed and the code
-              never did: it rendered a chevron and nothing else, so collapsing
-              the rail hid the credit line completely. Now it is the bar alone,
-              which is readable at sixteen pixels, with the figure and the limit
-              in its tooltip and in its accessible name.
-            */
-            <>
-              <CreditRail locale={locale} context={context} compact />
-              <button
-                type="button"
-                onClick={toggleRail}
-                aria-label={t("agency.expandNav")}
-                title={t("agency.expandNav")}
-                className="hover:bg-ink-50 text-muted flex w-full items-center justify-center rounded-[var(--radius-control)] py-2"
-              >
-                <Icon name="chevronRight" size={16} className="rtl:rotate-180" />
-              </button>
-            </>
-          ) : (
-            /*
-              The badge that said "Agent portal" on the agent portal is gone.
-              It was the third brand mark in a 90-pixel column, under a wordmark
-              that had already said whose product this is, telling an agent
-              something they cannot fail to know.
-            */
-            <CreditRail locale={locale} context={context} />
-          )}
-
-          {navList(railClosed)}
-        </div>
-      </aside>
-
-      {/*
-        Everything inside measures against this column, not the window.
-        The rail is 272px wide, so a 1024px window gives the content about 710px
-        — and a layout keyed to the *viewport* laid out four search fields and a
-        button as though it had the full 1024, pushing Search off the edge. Zoom
-        makes it worse in exactly the same way, because zoom is a narrower
-        viewport wearing a different name.
-      */}
-      {/*
-        Six between blocks rather than five, now that the header is a card
-        sitting in the same stack: a surface needs a little more room around it
-        than a line of text does before the next one starts.
-      */}
-      <div className="@container min-w-0 flex-1 space-y-6">
-        {/*
-          Sticky, and a surface of its own.
-
-          It scrolled away with the page, which is wrong for what it holds: the
-          basket carries a countdown to the moment its rates go stale, and the
-          credit line is the number behind every decision on the screen below
-          it. Both were reachable only by scrolling back to the top of a result
-          list the agent had just scrolled down.
-
-          A surface because it now sits between two of them — the rail beside
-          it and the cards under it — and a bare row with one hairline read as
-          the gap between them rather than as a thing.
-        */}
-        <header className="surface hairline sticky top-4 z-30 flex items-center justify-between gap-3 rounded-[var(--radius-card)] border px-3 py-1.5 shadow-[var(--shadow-card)]">
-          <div className="flex min-w-0 items-center gap-2">
+      <div className="space-y-6">
+        <header className="surface hairline no-print sticky top-4 z-30 flex items-center gap-3 rounded-[var(--radius-card)] border px-3 py-1.5 shadow-[var(--shadow-card)]">
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -369,56 +255,51 @@ export function PortalShell({
             >
               <Icon name="menu" size={18} />
             </Button>
-            <Link href={href(locale, "/agency")} className="lg:hidden">
+            {/*
+              The mark alone in the bar, and the full lockup nowhere.
+
+              A horizontal bar has one scarce dimension and the wordmark wanted
+              187 pixels of it to say what the browser tab, the drawer and every
+              document this portal produces already say. The agency's own name
+              moved into the account menu with the rest of the identity.
+            */}
+            <Link href={href(locale, "/agency")} aria-label={context.agency.name}>
               <Wordmark markOnly />
             </Link>
-            {/*
-              Hidden on a phone, where the credit figure has the better claim
-              on the space — the agency's own name is the one thing an agent
-              never needs reminding of, and it is in the drawer regardless.
-            */}
-            {/*
-              The agency, then the desk.
-
-              Two lines of equal-weight grey in a band a thousand pixels wide
-              read as a caption nobody wrote on purpose. The agency's name is
-              the identity on the document an agent is about to send, so it
-              carries the weight; the role beside it, in a pill, is the thing
-              that actually changes between the people sharing this machine and
-              decides what the screen will let them do.
-            */}
-            <div className="hidden min-w-0 items-center gap-2 sm:flex">
-              <p className="truncate text-sm font-semibold leading-tight">{context.agency.name}</p>
-              <span className="surface-sunken text-muted hidden shrink-0 rounded-[var(--radius-pill)] px-2 py-0.5 text-[11px] font-medium md:inline">
-                {context.session.name}
-              </span>
-            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/*
-              The figure follows the agent everywhere, but it is only ever in
-              one place at a time.
+          {navBar()}
 
-              The rail already carries available credit, the limit under it and
-              a utilisation bar, and this pill was carrying the same number two
-              inches away — the same $23,698 twice on one screen, which reads
-              as two figures that happen to agree rather than as one fact. So
-              the pill appears exactly where the rail cannot: on a laptop with
-              the nav collapsed, and on anything narrower than `lg`, where the
-              rail is behind the menu button.
+          <div className="flex shrink-0 items-center gap-2">
+            {/*
+              Credit, in the one place it now lives.
+
+              This pill used to hide itself whenever the rail was showing the
+              same figure, because the same number twice on one screen reads as
+              two figures that happen to agree. With the rail gone there is no
+              second copy to duck, and this is the only thing on the bar that
+              is a fact rather than a destination — so it keeps the meter, which
+              answers "am I about to run out" in a way a figure cannot.
             */}
             {context.balance && (
               <Link
                 href={href(locale, "/agency/credit")}
-                className={cx(
-                  "hairline hover:border-brand-300 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors",
-                  !railClosed && "lg:hidden",
-                )}
+                className="hairline hover:border-brand-300 hidden items-center gap-2 rounded-full border py-1 pe-3 ps-2.5 text-xs transition-colors sm:inline-flex"
               >
-                {/* The label is the first thing to go when space is short; the
-                    figure is what an agent is actually looking for. */}
-                <span className="text-muted hidden sm:inline">{t("agency.creditAvailable")}</span>
+                {/*
+                  A meter beside the figure, not instead of it. The bar answers
+                  "am I close to the limit" at a glance and the number answers
+                  "how much"; the word "available" is the first thing to go when
+                  the bar gets tight, because the other two carry the meaning.
+                */}
+                <span aria-hidden className="w-10 shrink-0">
+                  <Meter
+                    value={context.balance.available}
+                    max={context.balance.limit}
+                    label={t("agency.creditAvailable")}
+                  />
+                </span>
+                <span className="text-muted hidden xl:inline">{t("agency.creditAvailable")}</span>
                 <Money
                   amount={context.balance.available}
                   currency={context.balance.currency}
@@ -440,32 +321,73 @@ export function PortalShell({
               to now holds it, which is where somebody goes looking for it and
               nowhere near where they are working.
             */}
-            <AccountMenu context={context} onSignOut={signOut} />
+            <AccountMenu
+              context={context}
+              locale={locale}
+              accountItems={accountItems}
+              onSignOut={signOut}
+            />
           </div>
         </header>
 
-        {requireAdmin && context.session.role !== "admin" ? (
-          <p className="text-caution-700 bg-caution-50 rounded-[var(--radius-control)] px-3 py-2 text-sm">
-            {t("agency.adminOnly")}
-          </p>
-        ) : (
-          children(context)
-        )}
-      </div>
+        {/*
+          The work, and the basket beside it.
 
+          Everything inside the first column measures against that column rather
+          than against the window — the cart docks into this row, so opening it
+          narrows the results instead of covering them, and a layout keyed to
+          the viewport would lay out four search fields as though the dock were
+          not there.
+        */}
+        <div className="lg:flex lg:gap-6">
+          <div className="@container min-w-0 flex-1 space-y-6">
+            {requireAdmin && context.session.role !== "admin" ? (
+              <p className="text-caution-700 bg-caution-50 rounded-[var(--radius-control)] px-3 py-2 text-sm">
+                {t("agency.adminOnly")}
+              </p>
+            ) : (
+              children(context)
+            )}
+          </div>
+
+          {/*
+            The third column. Inside the flex row, so opening the cart narrows
+            the results rather than covering them — which is the whole point:
+            every Add button on the left stays live while it is open.
+          */}
+          <CartDock locale={locale} />
+        </div>
+
+        {/*
+          On a phone the bar has room for the mark, the basket and the account
+          and nothing else, so the same navigation lives in a drawer — with the
+          account destinations appended, or Team and Settings would be reachable
+          only through a menu that is itself in the bar it was moved out of.
+        */}
         <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} title={t("agency.portal")}>
           <div className="space-y-5">
             <CreditRail locale={locale} context={context} />
             {nav}
+            <nav aria-label={t("agency.navAccount")} className="hairline border-t pt-3">
+              <p className="text-muted px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+                {t("agency.navAccount")}
+              </p>
+              <ul className="space-y-0.5">
+                {accountItems.map((item) => (
+                  <li key={item.path}>
+                    <Link
+                      href={href(locale, item.path)}
+                      className="text-muted hover:bg-ink-50 hover:text-ink-900 flex items-center gap-2.5 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium"
+                    >
+                      <Icon name={item.icon} size={16} className="opacity-80" />
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </div>
         </Drawer>
-
-        {/*
-          The third column. Inside the flex row, so opening the cart narrows
-          the results rather than covering them — which is the whole point:
-          every Add button on the left stays live while it is open.
-        */}
-        <CartDock locale={locale} />
       </div>
 
       {/* No room to dock on a phone, so there it stays a sheet. */}
@@ -563,9 +485,14 @@ function CreditRail({
  */
 function AccountMenu({
   context,
+  locale,
+  accountItems,
   onSignOut,
 }: {
   context: AgencyContext;
+  locale: Locale;
+  /** Team and Settings: configured occasionally, so not in the bar. */
+  accountItems: NavItem[];
   onSignOut: () => void | Promise<void>;
 }) {
   const { t } = useApp();
@@ -622,9 +549,30 @@ function AccountMenu({
         >
           {/* Which account, on a machine several agents share. */}
           <div className="hairline border-b px-3 py-2">
-            <p className="truncate text-sm font-semibold">{context.session.name}</p>
-            <p className="text-muted truncate text-xs">{context.agency.name}</p>
+            <p className="truncate text-sm font-semibold">{context.agency.name}</p>
+            <p className="text-muted truncate text-xs">{context.session.name}</p>
           </div>
+
+          {/*
+            The two destinations that left the bar. Here rather than there
+            because configuring the team is not something you do between a
+            search and a booking.
+          */}
+          <div className="hairline border-b py-1">
+            {accountItems.map((item) => (
+              <Link
+                key={item.path}
+                href={href(locale, item.path)}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="hover:bg-ink-50 flex items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-sm"
+              >
+                <Icon name={item.icon} size={14} />
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
           <button
             type="button"
             role="menuitem"

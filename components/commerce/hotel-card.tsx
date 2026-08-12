@@ -81,21 +81,47 @@ export function HotelCard({
         {tight && <span aria-hidden className="me-2">·</span>}
         {card.offerSummary.boardSummary}
       </p>
+      {/*
+        A badge, not a coloured sentence.
+
+        Whether a rate can be given back is the one fact on this card that
+        cannot be undone once it is booked, and it was a line of small red or
+        green text in a stack of other small text — the same size and weight as
+        the room name above it and the amenities beside it. An agent scanning
+        twenty rows for a price does not read a sentence; they see a shape.
+
+        The word carries the meaning and the colour only reinforces it, because
+        roughly one man in twelve cannot tell this particular red from this
+        particular green.
+      */}
       <p
         className={cx(
-          "text-xs font-bold wrap-anywhere",
+          "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold wrap-anywhere",
           tight ? "basis-full" : "mt-1",
           card.offerSummary.refundable ? "text-positive-700" : "text-critical-700",
         )}
       >
-        {card.offerSummary.refundable
-          ? card.offerSummary.freeCancellationUntil
-            ? t("rate.freeUntil", {
-                date: formatDeadline(card.offerSummary.freeCancellationUntil, "UTC", locale),
-                tz: locale === "ar" ? "توقيت الفندق" : "hotel local time",
-              })
-            : t("rate.refundable")
-          : t("rate.nonRefundable")}
+        <span
+          className={cx(
+            "inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-pill)] px-2 py-0.5 text-[11px] font-semibold",
+            card.offerSummary.refundable
+              ? "bg-positive-50 text-positive-700"
+              : "bg-critical-50 text-critical-700",
+          )}
+        >
+          <Icon name={card.offerSummary.refundable ? "check" : "alert"} size={12} />
+          {card.offerSummary.refundable ? t("rate.refundable") : t("rate.nonRefundable")}
+        </span>
+        {/* The deadline, which is the half of "free cancellation" that decides
+            whether it is any use to the customer in front of the agent. */}
+        {card.offerSummary.refundable && card.offerSummary.freeCancellationUntil && (
+          <span className="font-medium">
+            {t("rate.freeUntil", {
+              date: formatDeadline(card.offerSummary.freeCancellationUntil, "UTC", locale),
+              tz: locale === "ar" ? "توقيت الفندق" : "hotel local time",
+            })}
+          </span>
+        )}
         {card.remainingLabel && (
           <span className="text-critical-700 ms-2 font-bold">{card.remainingLabel}</span>
         )}
