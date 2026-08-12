@@ -59,6 +59,21 @@ function permissionLabel(t: (key: string) => string, permission: AgentPermission
  * account, and the one their staff open every morning: it should say what is
  * behind the door, and then get out of the way of the two fields that open it.
  */
+/**
+ * Where to land after signing in, if the URL asked for somewhere.
+ *
+ * A path on this site and nothing else. `next` arrives in a query string,
+ * which anyone can write, and a value like `https://elsewhere.example` or
+ * `//elsewhere.example` would turn the sign-in page into a redirector that
+ * borrows this domain's credibility to land an agent somewhere hostile —
+ * immediately after they have proved who they are, which is the worst possible
+ * moment. One leading slash, and never two.
+ */
+function safeNext(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 export function AgencySignInView({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [email, setEmail] = useState("");
@@ -141,7 +156,13 @@ export function AgencySignInView({ locale }: { locale: Locale }) {
     refreshAgency();
     // A full navigation, not a router push: the session cookie has just been
     // set and every cached client fetch above it is now stale.
-    window.location.assign(href(locale, "/agency"));
+    /*
+     * Read off the URL here rather than through `useSearchParams`, which would
+     * put a Suspense boundary around a page that is otherwise static for the
+     * sake of one string needed once, in an event handler.
+     */
+    const next = safeNext(new URLSearchParams(window.location.search).get("next"));
+    window.location.assign(next ?? href(locale, "/agency"));
   }
 
   /** Back to the first step with the address intact, for a typo in it. */

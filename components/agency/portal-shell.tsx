@@ -604,14 +604,36 @@ function SessionUnavailable() {
   );
 }
 
+/**
+ * Signed out, on a page that needs a session.
+ *
+ * This used to be a screen whose entire content was a button to another
+ * screen — the same heading, a line of explanation, and one more click before
+ * anything could be typed. Worse than the click: `travel-agent.tracking.me`
+ * lands here, so this was the whole portal's front door, and it looked like a
+ * placeholder. Somebody arriving at the domain would conclude the sign-in page
+ * had never been built.
+ *
+ * So it forwards, carrying where the visitor was trying to get to. A link is
+ * still rendered for the moment before the effect runs and for anything
+ * without JavaScript, but nobody should ever have to press it.
+ */
 function SignInPrompt({ locale }: { locale: Locale }) {
   const { t } = useApp();
+  const pathname = usePathname();
+  const target = `${href(locale, "/agency/signin")}?next=${encodeURIComponent(pathname)}`;
+
+  useEffect(() => {
+    // `replace`, not `assign`: a bounce should not sit in the history stack
+    // waiting to catch the back button and bounce again.
+    window.location.replace(target);
+  }, [target]);
+
   return (
     <div className="mx-auto max-w-md space-y-4 py-16 text-center">
       <Wordmark className="justify-center" />
-      <h1 className="text-xl font-bold">{t("agency.signIn")}</h1>
       <p className="text-muted text-sm">{t("agency.signInRequired")}</p>
-      <Link href={href(locale, "/agency/signin")}>
+      <Link href={target}>
         <Button>{t("agency.signIn")}</Button>
       </Link>
     </div>

@@ -78,3 +78,30 @@ describe("naming a destination we only have the id of", () => {
     expect(intentFromSearchParams(params, "en")?.destinationDisplay).toBe("Cairo");
   });
 });
+
+describe("where sign-in sends you afterwards", () => {
+  /*
+   * `next` comes off a query string, so it is attacker-controlled. The danger
+   * is specific: a redirect that leaves this origin, taken the instant an agent
+   * has proved who they are, on a domain they were told to trust.
+   */
+  const safeNext = (value: string | null): string | null =>
+    !value || !value.startsWith("/") || value.startsWith("//") ? null : value;
+
+  it("accepts a path on this site", () => {
+    expect(safeNext("/en/agency/bookings")).toBe("/en/agency/bookings");
+  });
+
+  it("refuses another origin, however it is spelled", () => {
+    expect(safeNext("https://elsewhere.example")).toBeNull();
+    // The one that catches people out: protocol-relative, and a browser reads
+    // it as a different host.
+    expect(safeNext("//elsewhere.example")).toBeNull();
+    expect(safeNext("javascript:alert(1)")).toBeNull();
+  });
+
+  it("falls back to nothing when the URL said nothing", () => {
+    expect(safeNext(null)).toBeNull();
+    expect(safeNext("")).toBeNull();
+  });
+});
