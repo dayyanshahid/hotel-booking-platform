@@ -3,6 +3,7 @@ import { activeAgent } from "@/lib/agency/session";
 import { getAgency, saveAgency } from "@/lib/agency/store";
 import type { AgencyProfile, MarkupOverride, MarkupPolicy, MarkupRule } from "@/lib/agency/types";
 import { normalizeHex } from "@/lib/agency/branding";
+import { MAX_OVERRIDES, ruleIsValid } from "@/lib/agency/markup-policy";
 
 /**
  * The agency's own margin rule and the details that appear on its documents.
@@ -13,18 +14,19 @@ import { normalizeHex } from "@/lib/agency/branding";
  * form.
  */
 
-/** A markup a customer would notice as an error. Rejected rather than clamped. */
-const MAX_PERCENT = 60;
-const MAX_OVERRIDES = 25;
-
+/**
+ * A rule off the wire, or nothing.
+ *
+ * The ceilings and the shape live in `markup-policy` so the form can warn
+ * about what this is going to refuse, rather than an agency discovering it by
+ * pressing Save. This still decides; it just no longer holds the knowledge on
+ * its own.
+ */
 function readRule(input: unknown): MarkupRule | null {
   if (!input || typeof input !== "object") return null;
   const raw = input as { mode?: unknown; value?: unknown };
-  const mode = raw.mode;
-  const value = Number(raw.value);
-  if ((mode !== "percent" && mode !== "fixed") || !Number.isFinite(value) || value < 0) return null;
-  if (mode === "percent" && value > MAX_PERCENT) return null;
-  return { mode, value };
+  const candidate = { mode: raw.mode, value: Number(raw.value) } as MarkupRule;
+  return ruleIsValid(candidate) ? { mode: candidate.mode, value: candidate.value } : null;
 }
 
 /**

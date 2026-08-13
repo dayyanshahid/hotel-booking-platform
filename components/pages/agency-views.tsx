@@ -39,6 +39,7 @@ import {
 } from "@/lib/agency/subagents";
 import type { AgentRollup, PresetId } from "@/lib/agency/subagents";
 import { committedSplit, isCreditLow } from "@/lib/agency/statement";
+import { markupIssues, sellUnder } from "@/lib/agency/markup-policy";
 import type { StatementLine } from "@/lib/agency/statement";
 import type {
   Agent,
@@ -1986,6 +1987,44 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
   const isAdmin = context.session.role === "admin";
   const currency = context.agency.credit.currency as CurrencyCode;
 
+  /*
+   * Whether anything on this page differs from what is stored.
+   *
+   * The Save button sat at the foot of a long form with no indication that
+   * there was anything to save, and the confirmation appeared at the top where
+   * nobody who had just scrolled to the bottom would see it. Compared against
+   * the session's own copy, so a successful save settles the state back to
+   * clean without a reload.
+   */
+  const dirty = useMemo(
+    () =>
+      JSON.stringify(markup) !== JSON.stringify(context.agency.markup) ||
+      JSON.stringify(profile) !== JSON.stringify(context.agency.profile),
+    [markup, profile, context.agency.markup, context.agency.profile],
+  );
+
+  /*
+   * What the server is going to refuse, known before it is asked.
+   *
+   * The rules live in `markup-policy` and the route reads the same ones. This
+   * matters beyond politeness: the request is all-or-nothing, so one mistyped
+   * country code used to reject the invoice address corrected in the same
+   * sitting, with a message about markup.
+   */
+  const issues = useMemo(() => markupIssues(markup), [markup]);
+  const issueFor = (index: number) => issues.find((i) => "index" in i && i.index === index);
+
+  /*
+   * A page about money should not be left silently. The browser decides how to
+   * word it; all we can say is that there is something to lose.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -2005,10 +2044,12 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
   }
 
   function setDefault(next: Partial<MarkupRule>) {
+    setSaved(false);
     setMarkup({ ...markup, default: { ...markup.default, ...next } });
   }
 
   function setOverride(index: number, next: Partial<MarkupOverride>) {
+    setSaved(false);
     setMarkup({
       ...markup,
       overrides: markup.overrides.map((o, i) => (i === index ? { ...o, ...next } : o)),
@@ -2020,6 +2061,13 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
       <PageHeader title={t("agency.settings")} description={t("agency.settingsIntro")} />
       {error && <Alert tone="critical">{error}</Alert>}
       {saved && <Alert tone="success">{t("agency.markupSaved")}</Alert>}
+
+      {/*
+        Why every field is greyed out, for the account that cannot change them.
+        Disabled controls with no explanation read as a page that is broken,
+        and this one prices everything the agency sells.
+      */}
+      {!isAdmin && <Alert tone="info">{t("agency.settingsReadOnly")}</Alert>}
 
       <Card className="space-y-2 p-5">
         <h2 className="font-semibold">{t("agency.commission")}</h2>
@@ -2058,7 +2106,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
 
         <p className="text-muted text-sm">
           {t("agency.cost")} {formatMoney(1000, currency, locale)} → {t("agency.sell")}{" "}
-          <strong>{formatMoney(previewSell(1000, markup.default), currency, locale)}</strong>
+          <strong>{formatMoney(sellUnder(1000, markup.default), currency, locale)}</strong>
         </p>
       </Card>
 
@@ -2113,13 +2161,41 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() =>
-                    setMarkup({ ...markup, overrides: markup.overrides.filter((_, i) => i !== index) })
-                  }
+                  onClick={() => {
+                    setSaved(false);
+                    setMarkup({ ...markup, overrides: markup.overrides.filter((_, i) => i !== index) });
+                  }}
                 >
                   {t("common.remove")}
                 </Button>
               )}
+
+              {/*
+                Said on the row that is wrong, not as one message at the top of
+                a list of twenty-five. And the same worked example the default
+                rule gets, because a flat 500 on a country is the setting most
+                easily typed as a percentage by mistake.
+              */}
+              <p
+                className={cx(
+                  "text-xs sm:col-span-4",
+                  issueFor(index) ? "text-critical-700" : "text-muted",
+                )}
+              >
+                {(() => {
+                  const issue = issueFor(index);
+                  if (issue?.kind === "country") return t("agency.overrideCountryInvalid");
+                  if (issue?.kind === "duplicate") {
+                    return t("agency.overrideDuplicate", { country: issue.countryCode });
+                  }
+                  if (issue?.kind === "value") return t("agency.overrideValueInvalid");
+                  return `${t("agency.cost")} ${formatMoney(1000, currency, locale)} → ${t("agency.sell")} ${formatMoney(
+                    sellUnder(1000, override.rule),
+                    currency,
+                    locale,
+                  )}`;
+                })()}
+              </p>
             </li>
           ))}
         </ul>
@@ -2149,7 +2225,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
               id="pf-legal"
               value={profile.legalName}
               disabled={!isAdmin}
-              onChange={(e) => setProfile({ ...profile, legalName: e.target.value })}
+              onChange={(e) => { setSaved(false); setProfile({ ...profile, legalName: e.target.value }); }}
             />
           </Field>
           <Field label={t("agency.taxNumber")} htmlFor="pf-tax">
@@ -2204,10 +2280,43 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
         isAdmin={isAdmin}
       />
 
+      {/*
+        The save, where it can be reached from anywhere on the page.
+
+        It used to sit at the very foot of a long form, below the branding
+        preview — so changing a margin meant scrolling past everything else to
+        commit it, and the confirmation then appeared at the top, off screen.
+        Sticky, and it says what state the page is in rather than offering the
+        same button whether or not anything has changed.
+      */}
       {isAdmin && (
-        <Button onClick={save} loading={busy}>
-          {t("common.save")}
-        </Button>
+        <div className="surface hairline sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border p-3 shadow-[var(--shadow-raised)]">
+          <p className="text-muted min-w-0 text-sm">
+            {issues.length > 0
+              ? t("agency.settingsFixFirst", { count: issues.length })
+              : dirty
+                ? t("agency.settingsUnsaved")
+                : t("agency.settingsAllSaved")}
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {dirty && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setMarkup(context.agency.markup);
+                  setProfile(context.agency.profile);
+                  setError(null);
+                  setSaved(false);
+                }}
+              >
+                {t("agency.discardChanges")}
+              </Button>
+            )}
+            <Button onClick={save} loading={busy} disabled={!dirty || issues.length > 0}>
+              {t("common.save")}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2451,8 +2560,4 @@ function BrandingCard({
   );
 }
 
-function previewSell(cost: number, rule: MarkupRule): number {
-  return rule.mode === "percent"
-    ? Math.round(cost * (1 + Math.max(0, rule.value) / 100))
-    : cost + Math.max(0, Math.round(rule.value));
-}
+
