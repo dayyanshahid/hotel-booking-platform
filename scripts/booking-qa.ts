@@ -874,6 +874,23 @@ async function main(): Promise<void> {
     return `${done.data.session.agencyName} · ${agentPermission}`;
   });
 
+  await check("supply is refreshed before the trade path spends anything", async () => {
+    /*
+     * The same refresh the hold section learned to do, for the same reason.
+     *
+     * Everything below books against live rates, and by the time the run gets
+     * here the cached search is many minutes and a hundred supplier calls old.
+     * A rate that has moved in the meantime is refused with 409
+     * `availabilityChanged` — which is the endpoint behaving correctly, and
+     * reads in this report as a defect in the trade path. It cost an afternoon
+     * once: booking the same offer in isolation returned 200 and confirmed,
+     * while the harness insisted the trade path was broken.
+     */
+    await liveSearch(true);
+    spent.clear();
+    return "re-searched";
+  });
+
   await check("a rate is rechecked before credit is committed", async () => {
     if (!agentPermission) return "SKIP: no agent session";
     const card = await freshOffer();
