@@ -38,6 +38,8 @@ import {
   presetOf,
 } from "@/lib/agency/subagents";
 import type { AgentRollup, PresetId } from "@/lib/agency/subagents";
+import { committedSplit, isCreditLow } from "@/lib/agency/statement";
+import type { StatementLine } from "@/lib/agency/statement";
 import type {
   Agent,
   AgentCapabilities,
@@ -422,6 +424,8 @@ function CreditPanel({ locale, context }: { locale: Locale; context: AgencyConte
   if (!balance) return null;
   const currency = balance.currency as CurrencyCode;
   const used = balance.limit > 0 ? Math.min(1, balance.used / balance.limit) : 0;
+  const split = committedSplit(balance.used, balance.heldAmount);
+  const low = isCreditLow(balance.limit, balance.available);
 
   return (
     <Card className="space-y-3 p-5">
@@ -441,7 +445,46 @@ function CreditPanel({ locale, context }: { locale: Locale; context: AgencyConte
           style={{ width: `${Math.round(used * 100)}%` }}
         />
       </div>
+      {/*
+        What the committed figure is actually made of.
+
+        "Committed $2,400" is a number an agency cannot act on. Split, it is two
+        facts with different remedies: what is owed will appear on a statement
+        and has to be paid, and what is held can be released this afternoon for
+        nothing if the line is needed elsewhere. Shown only when there is
+        something to split — on an untouched line it is three zeros.
+      */}
+      {balance.used > 0 && (
+        <div className="text-muted flex flex-wrap gap-x-4 gap-y-1 text-xs">
+          <span>
+            {t("agency.creditOwed")} <span className="text-[var(--text)] font-medium tabular-nums">
+              {formatMoney(split.owed, currency, locale)}
+            </span>
+          </span>
+          {split.held > 0 && (
+            <span>
+              {t("agency.creditHeld")} <span className="text-[var(--text)] font-medium tabular-nums">
+                {formatMoney(split.held, currency, locale)}
+              </span>{" "}
+              · {t("agency.creditHeldNote")}
+            </span>
+          )}
+        </div>
+      )}
+
       <p className="text-muted text-xs">{t("agency.creditTerms", { days: context.agency.credit.paymentDays, unit: dayLabel(t as never, context.agency.credit.paymentDays, locale) })}</p>
+
+      {/*
+        Said before a booking is refused rather than by refusing one.
+        An agent finds out they are at the limit when a customer is on the
+        phone and the confirm button turns them down; a line on the credit
+        screen is the cheaper place to learn it.
+      */}
+      {low && (
+        <Alert tone="warning">
+          {t("agency.creditLowBody", { available: formatMoney(balance.available, currency, locale) })}
+        </Alert>
+      )}
     </Card>
   );
 }
@@ -900,41 +943,163 @@ const LEDGER_LABEL: Record<LedgerEntry["kind"], string> = {
   holdRelease: "agency.ledgerHoldRelease",
 };
 
+/** How the statement is narrowed. Mirrors the ledger's own vocabulary. */
+type MovementView = "all" | "charges" | "credits" | "holds";
+
 function Statement({ locale }: { locale: Locale }) {
   const { t } = useApp();
-  const ledger = useResource<{ entries: LedgerEntry[] }>("/api/agency/ledger");
+  const ledger = useResource<{ entries: StatementLine[]; total: number }>("/api/agency/ledger");
   const entries = ledger.data?.entries ?? null;
+  const total = ledger.data?.total ?? 0;
+
+  const [view, setView] = useState<MovementView>("all");
+  const [query, setQuery] = useState("");
+
+  /*
+   * Narrowed in the browser, over what the endpoint already sent.
+   *
+   * The statement is capped at two hundred movements and a filter that went
+   * back to the server for each keystroke would spend a round trip to search
+   * inside a list already in memory. The cap itself is stated below rather
+   * than hidden, which is the part that matters.
+   */
+  const shown = useMemo(() => {
+    if (!entries) return [];
+    const needle = query.trim().toLowerCase();
+    return entries.filter((entry) => {
+      if (view === "charges" && !(entry.amount < 0 && entry.kind !== "hold")) return false;
+      if (view === "credits" && entry.amount <= 0) return false;
+      if (view === "holds" && entry.kind !== "hold" && entry.kind !== "holdRelease") return false;
+      if (!needle) return true;
+      return (
+        (entry.reference ?? "").toLowerCase().includes(needle) ||
+        entry.note.toLowerCase().includes(needle) ||
+        (entry.agentName ?? "").toLowerCase().includes(needle)
+      );
+    });
+  }, [entries, view, query]);
+
+  const views: { id: MovementView; label: string }[] = [
+    { id: "all", label: t("agency.movementsAll") },
+    { id: "charges", label: t("agency.movementsCharges") },
+    { id: "credits", label: t("agency.movementsCredits") },
+    { id: "holds", label: t("agency.movementsHolds") },
+  ];
 
   return (
     <section className="space-y-3">
-      <SectionHeading title={t("agency.statement")} description={t("agency.statementBody")} />
+      <SectionHeading
+        title={t("agency.statement")}
+        description={t("agency.statementBody")}
+        action={
+          entries && entries.length > 0 ? (
+            /*
+             * The monthly statements already export and they are totals; an
+             * accounts clerk chasing one figure needs the lines behind them.
+             */
+            <a
+              className="text-brand-700 text-sm underline underline-offset-2"
+              href={apiUrl("/api/agency/ledger?format=csv")}
+            >
+              {t("agency.exportCsv")}
+            </a>
+          ) : undefined
+        }
+      />
       {ledger.loading && <TableSkeleton rows={4} />}
       {ledger.failed && <LoadFailed title={t("agency.ledgerUnavailable")} onRetry={ledger.reload} />}
-      {entries && !entries.length && <p className="text-muted text-sm">{t("agency.noMovements")}</p>}
+
+      {/*
+        An untouched line is not a broken one. `Nothing` rather than a bare
+        sentence, because every other empty state in this portal is one and a
+        stray line of grey text reads as something that failed to load.
+      */}
+      {entries && !entries.length && (
+        <Nothing icon="receipt" title={t("agency.noMovements")} body={t("agency.noMovementsBody")} />
+      )}
+
       {entries && entries.length > 0 && (
-        <Card className="divide-ink-100 divide-y">
-          {entries.map((entry) => (
-            <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 p-3.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{t(LEDGER_LABEL[entry.kind])}</p>
-                <p className="text-muted text-xs wrap-anywhere">{entry.note}</p>
-                <p className="text-muted text-xs">
-                  {formatDateTime(entry.at, locale)}
-                  {entry.reference ? ` · ${entry.reference}` : ""}
-                </p>
-              </div>
-              <p
-                className={cx(
-                  "font-semibold tabular-nums",
-                  entry.amount < 0 ? "text-critical-700" : "text-positive-700",
-                )}
-              >
-                {entry.amount < 0 ? "−" : "+"}
-                {formatMoney(Math.abs(entry.amount), entry.currency as CurrencyCode, locale)}
-              </p>
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-1">
+              {views.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setView(option.id)}
+                  aria-pressed={view === option.id}
+                  className={cx(
+                    "rounded-[var(--radius-pill)] px-3 py-1.5 text-sm font-medium transition-colors",
+                    view === option.id
+                      ? "bg-brand-50 text-brand-700"
+                      : "text-muted hover:bg-ink-50 hover:text-ink-900",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
-          ))}
-        </Card>
+            <div className="min-w-52 flex-1">
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("agency.movementsSearch")}
+                aria-label={t("agency.movementsSearch")}
+              />
+            </div>
+          </div>
+
+          {/*
+            The cap, said out loud. A list that silently stops at two hundred
+            tells an agency they have two hundred movements.
+          */}
+          <p className="text-muted text-xs tabular-nums">
+            {t("agency.movementsShowing", { shown: shown.length, total })}
+          </p>
+
+          {shown.length === 0 ? (
+            <Nothing icon="search" title={t("agency.movementsNoMatch")} body={t("agency.movementsNoMatchBody")} />
+          ) : (
+            <Card className="divide-ink-100 divide-y">
+              {shown.map((entry) => (
+                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 p-3.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{t(LEDGER_LABEL[entry.kind])}</p>
+                    <p className="text-muted text-xs wrap-anywhere">{entry.note}</p>
+                    <p className="text-muted text-xs">
+                      {formatDateTime(entry.at, locale)}
+                      {entry.reference ? ` · ${entry.reference}` : ""}
+                      {/* Who committed it. Absent on operator movements and on
+                          everything written before sub-agents existed. */}
+                      {entry.agentName ? ` · ${entry.agentName}` : ""}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-end">
+                    <p
+                      className={cx(
+                        "font-semibold tabular-nums",
+                        entry.amount < 0 ? "text-critical-700" : "text-positive-700",
+                      )}
+                    >
+                      {entry.amount < 0 ? "−" : "+"}
+                      {formatMoney(Math.abs(entry.amount), entry.currency as CurrencyCode, locale)}
+                    </p>
+                    {/*
+                      The balance this movement left behind — what makes a list
+                      of figures into a statement somebody can reconcile.
+                    */}
+                    <p className="text-muted text-xs tabular-nums">
+                      {t("agency.availableAfter", {
+                        amount: formatMoney(entry.availableAfter, entry.currency as CurrencyCode, locale),
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+        </>
       )}
     </section>
   );

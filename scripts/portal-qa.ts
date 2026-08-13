@@ -168,6 +168,48 @@ async function main(): Promise<void> {
     return `${balance.available} available of ${balance.limit}`;
   });
 
+  await check("the statement reconciles with the figure above it", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The one invariant that makes a statement a statement. Every line carries
+     * the balance it left behind, so the newest line must agree with the
+     * header — and if it does not, one of the two is wrong on a page an agency
+     * uses to check what it owes.
+     */
+    const led = await must<{
+      entries?: { availableAfter: number; usedAfter: number }[];
+      total?: number;
+      balance?: { available: number; used: number; limit: number };
+    }>(admin, "/api/agency/ledger");
+    const newest = led.entries?.[0];
+    if (!newest) return "SKIP: no movements on this installation";
+    if (Math.round(newest.availableAfter) !== Math.round(led.balance?.available ?? -1)) {
+      throw new Error(`newest line says ${newest.availableAfter} available, header says ${led.balance?.available}`);
+    }
+    if (Math.round(newest.usedAfter) !== Math.round(led.balance?.used ?? -1)) {
+      throw new Error(`newest line says ${newest.usedAfter} committed, header says ${led.balance?.used}`);
+    }
+    return `${newest.availableAfter} on both · ${led.total} movements`;
+  });
+
+  await check("the statement exports as a spreadsheet, and not as a page", async () => {
+    if (gate()) return gate()!;
+    const res = await fetch(`${BASE}/api/agency/ledger?format=csv`, {
+      headers: { cookie: (admin as unknown as { jar: Map<string, string> }).jar
+        ? [...(admin as unknown as { jar: Map<string, string> }).jar].map(([k, v]) => `${k}=${v}`).join("; ")
+        : "" },
+    });
+    const type = res.headers.get("content-type") ?? "";
+    if (!type.includes("text/csv")) throw new Error(`served ${type} instead of CSV`);
+    // Never a shared cache: this is one agency's commercial history.
+    if (!(res.headers.get("cache-control") ?? "").includes("no-store")) {
+      throw new Error("the export is cacheable");
+    }
+    const first = (await res.text()).split("\n")[0];
+    if (!first.includes("Available after")) throw new Error(`unexpected header row: ${first.slice(0, 60)}`);
+    return "text/csv · private";
+  });
+
   await check("credit is not readable without a session", async () => {
     const anonymous = new Session();
     for (const path of ["/api/agency/ledger", "/api/agency/statements"]) {
