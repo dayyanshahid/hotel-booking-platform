@@ -11,7 +11,16 @@ import { arrivalBucket, bookingTotals } from "@/lib/agency/book";
 // From the policy module, not `holds.ts`: that one is server-only and
 // importing it here would throw the moment this component hydrated.
 import { hoursLeftOnHold, isHoldUrgent } from "@/lib/agency/hold-policy";
-import { DataTable, LoadFailed, Meter, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import {
+  DataTable,
+  LoadFailed,
+  Meter,
+  Money,
+  Nothing,
+  PageHeader,
+  Section,
+  TableSkeleton,
+} from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
@@ -20,13 +29,15 @@ import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
 import {
+  AGENT_PRESETS,
   allocatableBy,
   allocatedToChildren,
   descendantsOf,
   orderedTree,
   poolOf,
+  presetOf,
 } from "@/lib/agency/subagents";
-import type { AgentRollup } from "@/lib/agency/subagents";
+import type { AgentRollup, PresetId } from "@/lib/agency/subagents";
 import type {
   Agent,
   AgentCapabilities,
@@ -935,6 +946,44 @@ export function AgencyTeamView({ locale }: { locale: Locale }) {
   return <PortalShell locale={locale}>{(context) => <TeamPanel locale={locale} context={context} />}</PortalShell>;
 }
 
+/** One line of the change log, as the API sends it. */
+interface TeamAuditRow {
+  id: string;
+  at: string;
+  actorName: string;
+  subjectName: string;
+  field: string;
+  before?: string;
+  after?: string;
+}
+
+/**
+ * A recorded change, in a sentence.
+ *
+ * The stored value is whatever the field held — `"true"`, `"issue"`, `"1000"`
+ * — because the log has to survive the vocabulary changing around it. Turning
+ * that back into words happens here, at the last moment, where the reader's
+ * language is known.
+ */
+function auditSentence(t: (key: string, vars?: Record<string, string | number>) => string, row: TeamAuditRow): string {
+  const value = (raw?: string) => {
+    if (raw === undefined) return t("agency.auditNothing");
+    if (raw === "true") return t("common.yes");
+    if (raw === "false") return t("common.no");
+    if (raw === "viewOnly" || raw === "booking" || raw === "issue") {
+      return permissionLabel(t, raw as AgentPermission);
+    }
+    return raw;
+  };
+  if (row.field === "created") return t("agency.auditCreated", { subject: row.subjectName });
+  return t("agency.auditChanged", {
+    subject: row.subjectName,
+    field: t(`agency.auditField.${row.field}`),
+    before: value(row.before),
+    after: value(row.after),
+  });
+}
+
 function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext }) {
   const { t } = useApp();
   const [name, setName] = useState("");
@@ -961,9 +1010,11 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
     agents: Agent[];
     summary?: Record<string, AgentRollup>;
     agencyLimit?: number;
+    audit?: TeamAuditRow[];
   }>("/api/agency/agents");
   const agents = team.data?.agents ?? null;
   const summary = team.data?.summary ?? {};
+  const audit = team.data?.audit ?? [];
   const reload = team.reload;
 
   /** Free-text filter over name and address, and whether to show suspended. */
@@ -1076,6 +1127,20 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
    */
   async function setPermissionFor(agent: Agent, next: AgentPermission) {
     await adjust(agent, { permission: next });
+  }
+
+  /**
+   * A whole shape at once, rather than three controls in sequence.
+   *
+   * Sent as one request so the account is never briefly half-changed — a
+   * trainee raised to senior through three separate saves is, for two of them,
+   * an account nobody chose: able to issue before the rights that go with it
+   * have caught up.
+   */
+  async function applyPreset(agent: Agent, id: PresetId) {
+    const preset = AGENT_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    await adjust(agent, { permission: preset.permission, capabilities: preset.capabilities });
   }
 
   /**
@@ -1329,6 +1394,29 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
                     <Badge tone={agent.role === "admin" ? "brand" : "neutral"}>
                       {agent.role === "admin" ? t("agency.roleAdmin") : t("agency.roleAgent")}
                     </Badge>
+                    {/*
+                      The shape, named. The permission and the two switches
+                      beside it are still there and still authoritative — this
+                      only sets all three at once, and reads "Custom" the
+                      moment they say something no preset does.
+                    */}
+                    {manages && (
+                      <Select
+                        aria-label={t("agency.preset")}
+                        className="!min-h-9 !w-auto"
+                        value={presetOf(agent) ?? "custom"}
+                        onChange={(e) => {
+                          if (e.target.value !== "custom") applyPreset(agent, e.target.value as PresetId);
+                        }}
+                      >
+                        {AGENT_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {t(`agency.preset.${preset.id}`)}
+                          </option>
+                        ))}
+                        <option value="custom">{t("agency.presetCustom")}</option>
+                      </Select>
+                    )}
                     {manages ? (
                       <Select
                         aria-label={t("agency.permission")}
@@ -1421,6 +1509,39 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
                 />
               </Field>
             )}
+            {/*
+              Chosen first, because it answers the other three.
+              Picking "Counter agent" sets the permission and both switches to
+              the shape an agency actually hires into; anything unusual is
+              still a matter of changing one of them afterwards.
+            */}
+            <Field label={t("agency.preset")} htmlFor="agent-preset" hint={t("agency.presetHint")}>
+              <Select
+                id="agent-preset"
+                value={
+                  AGENT_PRESETS.find(
+                    (p) =>
+                      p.permission === permission &&
+                      p.capabilities.hold === mayHold &&
+                      p.capabilities.nonRefundable === mayNonRefundable,
+                  )?.id ?? "custom"
+                }
+                onChange={(e) => {
+                  const preset = AGENT_PRESETS.find((p) => p.id === e.target.value);
+                  if (!preset) return;
+                  setPermission(preset.permission);
+                  setMayHold(preset.capabilities.hold);
+                  setMayNonRefundable(preset.capabilities.nonRefundable);
+                }}
+              >
+                {AGENT_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {t(`agency.preset.${preset.id}`)}
+                  </option>
+                ))}
+                <option value="custom">{t("agency.presetCustom")}</option>
+              </Select>
+            </Field>
             <Field
               label={t("agency.permission")}
               htmlFor="agent-permission"
@@ -1508,6 +1629,30 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
         </Card>
       ) : (
         <p className="text-muted text-sm">{t("agency.noPoolToShare")}</p>
+      )}
+
+      {/*
+        Who changed what, and when.
+
+        Written for the moment it is disputed rather than for routine reading:
+        an agency asking why a desk could suddenly sell non-refundable stock in
+        March needs an answer that names a person. Kept at the foot of the
+        screen because nobody arrives here to read it — they arrive to change
+        something, and find this underneath when they need it.
+      */}
+      {audit.length > 0 && (
+        <Section title={t("agency.auditTitle")} description={t("agency.auditBody")}>
+          <Card className="divide-ink-100 divide-y">
+            {audit.slice(0, 20).map((row) => (
+              <div key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-3.5 py-2.5">
+                <p className="min-w-0 text-sm wrap-anywhere">{auditSentence(t, row)}</p>
+                <p className="text-muted shrink-0 text-xs tabular-nums">
+                  {formatDateTime(row.at, locale)} · {row.actorName}
+                </p>
+              </div>
+            ))}
+          </Card>
+        </Section>
       )}
     </div>
   );

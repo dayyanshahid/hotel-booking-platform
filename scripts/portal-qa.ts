@@ -455,6 +455,59 @@ async function main(): Promise<void> {
     return `${keys.length} scoped · pool ${own.pool}`;
   });
 
+  await check("a change is recorded against the person who made it", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The whole point of the trail: an agency asking in March why a desk could
+     * suddenly sell non-refundable stock gets an answer that names somebody.
+     * A log written only for the interesting changes is not a log, so this
+     * checks the boring one too — the create.
+     */
+    const email = `qa-audit-${Math.random().toString(36).slice(2, 8)}@skyline.example`;
+    const made = await admin.api<{ agent?: { id: string } }>("/api/agency/agents", {
+      body: { email, name: "QA Audited", permission: "booking", capabilities: { hold: true, nonRefundable: false } },
+    });
+    const agentId = made.data?.agent?.id;
+    if (!agentId) throw new Error("the new agent came back without an id");
+
+    await admin.api("/api/agency/agents", {
+      method: "PATCH",
+      body: { agentId, active: true, permission: "issue" },
+    });
+
+    const after = await must<{ audit?: { subjectName: string; field: string; before?: string; after?: string }[] }>(
+      admin,
+      "/api/agency/agents",
+    );
+    const mine = (after.audit ?? []).filter((e) => e.subjectName === "QA Audited");
+    if (!mine.some((e) => e.field === "created")) throw new Error("the account was created and nothing said so");
+    const raised = mine.find((e) => e.field === "permission");
+    if (!raised) throw new Error("a permission change went unrecorded");
+    if (raised.before !== "booking" || raised.after !== "issue") {
+      throw new Error(`recorded ${raised.before} → ${raised.after}, expected booking → issue`);
+    }
+    return `${mine.length} entries · ${raised.before} → ${raised.after}`;
+  });
+
+  await check("the trail does not carry changes about people outside the branch", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * A peer's demotion is between that peer and their manager. The agent list
+     * is filtered and the figures are filtered; a trail that was not would
+     * name every account in the agency in the same payload.
+     */
+    const mine = await must<{
+      agents?: { name: string }[];
+      audit?: { subjectName: string; actorName: string }[];
+    }>(branch, "/api/agency/agents");
+    const visible = new Set((mine.agents ?? []).map((a) => a.name));
+    const stray = (mine.audit ?? []).filter(
+      (e) => !visible.has(e.subjectName) || !visible.has(e.actorName),
+    );
+    if (stray.length) throw new Error(`${stray.length} entries named somebody outside the branch`);
+    return `${mine.audit?.length ?? 0} entries, all in-branch`;
+  });
+
   await check("demoting the branch narrows everyone beneath it", async () => {
     if (!branchId) return "SKIP: no branch";
     /*

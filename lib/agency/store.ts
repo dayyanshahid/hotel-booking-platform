@@ -29,13 +29,14 @@ const KEY = "agencies";
 interface Shape {
   agencies: Agency[];
   agents: Agent[];
+  teamAudit: TeamAuditEntry[];
   ledger: LedgerEntry[];
   bookings: AgencyBooking[];
   quotes: AgencyQuote[];
   customers: AgencyCustomer[];
 }
 
-const state: Shape = { agencies: [], agents: [], ledger: [], bookings: [], quotes: [], customers: [] };
+const state: Shape = { agencies: [], agents: [], teamAudit: [], ledger: [], bookings: [], quotes: [], customers: [] };
 let loaded = false;
 
 /**
@@ -147,6 +148,10 @@ export async function loadAgencies(): Promise<void> {
     const parsed = (await driver().read<Partial<Shape>>(KEY)) ?? {};
     state.agencies = parsed.agencies ?? [];
     state.agents = parsed.agents ?? [];
+    // Absent from anything stored before the trail existed, and the fallback
+    // has to be here: the hydrator assigns every key, so a missing one would
+    // otherwise keep whatever the previous agency's load left in place.
+    state.teamAudit = parsed.teamAudit ?? [];
     state.ledger = parsed.ledger ?? [];
     state.bookings = parsed.bookings ?? [];
     state.quotes = parsed.quotes ?? [];
@@ -233,6 +238,70 @@ export async function saveAgent(agent: Agent): Promise<void> {
   if (i >= 0) state.agents[i] = agent;
   else state.agents.push(agent);
   await persist();
+}
+
+/* ---------------------------------------------------------- team audit */
+
+/**
+ * A change somebody made to somebody else's account.
+ *
+ * Written for the moment it is disputed rather than for routine reading: an
+ * agency asking why a desk could suddenly sell non-refundable stock in March,
+ * or why a limit halved, needs an answer that names a person and a time. A
+ * trail written only for the interesting changes is not a trail, so every
+ * field the console can alter is recorded, including the ones nobody argues
+ * about.
+ *
+ * Names are stored alongside the ids on purpose. An id resolves to nothing
+ * once an account is gone, and "agt_8fj20d changed agt_11xkq" is not an answer
+ * to anybody's question.
+ */
+export interface TeamAuditEntry {
+  id: string;
+  agencyId: string;
+  at: string;
+  /**
+   * Monotonic within the agency, because two changes in the same millisecond
+   * share an ISO string and the sort would then return them in whichever order
+   * the array happened to hold. A log that cannot say which came last fails at
+   * the question it exists for.
+   */
+  seq: number;
+  actorId: string;
+  actorName: string;
+  subjectId: string;
+  subjectName: string;
+  /** `created`, or the field that moved — see `diffAgent`. */
+  field: string;
+  before?: string;
+  after?: string;
+}
+
+export async function appendTeamAudit(
+  entries: Omit<TeamAuditEntry, "id" | "at" | "seq">[],
+): Promise<void> {
+  if (!entries.length) return;
+  await loadAgencies();
+  const at = new Date().toISOString();
+  let seq = state.teamAudit.reduce((max, e) => Math.max(max, e.seq ?? 0), 0);
+  for (const entry of entries) {
+    seq += 1;
+    state.teamAudit.push({
+      ...entry,
+      id: `tad_${Math.random().toString(36).slice(2, 10)}`,
+      at,
+      seq,
+    });
+  }
+  await persist();
+}
+
+export async function listTeamAudit(agencyId: string, limit = 100): Promise<TeamAuditEntry[]> {
+  await loadAgencies();
+  return [...(state.teamAudit ?? [])]
+    .filter((e) => e.agencyId === agencyId)
+    .sort((a, b) => b.at.localeCompare(a.at) || (b.seq ?? 0) - (a.seq ?? 0))
+    .slice(0, limit);
 }
 
 /* -------------------------------------------------------------- ledger */

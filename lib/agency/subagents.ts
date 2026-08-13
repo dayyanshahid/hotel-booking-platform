@@ -1,5 +1,5 @@
 import { canAtLeast, capabilitiesOf, permissionOf, PERMISSION_RANK } from "./types";
-import type { Agent, AgentCapabilities, AgentPermission, LedgerEntry } from "./types";
+import type { Agent, AgentCapabilities, AgentPermission, LedgerEntry, MarkupRule } from "./types";
 
 /**
  * Sub-agents: users beneath a user, inside one agency.
@@ -341,4 +341,102 @@ export function orderedTree(agents: Agent[]): TreeRow[] {
   walk(undefined, 0);
   for (const agent of agents) if (!placed.has(agent.id)) rows.push({ agent, depth: 0 });
   return rows;
+}
+
+/* ----------------------------------------------------------------- presets */
+
+/**
+ * The three shapes an agency actually hires into.
+ *
+ * Setting a permission and two switches per person is fine for three staff and
+ * tedious for thirty — and tedium on this screen is not a comfort problem, it
+ * is how somebody ends up with the rights of whoever was configured just
+ * before them. A preset is a named starting point, not a lock: every control
+ * stays editable afterwards, and an account edited away from its preset simply
+ * stops matching one.
+ *
+ * Deliberately no `role`. An administrator runs the whole agency, and a branch
+ * manager is not that — folding it into a preset called "Senior" would hand
+ * agency settings to anyone promoted at a desk.
+ */
+export type PresetId = "trainee" | "counter" | "senior";
+
+export interface AgentPreset {
+  id: PresetId;
+  permission: AgentPermission;
+  capabilities: AgentCapabilities;
+}
+
+export const AGENT_PRESETS: AgentPreset[] = [
+  /** Looks, quotes, commits nothing. A first week. */
+  { id: "trainee", permission: "viewOnly", capabilities: { hold: false, nonRefundable: false } },
+  /**
+   * Sells, and can reserve a room while a customer decides — but not commit
+   * the agency to something nobody can hand back. The common counter job.
+   */
+  { id: "counter", permission: "booking", capabilities: { hold: true, nonRefundable: false } },
+  /** Trusted with the credit line and with rates that cannot be undone. */
+  { id: "senior", permission: "issue", capabilities: { hold: true, nonRefundable: true } },
+];
+
+/**
+ * Which preset an account currently matches, if any.
+ *
+ * `null` is a real answer and the screen says so: an account deliberately
+ * tuned away from every preset must not be shown as though it were one of
+ * them, or the next person to read the row will trust the label over the
+ * switches.
+ */
+export function presetOf(agent: Pick<Agent, "role" | "permission" | "capabilities">): PresetId | null {
+  const permission = permissionOf(agent);
+  const rights = capabilitiesOf(agent);
+  const match = AGENT_PRESETS.find(
+    (p) =>
+      p.permission === permission &&
+      p.capabilities.hold === rights.hold &&
+      p.capabilities.nonRefundable === rights.nonRefundable,
+  );
+  return match?.id ?? null;
+}
+
+/* ------------------------------------------------------------------- audit */
+
+/** One field that changed, in terms a person can read. */
+export interface AgentChange {
+  field: "permission" | "hold" | "nonRefundable" | "creditLimit" | "markup" | "active" | "role";
+  before?: string;
+  after?: string;
+}
+
+const markupText = (rule?: MarkupRule): string | undefined =>
+  rule ? (rule.mode === "percent" ? `+${rule.value}%` : `+${rule.value} ${rule.currency ?? ""}`.trim()) : undefined;
+
+/**
+ * What actually changed between two versions of an account.
+ *
+ * One entry per field rather than one blob per request. "Raised to issue and
+ * given the right to hold" is two decisions, and a log that records them as a
+ * single lump cannot answer which of them somebody is disputing.
+ *
+ * Capabilities are compared through {@link capabilitiesOf} rather than on the
+ * raw record, so an account that had no capabilities field and now has one
+ * explicitly set to its previous effective value does not read as a change
+ * nobody made.
+ */
+export function diffAgent(before: Agent, after: Agent): AgentChange[] {
+  const changes: AgentChange[] = [];
+  const push = (field: AgentChange["field"], a?: string, b?: string) => {
+    if (a !== b) changes.push({ field, before: a, after: b });
+  };
+
+  push("permission", permissionOf(before), permissionOf(after));
+  const rightsBefore = capabilitiesOf(before);
+  const rightsAfter = capabilitiesOf(after);
+  push("hold", String(rightsBefore.hold), String(rightsAfter.hold));
+  push("nonRefundable", String(rightsBefore.nonRefundable), String(rightsAfter.nonRefundable));
+  push("creditLimit", before.creditLimit?.toString(), after.creditLimit?.toString());
+  push("markup", markupText(before.markup), markupText(after.markup));
+  push("active", String(before.active), String(after.active));
+  push("role", before.role, after.role);
+  return changes;
 }

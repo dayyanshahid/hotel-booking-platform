@@ -1,11 +1,13 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import {
+  appendTeamAudit,
   getAgency,
   getAgentByEmail,
   listAgencyBookings,
   listAgents,
   listLedger,
+  listTeamAudit,
   saveAgent,
 } from "@/lib/agency/store";
 import { readCapabilities } from "@/lib/agency/types";
@@ -17,6 +19,7 @@ import {
   mayGrantPermission,
   mayManage,
   teamRollup,
+  diffAgent,
 } from "@/lib/agency/subagents";
 import type { Agent, AgentCapabilities, AgentPermission, MarkupRule } from "@/lib/agency/types";
 
@@ -101,7 +104,16 @@ export async function GET(req: Request) {
    */
   const summary = teamRollup(agents, entries, bookings, agencyLimit);
 
-  if (session.role === "admin") return ok({ agents, summary, agencyLimit });
+  /*
+   * The trail, scoped like the accounts are.
+   *
+   * A branch may read changes it made and changes made to its own people; a
+   * peer's demotion is between that peer and their manager. Filtered on both
+   * ends because either one identifies somebody outside the branch.
+   */
+  const trail = await listTeamAudit(session.agencyId);
+
+  if (session.role === "admin") return ok({ agents, summary, agencyLimit, audit: trail });
 
   /*
    * A sub-agent sees its own branch and nothing sideways — and the summary is
@@ -113,6 +125,7 @@ export async function GET(req: Request) {
     agents: agents.filter((a) => mine.has(a.id)),
     summary: Object.fromEntries(Object.entries(summary).filter(([id]) => mine.has(id))),
     agencyLimit,
+    audit: trail.filter((e) => mine.has(e.subjectId) && mine.has(e.actorId)),
   });
 }
 
@@ -243,6 +256,12 @@ export async function POST(req: Request) {
     active: true,
     createdAt: new Date().toISOString(),
   };
+  /*
+   * Snapshotted before the mutation, because `agent` *is* `existing` when one
+   * was found — the block below edits the stored object in place, so a diff
+   * taken afterwards would compare a record with itself and report nothing.
+   */
+  const before = existing ? { ...existing } : null;
   if (existing) {
     agent.name = sanitize(body.name, 60);
     agent.role = body.role === "admin" ? "admin" : "agent";
@@ -255,6 +274,18 @@ export async function POST(req: Request) {
     agent.active = true;
   }
   await saveAgent(agent);
+  await appendTeamAudit(
+    (before ? diffAgent(before, agent) : [{ field: "created" as const }]).map((change) => ({
+      agencyId: session.agencyId,
+      actorId: actor.id,
+      actorName: actor.name,
+      subjectId: agent.id,
+      subjectName: agent.name,
+      field: change.field,
+      before: "before" in change ? change.before : undefined,
+      after: "after" in change ? change.after : undefined,
+    })),
+  );
   return ok({ agent });
 }
 
@@ -348,5 +379,22 @@ export async function PATCH(req: Request) {
     active: suspending,
   };
   await saveAgent(updated);
+  /*
+   * Written after the save, so the log never claims a change that failed to
+   * persist. The reverse order would be worse in the one situation the trail
+   * exists for: a dispute where the record and the log disagree.
+   */
+  await appendTeamAudit(
+    diffAgent(agent, updated).map((change) => ({
+      agencyId: session.agencyId,
+      actorId: actor.id,
+      actorName: actor.name,
+      subjectId: updated.id,
+      subjectName: updated.name,
+      field: change.field,
+      before: change.before,
+      after: change.after,
+    })),
+  );
   return ok({ agent: updated });
 }
