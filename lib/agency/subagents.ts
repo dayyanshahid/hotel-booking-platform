@@ -205,3 +205,140 @@ export function mayManage(actor: Agent, subject: Agent, agents: Agent[]): boolea
   if (actor.role === "admin") return true;
   return descendantsOf(actor.id, agents).some((a) => a.id === subject.id);
 }
+
+/* ------------------------------------------------------------------ rollup */
+
+/**
+ * One account's line in the team screen, as figures rather than records.
+ *
+ * An allocation on its own is half a fact. "This desk has 4,000" does not tell
+ * a branch manager whether to raise it, lower it or leave it — only "4,000, of
+ * which 2,600 is gone" does. The same is true of the people beneath them: a
+ * parent is accountable for a subtree, so every figure here counts the account
+ * and its descendants together.
+ *
+ * Computed on the server and sent as numbers. The alternative is shipping the
+ * ledger and the whole booking list to the browser so it can add them up, which
+ * hands every agent the agency's entire commercial history to render six
+ * figures they are allowed to see.
+ */
+export interface AgentRollup {
+  /** The pool this account draws on: its own cap, or the agency line. */
+  pool: number;
+  /** Promised to the accounts directly beneath it. */
+  allocated: number;
+  /** Committed by this account and everyone under it. */
+  spent: number;
+  /** What is left of the pool after spending. Never negative. */
+  left: number;
+  /** Bookings this account and its descendants have made, excluding cancelled. */
+  bookings: number;
+  /** What those bookings sold for, and what the agency kept. */
+  sell: number;
+  margin: number;
+}
+
+/**
+ * Every account's line, keyed by id.
+ *
+ * Built in one pass over the team so a screen showing thirty rows does not do
+ * thirty walks of the ledger. `descendantsOf` is the expensive part and it is
+ * done once per account either way; what this avoids is re-filtering the
+ * ledger and the bookings for each of them.
+ */
+export function teamRollup(
+  agents: Agent[],
+  entries: LedgerEntry[],
+  bookings: TeamBooking[],
+  agencyLimit: number,
+): Record<string, AgentRollup> {
+  const out: Record<string, AgentRollup> = {};
+  for (const agent of agents) {
+    const family = new Set([agent.id, ...descendantsOf(agent.id, agents).map((a) => a.id)]);
+    const pool = poolOf(agent, agencyLimit);
+    const spent = spentUnder(agent.id, agents, entries);
+    /*
+     * Cancelled and failed bookings are not production.
+     *
+     * They are still in the list and still have this agent's name on them, and
+     * counting them would tell a branch manager their desk had sold something
+     * it had given back — on the screen where they decide whether to raise that
+     * desk's limit.
+     */
+    const sold = bookings.filter(
+      (b) => family.has(b.agentId) && b.status !== "cancelled" && b.status !== "failed",
+    );
+    out[agent.id] = {
+      pool,
+      allocated: allocatedToChildren(agent.id, agents),
+      spent,
+      left: Math.max(0, pool - spent),
+      bookings: sold.length,
+      sell: sold.reduce((sum, b) => sum + b.sell, 0),
+      margin: sold.reduce((sum, b) => sum + (b.sell - b.cost), 0),
+    };
+  }
+  return out;
+}
+
+/** Only the parts of a booking this rollup reads. */
+export interface TeamBooking {
+  agentId: string;
+  status: string;
+  sell: number;
+  cost: number;
+}
+
+/* -------------------------------------------------------------------- tree */
+
+/** An account and how deep it sits, for a list that has to read as a shape. */
+export interface TreeRow {
+  agent: Agent;
+  depth: number;
+}
+
+/**
+ * The team in reading order: every account directly beneath the one above it.
+ *
+ * A flat list with "reports to Layla" on each line makes the reader hold the
+ * hierarchy in their head and rebuild it by scanning. Once an agency has a
+ * dozen desks under three branches that is no longer possible, and the screen
+ * where somebody decides who may spend what is the wrong place to be guessing
+ * at who answers to whom.
+ *
+ * Roots are anything whose parent is not in the list — which covers the top of
+ * the agency and, for a sub-agent looking at their own branch, themselves. A
+ * cycle cannot be created through the API, but a corrupted record must not hang
+ * the screen, so anything not reached from a root is appended at the end rather
+ * than dropped: an account you cannot place is still an account that can spend.
+ */
+export function orderedTree(agents: Agent[]): TreeRow[] {
+  const byParent = new Map<string | undefined, Agent[]>();
+  const ids = new Set(agents.map((a) => a.id));
+  for (const agent of agents) {
+    const key = agent.parentId && ids.has(agent.parentId) ? agent.parentId : undefined;
+    const siblings = byParent.get(key) ?? [];
+    siblings.push(agent);
+    byParent.set(key, siblings);
+  }
+  // Administrators first, then by name, so the order is stable between reads
+  // rather than following whatever the store happened to return.
+  const sorted = (list: Agent[] = []) =>
+    [...list].sort((a, b) =>
+      a.role === b.role ? a.name.localeCompare(b.name) : a.role === "admin" ? -1 : 1,
+    );
+
+  const rows: TreeRow[] = [];
+  const placed = new Set<string>();
+  const walk = (parentId: string | undefined, depth: number) => {
+    for (const agent of sorted(byParent.get(parentId))) {
+      if (placed.has(agent.id)) continue;
+      placed.add(agent.id);
+      rows.push({ agent, depth });
+      walk(agent.id, depth + 1);
+    }
+  };
+  walk(undefined, 0);
+  for (const agent of agents) if (!placed.has(agent.id)) rows.push({ agent, depth: 0 });
+  return rows;
+}

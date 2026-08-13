@@ -11,7 +11,7 @@ import { arrivalBucket, bookingTotals } from "@/lib/agency/book";
 // From the policy module, not `holds.ts`: that one is server-only and
 // importing it here would throw the moment this component hydrated.
 import { hoursLeftOnHold, isHoldUrgent } from "@/lib/agency/hold-policy";
-import { DataTable, LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { DataTable, LoadFailed, Meter, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { DocumentBrand, DocumentFooter } from "@/components/agency/document-brand";
@@ -19,7 +19,14 @@ import { DEFAULT_BRAND_COLOR, brandingOf, normalizeHex } from "@/lib/agency/bran
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import { canAtLeast, capabilitiesOf } from "@/lib/agency/types";
-import { allocatableBy, allocatedToChildren, descendantsOf, poolOf } from "@/lib/agency/subagents";
+import {
+  allocatableBy,
+  allocatedToChildren,
+  descendantsOf,
+  orderedTree,
+  poolOf,
+} from "@/lib/agency/subagents";
+import type { AgentRollup } from "@/lib/agency/subagents";
 import type {
   Agent,
   AgentCapabilities,
@@ -950,9 +957,18 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
    * one because the read failed invites an administrator to re-invite
    * colleagues who are already there.
    */
-  const team = useResource<{ agents: Agent[] }>("/api/agency/agents");
+  const team = useResource<{
+    agents: Agent[];
+    summary?: Record<string, AgentRollup>;
+    agencyLimit?: number;
+  }>("/api/agency/agents");
   const agents = team.data?.agents ?? null;
+  const summary = team.data?.summary ?? {};
   const reload = team.reload;
+
+  /** Free-text filter over name and address, and whether to show suspended. */
+  const [query, setQuery] = useState("");
+  const [showSuspended, setShowSuspended] = useState(true);
 
   /*
    * Narrowed once, here. `CreditTerms.currency` is a plain string because it is
@@ -982,6 +998,26 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
    * refuses is a form that wasted their time and taught them nothing.
    */
   const canCreate = isAdmin || (me?.creditLimit !== undefined);
+
+  /*
+   * The tree, then the filter — in that order and not the other way round.
+   *
+   * Filtering first and then building the tree orphans every match whose parent
+   * did not match, and they surface as roots: a desk that looks like it answers
+   * to nobody, on the screen that governs who answers to whom. Built whole and
+   * then narrowed, a match keeps the depth it really has.
+   */
+  const rows = useMemo(() => {
+    if (!agents) return [];
+    const needle = query.trim().toLowerCase();
+    return orderedTree(agents).filter(({ agent }) => {
+      if (!showSuspended && !agent.active) return false;
+      if (!needle) return true;
+      return agent.name.toLowerCase().includes(needle) || agent.email.toLowerCase().includes(needle);
+    });
+  }, [agents, query, showSuspended]);
+
+  const suspendedCount = agents?.filter((a) => !a.active).length ?? 0;
 
   function markupOf(mode: "inherit" | "percent" | "fixed", value: string): MarkupRule | undefined {
     if (mode === "inherit") return undefined;
@@ -1117,6 +1153,35 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
         </Card>
       )}
 
+      {/*
+        A filter, once the team is big enough to need one.
+        Hidden below a handful of accounts, where a search box is one more
+        control on a screen you can already read at a glance.
+      */}
+      {agents && agents.length > 6 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-56 flex-1">
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("agency.teamSearch")}
+              aria-label={t("agency.teamSearch")}
+            />
+          </div>
+          {suspendedCount > 0 && (
+            <Toggle
+              checked={showSuspended}
+              onChange={setShowSuspended}
+              label={t("agency.showSuspended")}
+            />
+          )}
+          <p className="text-muted text-xs tabular-nums">
+            {t("agency.teamShowing", { shown: rows.length, total: agents.length })}
+          </p>
+        </div>
+      )}
+
       {team.loading && <TableSkeleton rows={3} />}
       {/*
         A failed read here shows an empty team, and the reader's obvious next
@@ -1125,27 +1190,35 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
         record for a person who already has the right to spend the credit.
       */}
       {team.failed && <LoadFailed title={t("agency.teamUnavailable")} onRetry={team.reload} />}
-      {agents && (
+      {agents && rows.length === 0 && (
+        <Nothing icon="users" title={t("agency.teamNoMatch")} body={t("agency.teamNoMatchBody")} />
+      )}
+      {agents && rows.length > 0 && (
         <Card className="divide-ink-100 divide-y">
-          {agents.map((agent) => {
+          {rows.map(({ agent, depth }) => {
             const rights = capabilitiesOf(agent);
             const canBook = canAtLeast(agent.permission ?? "issue", "booking");
             const editable = isAdmin || descendantsOf(context.session.agentId, agents).some((a) => a.id === agent.id);
             const editableRights = editable && agent.id !== context.session.agentId && canBook;
+            const stats = summary[agent.id];
             const manages = editable && agent.id !== context.session.agentId;
-            const parent = agent.parentId ? agents.find((a) => a.id === agent.parentId) : undefined;
             return (
-              <div key={agent.id} className="space-y-2 p-3.5">
+              <div
+                key={agent.id}
+                className="space-y-2 p-3.5"
+                /*
+                 * Indentation carries the hierarchy, so the row no longer has
+                 * to say "reports to Layla" — the shape says it, and the words
+                 * were costing a line on every sub-agent to repeat what the
+                 * account directly above already showed.
+                 */
+                style={depth ? { paddingInlineStart: `${0.875 + depth * 1.5}rem` } : undefined}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div className="min-w-0 space-y-1.5">
                     <div>
                       <p className="text-sm font-medium wrap-anywhere">{agent.name}</p>
-                      <p className="text-muted text-xs wrap-anywhere">
-                        {agent.email}
-                        {/* Who they answer to, said on their own row — a hierarchy
-                            you have to reconstruct from a list is not a hierarchy. */}
-                        {parent && <> · {t("agency.reportsTo")} {parent.name}</>}
-                      </p>
+                      <p className="text-muted text-xs wrap-anywhere">{agent.email}</p>
                     </div>
 
                     {/*
@@ -1154,6 +1227,47 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
                       read as a caption under their name in a way a full-width
                       band floating between two people does not.
                     */}
+                    {/*
+                      An allocation is half a fact without what is left of it.
+                      "This desk has 4,000" does not tell a branch manager
+                      whether to raise it, lower it or leave it alone; "4,000,
+                      of which 2,600 is gone" does — and the meter answers it
+                      before the numbers are read.
+                    */}
+                    {stats && (agent.creditLimit !== undefined || stats.spent > 0) && (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <span aria-hidden className="w-16 shrink-0">
+                          <Meter value={stats.left} max={stats.pool} label={t("agency.creditAvailable")} />
+                        </span>
+                        <span className="text-muted tabular-nums">
+                          {t("agency.leftOfPool", {
+                            left: formatMoney(stats.left, currency, locale),
+                            pool: formatMoney(stats.pool, currency, locale),
+                          })}
+                        </span>
+                        {stats.allocated > 0 && (
+                          <span className="text-muted tabular-nums">
+                            · {t("agency.promisedOn", { amount: formatMoney(stats.allocated, currency, locale) })}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/*
+                      What the account has actually sold, counted over everyone
+                      beneath it. A parent judging a limit is judging a branch,
+                      not one person's own bookings.
+                    */}
+                    {stats && stats.bookings > 0 && (
+                      <p className="text-muted text-xs tabular-nums">
+                        {t("agency.producedLine", {
+                          bookings: stats.bookings,
+                          sell: formatMoney(stats.sell, currency, locale),
+                          margin: formatMoney(stats.margin, currency, locale),
+                        })}
+                      </p>
+                    )}
+
                     {editableRights ? (
                       <div className="-mb-1.5 flex flex-wrap items-center gap-x-5">
                         <Toggle

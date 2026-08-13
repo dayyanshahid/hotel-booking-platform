@@ -428,6 +428,33 @@ async function main(): Promise<void> {
     return `${mine.agents?.length} of ${everyone.agents?.length}`;
   });
 
+  await check("the figures beside each account are scoped like the accounts are", async () => {
+    if (!branchId) return "SKIP: no branch";
+    /*
+     * The rollup carries what a branch has sold and what margin it kept, and
+     * that is a commercial fact about somebody's desk. Filtering the agent list
+     * but not the summary would have left every peer's production sitting in
+     * the payload for anyone who opened the network tab — the list would look
+     * correct and the leak would be one keystroke away.
+     */
+    const mine = await must<{
+      agents?: { id: string }[];
+      summary?: Record<string, { pool: number; spent: number; left: number }>;
+    }>(branch, "/api/agency/agents");
+    const visible = new Set((mine.agents ?? []).map((a) => a.id));
+    const keys = Object.keys(mine.summary ?? {});
+    if (!keys.length) throw new Error("no figures came back at all");
+    const stray = keys.filter((id) => !visible.has(id));
+    if (stray.length) throw new Error(`${stray.length} accounts had figures but no record`);
+
+    // And the figures are the branch's own pool, not the agency line.
+    const own = mine.summary?.[branchId];
+    if (!own) throw new Error("the branch got no figures for itself");
+    if (own.pool !== 4000) throw new Error(`expected the branch pool of 4000, got ${own.pool}`);
+    if (own.left > own.pool) throw new Error("more left than the pool holds");
+    return `${keys.length} scoped · pool ${own.pool}`;
+  });
+
   await check("demoting the branch narrows everyone beneath it", async () => {
     if (!branchId) return "SKIP: no branch";
     /*

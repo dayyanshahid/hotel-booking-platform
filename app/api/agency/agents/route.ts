@@ -1,6 +1,13 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
-import { getAgency, getAgentByEmail, listAgents, saveAgent } from "@/lib/agency/store";
+import {
+  getAgency,
+  getAgentByEmail,
+  listAgencyBookings,
+  listAgents,
+  listLedger,
+  saveAgent,
+} from "@/lib/agency/store";
 import { readCapabilities } from "@/lib/agency/types";
 import {
   allocatableBy,
@@ -9,6 +16,7 @@ import {
   mayGrantCapabilities,
   mayGrantPermission,
   mayManage,
+  teamRollup,
 } from "@/lib/agency/subagents";
 import type { Agent, AgentCapabilities, AgentPermission, MarkupRule } from "@/lib/agency/types";
 
@@ -66,11 +74,46 @@ export async function GET(req: Request) {
   const session = await activeAgent();
   if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
 
-  const agents = await listAgents(session.agencyId);
-  if (session.role === "admin") return ok({ agents });
+  const [agents, agency, entries, bookings] = await Promise.all([
+    listAgents(session.agencyId),
+    getAgency(session.agencyId),
+    /*
+     * The whole ledger, not the recent page of it.
+     *
+     * `listLedger` defaults to fifty entries because that is a statement's
+     * worth. A sub-limit measured against a truncated ledger under-reports
+     * spending, and it does so silently and in the generous direction — a desk
+     * that had used its allocation would show headroom it does not have.
+     */
+    listLedger(session.agencyId, Number.MAX_SAFE_INTEGER),
+    listAgencyBookings(session.agencyId),
+  ]);
+  const agencyLimit = agency?.credit.limit ?? 0;
 
+  /*
+   * Figures, computed here, sent as numbers.
+   *
+   * The alternative is sending the ledger and every booking to the browser so
+   * it can add them up — which hands an account the agency's whole commercial
+   * history to render the six figures it is allowed to see. It also keeps the
+   * arithmetic in one place: the same functions decide what a screen shows and
+   * what a POST is allowed to do.
+   */
+  const summary = teamRollup(agents, entries, bookings, agencyLimit);
+
+  if (session.role === "admin") return ok({ agents, summary, agencyLimit });
+
+  /*
+   * A sub-agent sees its own branch and nothing sideways — and the summary is
+   * filtered with it, or the payload would carry a peer's production for
+   * anybody who opened the network tab.
+   */
   const mine = new Set([session.agentId, ...descendantsOf(session.agentId, agents).map((a) => a.id)]);
-  return ok({ agents: agents.filter((a) => mine.has(a.id)) });
+  return ok({
+    agents: agents.filter((a) => mine.has(a.id)),
+    summary: Object.fromEntries(Object.entries(summary).filter(([id]) => mine.has(id))),
+    agencyLimit,
+  });
 }
 
 /**
