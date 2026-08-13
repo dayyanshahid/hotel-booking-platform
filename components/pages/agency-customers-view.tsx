@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { DataTable, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
-import { Alert, Button, Card, Field, Input, Modal } from "@/components/ui";
-import { formatDate } from "@/lib/format";
+import { Alert, Badge, Button, Card, Field, Input, Modal } from "@/components/ui";
+import { formatDate, formatMoney } from "@/lib/format";
+import type { CustomerHistory } from "@/lib/agency/customers";
+import type { CurrencyCode } from "@/lib/types";
 import type { AgencyCustomer } from "@/lib/agency/types";
 import type { Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
@@ -30,6 +32,9 @@ const BLANK = { id: "", name: "", email: "", phone: "", reference: "", notes: ""
 function Customers({ locale }: { locale: Locale }) {
   const { t } = useApp();
   const [customers, setCustomers] = useState<AgencyCustomer[] | null>(null);
+  const [history, setHistory] = useState<Record<string, CustomerHistory>>({});
+  /** The client whose removal is waiting on a second click. */
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<typeof BLANK | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,11 +42,17 @@ function Customers({ locale }: { locale: Locale }) {
   const [loadFailed, setLoadFailed] = useState(false);
 
   async function load() {
-    const body = await apiFetch<{ customers: AgencyCustomer[] }>("/api/agency/customers");
+    const body = await apiFetch<{
+      customers: AgencyCustomer[];
+      history?: Record<string, CustomerHistory>;
+    }>("/api/agency/customers");
     // An unreadable address book showed as an empty one, and the obvious next
     // move is to re-enter people who are already on it.
     setLoadFailed(!body.ok);
-    if (body.ok && body.data) setCustomers(body.data.customers);
+    if (body.ok && body.data) {
+      setCustomers(body.data.customers);
+      setHistory(body.data.history ?? {});
+    }
   }
 
   useEffect(() => {
@@ -67,6 +78,7 @@ function Customers({ locale }: { locale: Locale }) {
   }
 
   async function remove(id: string) {
+    setConfirming(null);
     setBusy(true);
     setError(null);
     /*
@@ -104,7 +116,7 @@ function Customers({ locale }: { locale: Locale }) {
         actions={<Button onClick={() => setEditing({ ...BLANK })}>{t("agency.addCustomer")}</Button>}
       />
 
-      {customers && customers.length > 5 && (
+      {customers && customers.length > 3 && (
         <Card className="p-4 sm:max-w-md">
           <Field label={t("admin.search")} htmlFor="cus-q">
             <Input id="cus-q" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -156,19 +168,62 @@ function Customers({ locale }: { locale: Locale }) {
               ),
             },
             {
-              key: "notes",
-              header: t("agency.notes"),
-              secondary: true,
-              render: (customer) => <span className="text-muted text-xs wrap-anywhere">{customer.notes ?? "—"}</span>,
+              /*
+               * What the agency has actually done with them.
+               *
+               * The column this replaces showed the notes field, which is
+               * already on the record and rarely the thing anybody is scanning
+               * for. "Two quotes open, $1,400" is what decides whether to ring
+               * somebody this afternoon.
+               */
+              key: "trade",
+              header: t("agency.trade"),
+              render: (customer) => {
+                const trade = history[customer.id];
+                if (!trade || (!trade.quotes && !trade.bookings)) {
+                  return <span className="text-muted text-xs">{t("agency.noTradeYet")}</span>;
+                }
+                const currency = (trade.currency ?? "USD") as CurrencyCode;
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {trade.openQuotes > 0 && (
+                      <Badge tone="brand">
+                        {t("agency.openQuotesWorth", {
+                          count: trade.openQuotes,
+                          value: formatMoney(trade.openValue, currency, locale),
+                        })}
+                      </Badge>
+                    )}
+                    {trade.bookings > 0 && (
+                      <span className="text-muted tabular-nums">
+                        {t("agency.bookedSold", {
+                          count: trade.bookings,
+                          value: formatMoney(trade.sold, currency, locale),
+                        })}
+                      </span>
+                    )}
+                    {trade.openQuotes === 0 && trade.bookings === 0 && trade.quotes > 0 && (
+                      <span className="text-muted">{t("agency.quotesClosed", { count: trade.quotes })}</span>
+                    )}
+                  </div>
+                );
+              },
             },
             {
-              key: "added",
-              header: t("agency.added"),
+              /*
+               * When something last happened, falling back to when they were
+               * added. The date a record was created stops being interesting
+               * the moment there is trade against it; "last heard from" does
+               * not.
+               */
+              key: "last",
+              header: t("agency.lastActivity"),
               align: "end",
               secondary: true,
-              render: (customer) => (
-                <span className="whitespace-nowrap">{formatDate(customer.createdAt.slice(0, 10), locale)}</span>
-              ),
+              render: (customer) => {
+                const when = history[customer.id]?.lastActivity ?? customer.createdAt;
+                return <span className="whitespace-nowrap">{formatDate(when.slice(0, 10), locale)}</span>;
+              },
             },
             {
               key: "edit",
@@ -204,7 +259,18 @@ function Customers({ locale }: { locale: Locale }) {
         size="sm"
       >
         {editing && (
-          <div className="space-y-3">
+          /*
+           * A form, so Enter saves. Everybody types a name and presses it, and
+           * without this the key did nothing on a dialog whose whole content is
+           * five fields.
+           */
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!busy && editing.name.trim()) void save();
+            }}
+          >
             {error && <Alert tone="critical">{error}</Alert>}
             <Field label={t("agency.customerName")} htmlFor="cus-name">
               <Input
@@ -236,23 +302,58 @@ function Customers({ locale }: { locale: Locale }) {
               />
             </Field>
             <Field label={t("agency.notes")} htmlFor="cus-notes">
-              <Input
+              {/*
+                Several lines, because this is where an agent records that the
+                client only flies mornings and always wants a high floor. A
+                single-line input made that a scrolling ribbon nobody could read
+                back.
+              */}
+              <textarea
                 id="cus-notes"
+                rows={3}
+                maxLength={400}
                 value={editing.notes}
                 onChange={(e) => setEditing({ ...editing, notes: e.target.value })}
+                className="hairline focus-ring w-full rounded-[var(--radius-control)] border px-3 py-2 text-sm"
               />
             </Field>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={save} loading={busy} disabled={!editing.name.trim()}>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" loading={busy} disabled={!editing.name.trim()}>
                 {t("common.save")}
               </Button>
-              {editing.id && (
-                <Button variant="ghost" onClick={() => remove(editing.id)} loading={busy}>
-                  {t("common.remove")}
-                </Button>
-              )}
+              {editing.id &&
+                /*
+                 * Asked before it is done, and it names what goes with them.
+                 * Removing a client was one click on an irreversible action
+                 * sitting beside Save — and their quotes keep their name and
+                 * address, so the loss is the link rather than the record,
+                 * which is worth saying rather than leaving to be discovered.
+                 */
+                (confirming === editing.id ? (
+                  <>
+                    <Button variant="danger" onClick={() => remove(editing.id)} loading={busy}>
+                      {t("agency.removeConfirm")}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirming(null)}>
+                      {t("common.cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" onClick={() => setConfirming(editing.id)}>
+                    {t("common.remove")}
+                  </Button>
+                ))}
             </div>
-          </div>
+
+            {confirming === editing.id && (
+              <Alert tone="warning">
+                {history[editing.id]?.quotes
+                  ? t("agency.removeWithTrade", { count: history[editing.id].quotes })
+                  : t("agency.removePlain")}
+              </Alert>
+            )}
+          </form>
         )}
       </Modal>
     </div>

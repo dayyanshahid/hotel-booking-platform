@@ -13,7 +13,7 @@ import { LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/compone
 import { useResource } from "@/components/providers/use-resource";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
-import { daysUntilExpiry, isExpiringSoon } from "@/lib/agency/quotes";
+import { daysUntilExpiry, isExpiringSoon, quoteCost, quoteTotal } from "@/lib/agency/quotes";
 import { fold, foldedIncludes } from "@/lib/text";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
@@ -88,7 +88,7 @@ function QuoteList({ locale }: { locale: Locale }) {
     () =>
       (quotes ?? [])
         .filter((q) => q.status === "open")
-        .reduce((sum, q) => sum + q.items.reduce((n, i) => n + i.sell, 0), 0),
+        .reduce((sum, q) => sum + quoteTotal(q), 0),
     [quotes],
   );
   const currency = (quotes?.[0]?.currency ?? "USD") as CurrencyCode;
@@ -203,7 +203,7 @@ function QuoteList({ locale }: { locale: Locale }) {
 
       <ul className="space-y-2">
         {shown.map((quote) => {
-          const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
+          const total = quoteTotal(quote);
           // Expiry is applied by the endpoint, so rendering does not consult
           // the clock — a render that reads Date.now() is a render that can
           // disagree with itself.
@@ -306,8 +306,8 @@ function QuoteDetail({ locale, id, context }: { locale: Locale; id: string; cont
   }
 
   const currency = quote.currency as CurrencyCode;
-  const total = quote.items.reduce((sum, item) => sum + item.sell, 0);
-  const cost = quote.items.reduce((sum, item) => sum + item.cost, 0);
+  const total = quoteTotal(quote);
+  const cost = quoteCost(quote);
   const branding = brandingOf(context.agency);
 
   /*

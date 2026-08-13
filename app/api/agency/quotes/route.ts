@@ -1,6 +1,6 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent, agentWithPermission } from "@/lib/agency/session";
-import { getAgency, listQuotes, saveQuote } from "@/lib/agency/store";
+import { getAgency, getCustomer, listQuotes, saveQuote } from "@/lib/agency/store";
 import { withExpiry } from "@/lib/agency/quotes";
 import { viewOffer } from "@/lib/agency/rates";
 import { countryForOffer } from "@/lib/agency/context";
@@ -42,6 +42,7 @@ export async function GET(req: Request) {
 interface Body {
   customerName: string;
   customerEmail?: string;
+  customerId?: string;
   notes?: string;
   offerIds: string[];
   /**
@@ -160,6 +161,18 @@ export async function POST(req: Request) {
     agentName: session.name,
     customerName: sanitize(body.customerName, 120),
     customerEmail: body.customerEmail ? sanitize(body.customerEmail, 120).toLowerCase() : undefined,
+    /*
+     * Kept only when it names a client on this agency's own list.
+     *
+     * The id arrives from the browser, and an unchecked one would let a quote
+     * be attached to another agency's client record — which is the link the
+     * customer screen reads to total somebody's trade.
+     */
+    customerId: body.customerId
+      ? (await getCustomer(body.customerId))?.agencyId === session.agencyId
+        ? body.customerId
+        : undefined
+      : undefined,
     notes: sanitize(body.notes, 600),
     items,
     currency: items[0].currency,

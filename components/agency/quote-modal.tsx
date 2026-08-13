@@ -28,6 +28,16 @@ export function QuoteModal({
   const { t } = useApp();
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  /*
+   * Which saved client this is for, when one was picked.
+   *
+   * The picker used to copy a name and an address into two boxes and forget
+   * where they came from, so the client record could never say what had been
+   * quoted for them. Cleared the moment either box is edited by hand: a quote
+   * addressed to somebody else must not stay attached to the record it was
+   * seeded from.
+   */
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [notes, setNotes] = useState("");
   /*
    * A margin for this quote alone.
@@ -64,6 +74,7 @@ export function QuoteModal({
       body: JSON.stringify({
         customerName,
         customerEmail: customerEmail || undefined,
+        customerId,
         notes,
         offerIds,
         markupPercent: markup.trim() === "" ? undefined : Number(markup),
@@ -99,6 +110,7 @@ export function QuoteModal({
                 if (!picked) return;
                 setCustomerName(picked.name);
                 setCustomerEmail(picked.email ?? "");
+                setCustomerId(picked.id);
               }}
             >
               <option value="">{t("agency.pickCustomerNone")}</option>
@@ -111,10 +123,25 @@ export function QuoteModal({
           </Field>
         )}
         <Field label={t("agency.customerName")} htmlFor="q-name">
-          <Input id="q-name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+          <Input
+            id="q-name"
+            value={customerName}
+            onChange={(e) => {
+              setCustomerName(e.target.value);
+              setCustomerId(undefined);
+            }}
+          />
         </Field>
         <Field label={t("agency.customerEmail")} htmlFor="q-email">
-          <Input id="q-email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} />
+          <Input
+            id="q-email"
+            type="email"
+            value={customerEmail}
+            onChange={(e) => {
+              setCustomerEmail(e.target.value);
+              setCustomerId(undefined);
+            }}
+          />
         </Field>
         <Field label={t("agency.quoteMarkup")} htmlFor="q-markup" hint={t("agency.quoteMarkupHint")}>
           <Input

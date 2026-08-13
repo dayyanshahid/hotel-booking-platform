@@ -532,6 +532,15 @@ export interface AgencyQuote {
   agentName: string;
   customerName: string;
   customerEmail?: string;
+  /**
+   * The saved client this was quoted for, when one was picked.
+   *
+   * Absent on anything quoted by typing a name, and on everything written
+   * before the address book was linked to anything — which is why a client's
+   * history falls back to matching on the address. Stored as well as the name
+   * so that renaming a client does not orphan their past quotes.
+   */
+  customerId?: string;
   notes?: string;
   items: AgencyQuoteItem[];
   currency: string;

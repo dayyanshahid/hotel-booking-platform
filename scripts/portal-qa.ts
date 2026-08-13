@@ -689,6 +689,51 @@ async function main(): Promise<void> {
     return email;
   });
 
+  await check("one address, one record", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The reason this module exists. A name spelled two ways across a quote
+     * and a voucher has to be reconciled by hand; two records for one address
+     * is the same problem a step earlier, made when somebody is in a hurry.
+     */
+    const email = `dupe-${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const first = await counter.api<{ customer?: { id: string } }>("/api/agency/customers", {
+      body: { name: "First Spelling", email },
+    });
+    if (!first.ok) throw new Error(`the first save was refused: ${first.status}`);
+    const second = await counter.api("/api/agency/customers", { body: { name: "Second Spelling", email } });
+    if (second.ok) throw new Error("a second record was created for the same address");
+    if (second.status !== 409) throw new Error(`expected 409, got ${second.status}`);
+
+    // And editing the original must not report it as its own duplicate.
+    const same = await counter.api("/api/agency/customers", {
+      body: { id: first.data?.customer?.id, name: "First Spelling", email, phone: "+966500000000" },
+    });
+    if (!same.ok) throw new Error(`editing the original was refused: ${same.status}`);
+    return `409 on the duplicate, ${same.status} on the edit`;
+  });
+
+  await check("a client's trade comes back with them", async () => {
+    if (gate()) return gate()!;
+    /*
+     * The address book was a form-filler that forgot where the name came
+     * from, so a client record could never say what had been quoted for them.
+     * The figures are counted on the server; this checks they arrive at all
+     * and are keyed by the client they belong to.
+     */
+    const body = await must<{
+      customers?: { id: string }[];
+      history?: Record<string, { quotes: number; bookings: number }>;
+    }>(counter, "/api/agency/customers");
+    if (!body.customers?.length) return "SKIP: no clients on this installation";
+    if (!body.history) throw new Error("no trade came back at all");
+    const stray = Object.keys(body.history).filter(
+      (id) => !body.customers!.some((c) => c.id === id),
+    );
+    if (stray.length) throw new Error(`${stray.length} histories belong to nobody on the list`);
+    return `${Object.keys(body.history).length} keyed to ${body.customers.length} clients`;
+  });
+
   await check("and can take it off again", async () => {
     if (gate()) return gate()!;
     if (!created) return "SKIP: nothing was created";

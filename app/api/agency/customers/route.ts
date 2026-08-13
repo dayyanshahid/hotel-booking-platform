@@ -1,6 +1,14 @@
 import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent, agentWithPermission } from "@/lib/agency/session";
-import { getCustomer, listCustomers, removeCustomer, saveCustomer } from "@/lib/agency/store";
+import {
+  getCustomer,
+  listAgencyBookings,
+  listCustomers,
+  listQuotes,
+  removeCustomer,
+  saveCustomer,
+} from "@/lib/agency/store";
+import { customerHistories, duplicateOf } from "@/lib/agency/customers";
 import type { AgencyCustomer } from "@/lib/agency/types";
 
 /** The agency's own client list. Scoped to their agency on every operation. */
@@ -8,7 +16,19 @@ export async function GET(req: Request) {
   const locale = localeFrom(req);
   const session = await activeAgent();
   if (!session) return fail("accountSecurity", "agency.signInRequired", locale, { status: 401, action: "authenticate" });
-  return ok({ customers: await listCustomers(session.agencyId) });
+  const [customers, quotes, bookings] = await Promise.all([
+    listCustomers(session.agencyId),
+    listQuotes(session.agencyId),
+    listAgencyBookings(session.agencyId),
+  ]);
+  /*
+   * Their trade, counted here rather than in the browser.
+   *
+   * The screen would otherwise fetch every quote and every booking the agency
+   * has ever written in order to count two numbers per row — and it would do
+   * it on a page whose whole job is a list of names.
+   */
+  return ok({ customers, history: customerHistories(customers, quotes, bookings) });
 }
 
 export async function POST(req: Request) {
@@ -28,6 +48,25 @@ export async function POST(req: Request) {
   }
   if (body.email && !isEmail(body.email)) {
     return fail("validation", "error.validation", locale, { status: 422, fields: { email: "invalid" } });
+  }
+
+  /*
+   * One address, one record.
+   *
+   * This module exists because a name spelled two ways across a quote and a
+   * voucher has to be reconciled by hand. Two records for one address is the
+   * same problem a step earlier, and the easiest moment to make it is when
+   * somebody is in a hurry with a customer on the phone. Refused rather than
+   * merged: merging two records is a decision about somebody's trading
+   * history, and it is not this endpoint's to take silently.
+   */
+  const book = await listCustomers(session.agencyId);
+  const clash = duplicateOf(body.email, book, body.id);
+  if (clash) {
+    return fail("validation", "agency.customerDuplicate", locale, {
+      status: 409,
+      fields: { email: clash.name },
+    });
   }
 
   const now = new Date().toISOString();

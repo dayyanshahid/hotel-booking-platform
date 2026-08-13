@@ -70,3 +70,18 @@ export function extendedExpiry(days: number, now = Date.now()): string {
   const capped = Math.min(Math.max(Math.round(days), 1), MAX_EXTENSION_DAYS);
   return new Date(now + capped * 86_400_000).toISOString();
 }
+
+/**
+ * What a quote comes to, and what it cost us.
+ *
+ * The sum lived inline at three call sites in the quotes screen and was about
+ * to gain a fourth in the client record. Three copies of an arithmetic rule is
+ * how one of them ends up excluding a line the others include.
+ */
+export function quoteTotal(quote: Pick<AgencyQuote, "items">): number {
+  return quote.items.reduce((sum, item) => sum + item.sell, 0);
+}
+
+export function quoteCost(quote: Pick<AgencyQuote, "items">): number {
+  return quote.items.reduce((sum, item) => sum + item.cost, 0);
+}
