@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { ApiError, ErrorCategory, Locale } from "../types";
 import { createTranslator, isLocale } from "../i18n";
 import { isServerless } from "./runtime";
+import { isDurable } from "./persistence";
 
 /**
  * Platform-standard envelope (§9.4): every endpoint returns an error category,
@@ -107,6 +108,31 @@ export async function readJson<T>(req: Request): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The rate is not in the store — and why that is, is the useful part.
+ *
+ * A missing offer and a sold-out one look identical from here, and the app
+ * used to report both as "availability changed · select an alternative". On a
+ * deployment with a shared store that is the honest reading: the rate really
+ * has gone, and another property is the right next move.
+ *
+ * On a deployment without one it is a lie with consequences. The offer was
+ * published by whichever instance ran the search and the checkout arrived at a
+ * different one, so *every* property will fail the same way — and the advice
+ * sends an agent, with a customer on the phone, to try four more hotels and
+ * conclude the platform is broken rather than that their search needs
+ * re-running. Searching again puts the offers in the instance that will be
+ * asked about them, which usually works.
+ *
+ * The fix is a shared store, not this message. Until there is one, the message
+ * should at least point somewhere that helps.
+ */
+export function offerLost(locale: Locale, status = 409) {
+  return isDurable()
+    ? fail("availabilityChanged", "error.availabilityChanged", locale, { status, action: "selectAlternative" })
+    : fail("availabilityChanged", "error.searchAgain", locale, { status, action: "retry" });
 }
 
 /** Sanitize free text before it is stored or echoed back (§8.5). */

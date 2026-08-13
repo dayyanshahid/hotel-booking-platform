@@ -1,4 +1,4 @@
-import { fail, localeFrom, ok, readJson } from "@/lib/server/api";
+import { fail, localeFrom, offerLost, ok, readJson } from "@/lib/server/api";
 import { getHotelSeed, buildHotel } from "@/lib/data/hotels";
 import { getDestination } from "@/lib/data/destinations";
 import { ROOM_TEMPLATES } from "@/lib/data/rooms";
@@ -39,12 +39,9 @@ export async function POST(req: Request) {
   const offers: StoredOffer[] = [];
   for (const offerId of requested.slice(0, 12)) {
     const offer = await loadOffer(offerId);
-    if (!offer) {
-      return fail("availabilityChanged", "error.availabilityChanged", locale, {
-        status: 409,
-        action: "selectAlternative",
-      });
-    }
+    // Absent, not expired — which on a deployment with no shared store means
+    // the search ran on another instance rather than that the rate has gone.
+    if (!offer) return offerLost(locale);
     if (new Date(offer.expiresAt).getTime() < Date.now()) {
       return fail("availabilityChanged", "error.availabilityChanged", locale, {
         status: 409,

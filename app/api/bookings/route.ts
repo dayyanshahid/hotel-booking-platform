@@ -1,4 +1,4 @@
-import { fail, isEmail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
+import { fail, isEmail, localeFrom, offerLost, ok, readJson, sanitize } from "@/lib/server/api";
 import { buildHotel, getHotelSeed } from "@/lib/data/hotels";
 import { getDestination } from "@/lib/data/destinations";
 import { hash01 } from "@/lib/server/pricing";
@@ -210,12 +210,18 @@ export async function POST(req: Request) {
    */
   const soldOut = scenario === "rateSoldOut" || scenario === "offerExpired";
 
-  if (lostLine || soldOut) {
+  if (soldOut) {
     return fail("availabilityChanged", "error.availabilityChanged", locale, {
       status: 409,
       action: "selectAlternative",
     });
   }
+  /*
+   * Told apart from a sold-out rate, because the remedy differs. A scenario
+   * flag means the supplier says it has gone; a line whose offer is simply not
+   * in the store may only mean this instance never saw the search.
+   */
+  if (lostLine) return offerLost(locale);
   const offer = lineOffers[0].offer;
   const seed = getHotelSeed(session.hotelSlug);
   const dest = seed ? getDestination(seed.destinationId) : undefined;

@@ -685,6 +685,7 @@ const en: Dict = {
 
   "error.validation": "Check the highlighted details.",
   "error.availabilityChanged": "This option changed or sold out.",
+  "error.searchAgain": "This search is no longer held. Run it again — the rate is usually still there.",
   "error.paymentActionNeeded": "The payment could not be completed.",
   "error.bookingProcessing": "We are verifying the outcome of your booking.",
   "error.temporaryService": "Some options could not load right now.",
@@ -2176,6 +2177,7 @@ const ar: Dict = {
 
   "error.validation": "راجع البيانات المحددة.",
   "error.availabilityChanged": "تغيّر هذا الخيار أو نفد.",
+  "error.searchAgain": "لم يعد هذا البحث محفوظًا. أعد تشغيله — عادةً ما يكون السعر متاحًا.",
   "error.paymentActionNeeded": "تعذّر إتمام الدفع.",
   "error.bookingProcessing": "نتحقق من نتيجة حجزك.",
   "error.temporaryService": "تعذّر تحميل بعض الخيارات الآن.",
