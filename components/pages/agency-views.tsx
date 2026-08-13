@@ -1793,7 +1793,49 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
           </Button>
         </Card>
       ) : (
-        <p className="text-muted text-sm">{t("agency.noPoolToShare")}</p>
+        /*
+         * What this screen is, for somebody who cannot administer anybody.
+         *
+         * A counter agent saw one row, no controls and a line of grey text —
+         * which reads as a page that failed to load rather than as a page
+         * saying "this is your access, and somebody else sets it". The rules
+         * behind it are right and stay: an account sees its own branch, and
+         * cannot share a pool it was never given. Only the silence was wrong.
+         */
+        <Card className="space-y-3 p-5">
+          <div className="space-y-1">
+            <h2 className="font-semibold">{t("agency.yourAccess")}</h2>
+            <p className="text-muted text-sm leading-relaxed">{t("agency.noPoolToShare")}</p>
+          </div>
+          {me && (
+            <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted text-sm">{t("agency.permission")}</dt>
+                <dd className="text-sm font-medium">{permissionLabel(t, me.permission ?? "issue")}</dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted text-sm">{t("agency.mayHold")}</dt>
+                <dd className="text-sm font-medium">
+                  {capabilitiesOf(me).hold ? t("common.yes") : t("common.no")}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted text-sm">{t("agency.mayBookNonRefundable")}</dt>
+                <dd className="text-sm font-medium">
+                  {capabilitiesOf(me).nonRefundable ? t("common.yes") : t("common.no")}
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-3">
+                <dt className="text-muted text-sm">{t("agency.creditLimit")}</dt>
+                <dd className="text-sm font-medium tabular-nums">
+                  {me.creditLimit === undefined
+                    ? t("agency.boundedByAgency")
+                    : formatMoney(me.creditLimit, currency, locale)}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </Card>
       )}
 
       {/*
