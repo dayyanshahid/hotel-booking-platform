@@ -1131,7 +1131,17 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
         "You have 2,500 left to allocate" is the fact that makes the rest of
         this screen make sense; discovering it from a refusal does not.
       */}
-      {me && agents && (
+      {/*
+        Only for an account that actually has a pool to hand out.
+
+        `poolOf` falls back to the agency's own limit for anybody without an
+        allocation, which is right when the question is "how much may this
+        person spend" and badly wrong here: it showed a counter agent "Your
+        pool $25,000 · Left to allocate $25,000" directly above the sentence
+        telling them they have no allocation and nothing to share. Two
+        statements on one screen, contradicting each other, about money.
+      */}
+      {me && agents && canCreate && (
         <Card className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 p-4">
           <div>
             <p className="text-muted text-xs">{t("agency.poolYours")}</p>
