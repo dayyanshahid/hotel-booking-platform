@@ -111,6 +111,22 @@ async function must<T>(s: Session, path: string): Promise<T> {
   return res.data;
 }
 
+/**
+ * Accounts this run created, so it can put them back.
+ *
+ * Every run used to leave its branches and desks behind, active and holding an
+ * allocation. `allocatedToChildren` counts active children, so seven runs of
+ * four thousand exhausted a twenty-five thousand line and the eighth failed
+ * with `allocationTooLarge` — a harness that degrades until it reports a defect
+ * in code that never changed. It cost an afternoon to tell apart from a real
+ * regression, which is the whole problem with a test that leaves state.
+ *
+ * Suspended rather than deleted, because there is no delete for an agent by
+ * design — a suspended account keeps its bookings and stops counting against
+ * the pool, which is exactly what is wanted here.
+ */
+const spawned: string[] = [];
+
 const FORBIDDEN = ["rateKey", "RateCode", "AgentRefID", "netRate", "supplierNet", "hotelbeds", "tourmind"];
 const leaks = (raw: string) => FORBIDDEN.filter((w) => raw.toLowerCase().includes(w.toLowerCase()));
 
@@ -282,6 +298,7 @@ async function main(): Promise<void> {
       },
     });
     const agentId = created.data?.agent?.id;
+    if (agentId) spawned.push(agentId);
     if (!agentId) throw new Error("the new agent came back without an id");
 
     const patched = await admin.api<{ agent?: { capabilities?: Record<string, boolean> } }>("/api/agency/agents", {
@@ -309,6 +326,7 @@ async function main(): Promise<void> {
       body: { email, name: "QA Both", permission: "issue", capabilities: { hold: true, nonRefundable: true } },
     });
     const agentId = created.data?.agent?.id;
+    if (agentId) spawned.push(agentId);
     if (!agentId) throw new Error("the new agent came back without an id");
 
     const patched = await admin.api<{ agent?: { active?: boolean; capabilities?: Record<string, boolean> } }>(
@@ -333,6 +351,7 @@ async function main(): Promise<void> {
       body: { email, name: "QA Suspended", permission: "issue" },
     });
     const agentId = created.data?.agent?.id;
+    if (agentId) spawned.push(agentId);
     if (!agentId) throw new Error("the new agent came back without an id");
 
     await admin.api("/api/agency/agents", { method: "PATCH", body: { agentId, active: false } });
@@ -365,6 +384,7 @@ async function main(): Promise<void> {
     });
     if (!res.ok) throw new Error(`refused: ${res.status} ${res.error?.messageKey ?? ""}`);
     branchId = res.data?.agent?.id ?? "";
+    if (branchId) spawned.push(branchId);
     if (!branchId) throw new Error("created without an id");
     if (res.data?.agent?.creditLimit !== 4000) throw new Error("the allocation was not stored");
     if (!(await branch.signIn(branchEmail))) throw new Error("the branch could not sign in");
@@ -378,10 +398,14 @@ async function main(): Promise<void> {
      * which the old rule forbade outright — is now allowed precisely because
      * the credit comes out of their own pool rather than the agency's.
      */
-    const res = await branch.api<{ agent?: { parentId?: string; creditLimit?: number } }>("/api/agency/agents", {
-      body: { email: `qa-desk-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Desk", permission: "booking", creditLimit: 1500 },
-    });
+    const res = await branch.api<{ agent?: { id: string; parentId?: string; creditLimit?: number } }>(
+      "/api/agency/agents",
+      {
+        body: { email: `qa-desk-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Desk", permission: "booking", creditLimit: 1500 },
+      },
+    );
     if (!res.ok) throw new Error(`the branch was refused: ${res.status} ${res.error?.messageKey ?? ""}`);
+    if (res.data?.agent?.id) spawned.push(res.data.agent.id);
     if (res.data?.agent?.parentId !== branchId) throw new Error("the sub-agent was not filed under its creator");
     return `desk on 1500 under ${branchId}`;
   });
@@ -510,6 +534,7 @@ async function main(): Promise<void> {
       body: { email, name: "QA Audited", permission: "booking", capabilities: { hold: true, nonRefundable: false } },
     });
     const agentId = made.data?.agent?.id;
+    if (agentId) spawned.push(agentId);
     if (!agentId) throw new Error("the new agent came back without an id");
 
     await admin.api("/api/agency/agents", {
@@ -561,6 +586,7 @@ async function main(): Promise<void> {
       body: { email: `qa-narrow-${Math.random().toString(36).slice(2, 8)}@skyline.example`, name: "QA Narrow", permission: "booking", creditLimit: 100 },
     });
     if (!desk.ok || !desk.data?.agent?.id) return "SKIP: could not create a desk";
+    spawned.push(desk.data.agent.id);
 
     await admin.api("/api/agency/agents", {
       method: "PATCH",
@@ -758,7 +784,26 @@ async function main(): Promise<void> {
     return "6 payloads clean";
   });
 
+  /* ---------------------------------------------------------------------- */
+  await cleanUp();
+
   report();
+}
+
+/**
+ * Put the agency back roughly as it was found.
+ *
+ * Not a check — a failure to tidy is worth saying out loud but is not a defect
+ * in the product, so it prints and does not change the verdict.
+ */
+async function cleanUp(): Promise<void> {
+  if (!spawned.length) return;
+  let done = 0;
+  for (const agentId of spawned) {
+    const res = await admin.api("/api/agency/agents", { method: "PATCH", body: { agentId, active: false } });
+    if (res.ok) done += 1;
+  }
+  process.stdout.write(`\nTidied ${done} of ${spawned.length} accounts this run created.\n`);
 }
 
 function report(): void {

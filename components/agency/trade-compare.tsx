@@ -36,6 +36,48 @@ import type { CurrencyCode, HotelResultCard, Locale, SearchIntent } from "@/lib/
  * the same fact in the same place in every column, including when two columns
  * agree.
  */
+/**
+ * A row of the comparison: its label, then a cell per property.
+ *
+ * Declared here rather than inside `TradeCompare`, which is where it was.
+ * A component defined in a render body is a *new type* on every render, so
+ * React tears the whole subtree down and rebuilds it each time anything
+ * changes — every cell in the table, on a panel whose entire purpose is that
+ * an agent clicks around inside it. Focus is lost, any DOM state goes with it,
+ * and the work is proportional to the number of properties being compared.
+ *
+ * `cards` becomes a prop, which is the only reason it was ever written inside.
+ */
+function Row({
+  label,
+  cards,
+  render,
+  strong,
+}: {
+  label: string;
+  cards: HotelResultCard[];
+  render: (card: HotelResultCard) => React.ReactNode;
+  strong?: boolean;
+}) {
+  return (
+    <>
+      <div
+        className={cx(
+          "surface hairline sticky start-0 z-10 border-e py-2.5 pe-3 text-xs",
+          strong ? "font-semibold text-[var(--text)]" : "text-muted",
+        )}
+      >
+        {label}
+      </div>
+      {cards.map((card) => (
+        <div key={card.slug} className="min-w-0 py-2.5 pe-3 text-sm wrap-anywhere">
+          {render(card)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function TradeCompare({
   open,
   onClose,
@@ -127,33 +169,6 @@ export function TradeCompare({
   /** Below this the panel scrolls sideways rather than crushing the columns. */
   const floor = 116 + cards.length * 172;
 
-  /** A row of the comparison: its label, then a cell per property. */
-  const Row = ({
-    label,
-    render,
-    strong,
-  }: {
-    label: string;
-    render: (card: HotelResultCard) => React.ReactNode;
-    strong?: boolean;
-  }) => (
-    <>
-      <div
-        className={cx(
-          "surface hairline sticky start-0 z-10 border-e py-2.5 pe-3 text-xs",
-          strong ? "font-semibold text-[var(--text)]" : "text-muted",
-        )}
-      >
-        {label}
-      </div>
-      {cards.map((card) => (
-        <div key={card.slug} className="min-w-0 py-2.5 pe-3 text-sm wrap-anywhere">
-          {render(card)}
-        </div>
-      ))}
-    </>
-  );
-
   return (
     <Drawer
       open={open}
@@ -230,6 +245,7 @@ export function TradeCompare({
                 deciding what to quote.
               */}
               <Row
+                cards={cards}
                 label={t("agency.sell")}
                 strong
                 render={(card) => {
@@ -252,6 +268,7 @@ export function TradeCompare({
                 }}
               />
               <Row
+                cards={cards}
                 label={t("agency.margin")}
                 render={(card) => {
                   const quote = quotes[card.offerSummary.offerId];
@@ -272,6 +289,7 @@ export function TradeCompare({
                 }}
               />
               <Row
+                cards={cards}
                 label={t("agency.cost")}
                 render={(card) => {
                   const quote = quotes[card.offerSummary.offerId];
@@ -283,6 +301,7 @@ export function TradeCompare({
                 }}
               />
               <Row
+                cards={cards}
                 label={t("agency.public")}
                 render={(card) => (
                   <Money
@@ -295,9 +314,10 @@ export function TradeCompare({
                 )}
               />
 
-              <Row label={t("agency.compareRoom")} render={(card) => card.offerSummary.roomSummary} />
-              <Row label={t("agency.compareBoard")} render={(card) => card.offerSummary.boardSummary} />
+              <Row cards={cards} label={t("agency.compareRoom")} render={(card) => card.offerSummary.roomSummary} />
+              <Row cards={cards} label={t("agency.compareBoard")} render={(card) => card.offerSummary.boardSummary} />
               <Row
+                cards={cards}
                 label={t("agency.compareCancellation")}
                 render={(card) => (
                   <span className="inline-flex flex-wrap items-baseline gap-x-1">
@@ -324,6 +344,7 @@ export function TradeCompare({
                 )}
               />
               <Row
+                cards={cards}
                 label={t("agency.compareLeft")}
                 render={(card) =>
                   card.remainingLabel ? (
@@ -334,6 +355,7 @@ export function TradeCompare({
                 }
               />
               <Row
+                cards={cards}
                 label={t("agency.compareDistance")}
                 render={(card) =>
                   card.landmarkDistance ? (
@@ -346,6 +368,7 @@ export function TradeCompare({
                 }
               />
               <Row
+                cards={cards}
                 label={t("agency.compareAmenities")}
                 render={(card) => (
                   <span className="text-muted text-xs">
