@@ -311,7 +311,13 @@ export interface Column<T> {
   key: string;
   header: string;
   align?: "start" | "end";
-  /** Hidden below `sm` — for columns that are useful but not load-bearing. */
+  /**
+   * Hidden below `sm` *in the table* — for columns that are useful but not
+   * load-bearing when horizontal room is scarce.
+   *
+   * The mobile card list shows them anyway, deliberately: hiding was a
+   * concession to width, and a card has as many lines as it needs.
+   */
   secondary?: boolean;
   width?: string;
   render: (row: T) => ReactNode;
@@ -343,7 +349,84 @@ export function DataTable<T>({
   if (!rows.length && empty) return <>{empty}</>;
 
   return (
-    <Card className="overflow-x-auto">
+    <>
+      {/*
+        On a phone, a table is a list of records.
+
+        Every table here declares a `minWidth` so its columns keep their shape,
+        and inside a 341px column that produced a 620px table behind a
+        horizontal scrollbar: the customer's name and email visible, their
+        trade, their last activity and the edit control all off-screen and
+        reachable only by discovering a sideways swipe. The data was present
+        and unreachable, which is the worst of both.
+
+        Below `sm` each row becomes a card and each cell keeps its column
+        header as its label — so nothing is dropped and nothing is hidden. From
+        `sm` up the table returns unchanged, because on a real screen a table
+        is the better instrument.
+      */}
+      <div className="space-y-2 sm:hidden">
+        {rows.map((row) => {
+          const target = onRowHref?.(row);
+          const body = (
+            <Card className="space-y-1.5 p-3.5">
+              {columns.map((column, index) => {
+                const cell = column.render(row);
+                if (cell === null || cell === undefined || cell === "") return null;
+                /*
+                 * The first column is the record — a customer's name, a
+                 * booking's reference. It reads as the card's heading rather
+                 * than as a labelled field: "Customer name / Dayyan" is a
+                 * label restating what the value obviously is.
+                 */
+                if (index === 0) {
+                  return (
+                    <div
+                      key={column.key}
+                      /*
+                       * A link in the heading is how a record is opened, and
+                       * at a text line-height that is a twenty-pixel target.
+                       * The card gives it a full one without changing how any
+                       * screen writes its own first column.
+                       */
+                      className="pb-0.5 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
+                    >
+                      {cell}
+                    </div>
+                  );
+                }
+                /*
+                 * A column with no header is an action — Edit, CSV. It gets the
+                 * full width and no label, because "" as a label reads as a
+                 * missing string rather than as a button.
+                 */
+                if (!column.header) {
+                  return (
+                    <div key={column.key} className="pt-0.5">
+                      {cell}
+                    </div>
+                  );
+                }
+                return (
+                  <div key={column.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <span className="text-muted shrink-0 text-xs">{column.header}</span>
+                    <span className={cx("min-w-0 text-sm", column.align === "end" && "tabular-nums")}>{cell}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          );
+          return target ? (
+            <a key={rowKey(row)} href={target} className="block">
+              {body}
+            </a>
+          ) : (
+            <div key={rowKey(row)}>{body}</div>
+          );
+        })}
+      </div>
+
+    <Card className="hidden overflow-x-auto sm:block">
       <table className="w-full text-sm" style={{ minWidth }}>
         <thead className="text-muted hairline surface sticky top-0 z-10 border-b text-xs">
           <tr>
@@ -389,6 +472,7 @@ export function DataTable<T>({
         </tbody>
       </table>
     </Card>
+    </>
   );
 }
 

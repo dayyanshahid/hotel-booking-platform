@@ -161,7 +161,9 @@ function QuoteList({ locale }: { locale: Locale }) {
                   onClick={() => setFilter(key)}
                   aria-pressed={filter === key}
                   className={cx(
-                    "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-colors",
+                    // The pipeline is navigated from these, and on a phone
+                    // they were twenty-four pixels of target.
+                    "inline-flex min-h-11 items-center rounded-[var(--radius-pill)] px-3 text-xs font-medium transition-colors",
                     filter === key
                       ? "bg-brand-600 text-white"
                       : "surface-sunken text-muted hover:text-ink-900",
@@ -223,7 +225,12 @@ function QuoteList({ locale }: { locale: Locale }) {
                       )}
                     </span>
                     <p className="mt-1 font-semibold wrap-anywhere">
-                      <Link href={href(locale, `/agency/quotes/${quote.id}`)} className="hover:underline">
+                      <Link
+                        href={href(locale, `/agency/quotes/${quote.id}`)}
+                        // The only way into a quote from this list, and a bare
+                        // text link is a twenty-pixel target on a phone.
+                        className="inline-flex min-h-11 items-center hover:underline"
+                      >
                         {quote.customerName}
                       </Link>
                     </p>

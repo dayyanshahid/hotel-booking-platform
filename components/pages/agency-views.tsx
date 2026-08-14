@@ -607,7 +607,10 @@ function BookingsPanel({ locale }: { locale: Locale }) {
                 onClick={() => setView(key)}
                 aria-pressed={view === key}
                 className={cx(
-                  "rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-colors",
+                  // Twenty-four pixels tall on a phone, and this is how the
+                  // book of business is navigated — the first thing a thumb
+                  // reaches for on the screen.
+                  "inline-flex min-h-11 items-center rounded-[var(--radius-pill)] px-3 text-xs font-medium transition-colors",
                   view === key ? "bg-brand-600 text-white" : "surface-sunken text-muted hover:text-ink-900",
                 )}
               >
@@ -925,7 +928,16 @@ function Periods({ locale }: { locale: Locale }) {
             header: "",
             align: "end",
             render: (p) => (
-              <a className="text-brand-700 text-xs underline" href={`/api/agency/statements?format=csv&month=${p.month}`}>
+              /*
+                A link with a real target. At `text-xs` with no padding this
+                was fifteen pixels tall — a third of what a finger can be
+                expected to hit, on the control that exports somebody's
+                monthly statement.
+              */
+              <a
+                className="text-brand-700 inline-flex min-h-11 items-center px-2 text-xs underline underline-offset-2"
+                href={`/api/agency/statements?format=csv&month=${p.month}`}
+              >
                 CSV
               </a>
             ),
@@ -1000,7 +1012,9 @@ function Statement({ locale }: { locale: Locale }) {
              * accounts clerk chasing one figure needs the lines behind them.
              */
             <a
-              className="text-brand-700 text-sm underline underline-offset-2"
+              // Twenty pixels tall without the padding — reachable with a
+              // mouse, a guess with a thumb.
+              className="text-brand-700 inline-flex min-h-11 items-center text-sm underline underline-offset-2"
               href={apiUrl("/api/agency/ledger?format=csv")}
             >
               {t("agency.exportCsv")}
@@ -1031,7 +1045,10 @@ function Statement({ locale }: { locale: Locale }) {
                   onClick={() => setView(option.id)}
                   aria-pressed={view === option.id}
                   className={cx(
-                    "rounded-[var(--radius-pill)] px-3 py-1.5 text-sm font-medium transition-colors",
+                    // A full target height: these are how a statement is
+                    // narrowed, and on a phone they are the primary control on
+                    // the screen rather than a refinement.
+                    "inline-flex min-h-11 items-center rounded-[var(--radius-pill)] px-3.5 text-sm font-medium transition-colors",
                     view === option.id
                       ? "bg-brand-50 text-brand-700"
                       : "text-muted hover:bg-ink-50 hover:text-ink-900",
@@ -1454,7 +1471,15 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
                  * were costing a line on every sub-agent to repeat what the
                  * account directly above already showed.
                  */
-                style={depth ? { paddingInlineStart: `${0.875 + depth * 1.5}rem` } : undefined}
+                /*
+                 * Clamped, because an inline style cannot have a breakpoint.
+                 *
+                 * Three levels deep is 5.4rem of indent, which on a 341px card
+                 * leaves the name and its controls fighting over what is left.
+                 * `min()` lets the indent express the hierarchy on a wide
+                 * screen and quietly stop taking room on a narrow one.
+                 */
+                style={depth ? { paddingInlineStart: `min(${0.875 + depth * 1.5}rem, 22%)` } : undefined}
               >
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                   <div className="min-w-0 space-y-1.5">
