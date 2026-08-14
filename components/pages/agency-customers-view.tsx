@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
-import { DataTable, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { DataTable, Nothing, PageBody, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { Alert, Badge, Button, Card, Field, Input, Modal } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { CustomerHistory } from "@/lib/agency/customers";
@@ -109,19 +109,36 @@ function Customers({ locale }: { locale: Locale }) {
   );
 
   return (
-    <div className="space-y-5">
+    <PageBody measure="data" className="space-y-5">
       <PageHeader
         title={t("agency.customers")}
         description={t("agency.customersBody")}
         actions={<Button onClick={() => setEditing({ ...BLANK })}>{t("agency.addCustomer")}</Button>}
       />
 
+      {/*
+        A filter bar, not a card of its own.
+
+        A single search box in a bordered box floating above a full-width table
+        is a second object competing with the table for the reader's attention,
+        and it does not match how Team or the statement narrow a list. Same
+        control, same place, same shape, on every screen that has one.
+      */}
       {customers && customers.length > 3 && (
-        <Card className="p-4 sm:max-w-md">
-          <Field label={t("admin.search")} htmlFor="cus-q">
-            <Input id="cus-q" value={query} onChange={(e) => setQuery(e.target.value)} />
-          </Field>
-        </Card>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-56 flex-1">
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("agency.customerSearch")}
+              aria-label={t("agency.customerSearch")}
+            />
+          </div>
+          <p className="text-muted text-xs tabular-nums">
+            {t("agency.movementsShowing", { shown: rows.length, total: customers.length })}
+          </p>
+        </div>
       )}
 
       {!customers && !loadFailed && <TableSkeleton rows={4} />}
@@ -356,6 +373,6 @@ function Customers({ locale }: { locale: Locale }) {
           </form>
         )}
       </Modal>
-    </div>
+    </PageBody>
   );
 }

@@ -73,6 +73,61 @@ export function Money({
  * action in the same place. `actions` sits inline on wide screens and wraps
  * beneath on narrow ones rather than shrinking the title.
  */
+/* ---------------------------------------------------------------- measure */
+
+/**
+ * How wide a screen should actually read.
+ *
+ * The portal is capped at a workbench width because search needs it: results,
+ * filters and the cart side by side are four real columns of data, and every
+ * pixel taken off them is taken off the job. Every other screen inherited that
+ * width and should not have.
+ *
+ * What it looked like at 1512: a two-option dropdown 597px wide, another 874px,
+ * body copy running to 1206px, and a statement row with its label at one edge
+ * and its amount 1,285px away at the other — far enough apart that the eye
+ * cannot associate the two without tracking across the screen. Sparse, not
+ * dense, which is the opposite of what a tool used forty times a day wants.
+ *
+ * So width becomes a decision a screen makes rather than one it inherits:
+ *
+ * - `wide` — the workbench. Search and comparison, where the columns earn it.
+ * - `data` — tables and lists. Wide enough for six columns of figures, narrow
+ *   enough that the two ends of a row stay one object.
+ * - `form`  — settings and anything mostly prose. A reading measure.
+ */
+export function PageBody({
+  measure = "wide",
+  className,
+  children,
+}: {
+  measure?: "wide" | "data" | "form";
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cx(
+        /*
+         * Left-aligned, not centred.
+         *
+         * A narrower column centred under a full-width navigation bar shares
+         * no edge with anything, and reads as a page that has come loose. Left
+         * against the same spine as the bar, the nav simply extends further
+         * right — which is what it is doing — and every screen starts its
+         * content in the same place whether it is measured or not.
+         */
+        "w-full",
+        measure === "data" && "max-w-5xl",
+        measure === "form" && "max-w-3xl",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function PageHeader({
   title,
   description,

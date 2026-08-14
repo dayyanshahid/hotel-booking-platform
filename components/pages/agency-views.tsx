@@ -17,6 +17,7 @@ import {
   Meter,
   Money,
   Nothing,
+  PageBody,
   PageHeader,
   Section,
   TableSkeleton,
@@ -570,7 +571,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
   const totals = useMemo(() => bookingTotals(rows), [rows]);
 
   return (
-    <div className="space-y-5">
+    <PageBody measure="data" className="space-y-5">
       <PageHeader title={t("agency.bookings")} description={t("agency.bookingsBody")} />
 
       {/*
@@ -668,7 +669,7 @@ function BookingsPanel({ locale }: { locale: Locale }) {
         />
       )}
       {bookings && bookings.length > 0 && <BookingTable locale={locale} bookings={rows} />}
-    </div>
+    </PageBody>
   );
 }
 
@@ -826,7 +827,7 @@ export function AgencyCreditView({ locale }: { locale: Locale }) {
   return (
     <PortalShell locale={locale}>
       {(context) => (
-        <div className="space-y-4">
+        <PageBody measure="data" className="space-y-4">
           {/*
             The only portal page that had no page header, and so the only one
             whose outline began below the top. Every other screen here titles
@@ -837,7 +838,7 @@ export function AgencyCreditView({ locale }: { locale: Locale }) {
           <CreditPanel locale={locale} context={context} />
           <Periods locale={locale} />
           <Statement locale={locale} />
-        </div>
+        </PageBody>
       )}
     </PortalShell>
   );
@@ -1353,7 +1354,7 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
   }
 
   return (
-    <div className="space-y-4">
+    <PageBody measure="data" className="space-y-4">
       <PageHeader title={t("agency.subAgents")} description={t("agency.subAgentsBody")} />
       {error && <Alert tone="critical">{error}</Alert>}
 
@@ -1862,7 +1863,7 @@ function TeamPanel({ locale, context }: { locale: Locale; context: AgencyContext
           </Card>
         </Section>
       )}
-    </div>
+    </PageBody>
   );
 }
 
@@ -2057,7 +2058,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
   }
 
   return (
-    <div className="space-y-4">
+    <PageBody measure="form" className="space-y-4">
       <PageHeader title={t("agency.settings")} description={t("agency.settingsIntro")} />
       {error && <Alert tone="critical">{error}</Alert>}
       {saved && <Alert tone="success">{t("agency.markupSaved")}</Alert>}
@@ -2079,7 +2080,13 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
         <h2 className="font-semibold">{t("agency.markup")}</h2>
         <p className="text-muted text-sm">{t("agency.markupBody")}</p>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/*
+          Sized to what they hold. A two-option dropdown and a number like "10"
+          were each taking half the width of the card, which reads as a form
+          somebody forgot to lay out — and made the worked example underneath
+          look unrelated to the controls it describes.
+        */}
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
           <Field label={t("agency.markupMode")} htmlFor="markup-mode">
             <Select
               id="markup-mode"
@@ -2123,7 +2130,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
 
         <ul className="space-y-2">
           {markup.overrides.map((override, index) => (
-            <li key={index} className="grid items-end gap-2 sm:grid-cols-[110px_1fr_120px_auto]">
+            <li key={index} className="grid items-end gap-2 sm:grid-cols-[6rem_minmax(0,1fr)_7rem_auto]">
               <Field label={t("agency.country")} htmlFor={`ov-country-${index}`}>
                 <Input
                   id={`ov-country-${index}`}
@@ -2318,7 +2325,7 @@ function SettingsPanel({ locale, context }: { locale: Locale; context: AgencyCon
           </div>
         </div>
       )}
-    </div>
+    </PageBody>
   );
 }
 

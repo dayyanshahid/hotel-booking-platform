@@ -9,7 +9,7 @@ import { DocumentBrand, DocumentFooter } from "@/components/agency/document-bran
 import { PortalShell } from "@/components/agency/portal-shell";
 import type { AgencyContext } from "@/components/agency/use-agency";
 import { Alert, Badge, Button, Card, Input, Skeleton, cx } from "@/components/ui";
-import { LoadFailed, Money, Nothing, PageHeader, TableSkeleton } from "@/components/agency/ui";
+import { LoadFailed, Money, Nothing, PageBody, PageHeader, TableSkeleton } from "@/components/agency/ui";
 import { useResource } from "@/components/providers/use-resource";
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
@@ -111,7 +111,7 @@ function QuoteList({ locale }: { locale: Locale }) {
   }, [quotes, query, filter]);
 
   return (
-    <div className="space-y-4">
+    <PageBody measure="data" className="space-y-4">
       <PageHeader
         title={t("agency.quotes")}
         description={t("agency.quotesBody")}
@@ -244,7 +244,7 @@ function QuoteList({ locale }: { locale: Locale }) {
           );
         })}
       </ul>
-    </div>
+    </PageBody>
   );
 }
 
