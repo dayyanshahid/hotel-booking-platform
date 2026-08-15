@@ -6,7 +6,6 @@ import { ConsoleShell } from "@/components/admin/console-shell";
 import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton } from "@/components/ui";
 import { formatDateTime } from "@/lib/format";
 import type { Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 
 /* ------------------------------------------------------------ settings */

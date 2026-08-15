@@ -20,7 +20,6 @@ import {
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CancellationQuote, CurrencyCode, Locale, SupportCase } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 import { minuteLabel } from "@/lib/i18n";
 

@@ -8,7 +8,6 @@ import { Wordmark } from "@/components/ui/wordmark";
 import { formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 
 /* -------------------------------------------------------------- sign-in */

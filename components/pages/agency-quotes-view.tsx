@@ -17,7 +17,6 @@ import { daysUntilExpiry, isExpiringSoon, quoteCost, quoteTotal } from "@/lib/ag
 import { fold, foldedIncludes } from "@/lib/text";
 import type { AgencyQuote } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 
 /* --------------------------------------------------------------- list */

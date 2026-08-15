@@ -8,7 +8,6 @@ import { Alert, Badge, Button, Card, Field, Input, SectionHeading, Skeleton, cx 
 import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { href } from "@/lib/nav";
 import type { Booking, CurrencyCode, Locale, SupportCase, TravelerProfile } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 import { hourLabel } from "@/lib/i18n";
 

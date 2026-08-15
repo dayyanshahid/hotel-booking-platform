@@ -28,7 +28,6 @@ import type {
   LedgerEntry,
 } from "@/lib/agency/types";
 import type { CurrencyCode, Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 
 /* --------------------------------------------------------------- list */

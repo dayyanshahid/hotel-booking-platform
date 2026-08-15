@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
@@ -9,7 +8,6 @@ import type { AgencyContext } from "@/components/agency/use-agency";
 import { Money, Nothing, PageHeader, Section, Stat, StatGrid, StatSkeleton, TableSkeleton } from "@/components/agency/ui";
 import { Badge, Button, Card, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
-import { SearchBar } from "@/components/search/search-bar";
 import { formatDate, formatDateTime, formatMoney, nightsBetween, todayIso } from "@/lib/format";
 import { dayLabel, guestLabel, nightLabel } from "@/lib/i18n";
 import { href, humanDestination, searchParamsFromIntent } from "@/lib/nav";
@@ -196,7 +194,19 @@ function useDesk(context: AgencyContext, reloads: number) {
   }, [reloads]);
 
   const currency = context.balance?.currency ?? context.agency.credit.currency;
-  const today = todayIso();
+
+  /*
+   * Both dates come off `tick`, the clock this screen already keeps in state
+   * and refreshes with the poll.
+   *
+   * They used to call `Date.now()` and `todayIso()` in the render body, which
+   * makes rendering impure: two renders in the same paint can disagree, and on
+   * a screen that re-renders every thirty seconds the window silently moved
+   * under a list that had not been recomputed. Reading the same clock the
+   * countdowns read means the arrivals window and the countdown beside it can
+   * never be describing different moments.
+   */
+  const today = new Date(tick).toISOString().slice(0, 10);
 
   const live = (bookings ?? []).filter((b) => b.status === "confirmed" || b.status === "pending");
   const margin = live.reduce((sum, b) => sum + (b.sell - b.cost), 0);
@@ -225,7 +235,7 @@ function useDesk(context: AgencyContext, reloads: number) {
    * was "the next five arrivals whenever they are", which on a quiet account
    * is a list of stays four months out presented as though they need doing.
    */
-  const fortnight = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+  const fortnight = new Date(tick + 14 * 86_400_000).toISOString().slice(0, 10);
   const arrivals = live
     .filter((b) => b.checkIn >= today && b.checkIn <= fortnight)
     .sort((a, b) => a.checkIn.localeCompare(b.checkIn))

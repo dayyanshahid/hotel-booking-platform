@@ -209,21 +209,21 @@ async function main(): Promise<void> {
 
   const payloads = new Map<string, unknown>();
 
-  for (const module of MODULES) {
-    await check(`${module.name} returns a usable payload`, async () => {
+  for (const section of MODULES) {
+    await check(`${section.name} returns a usable payload`, async () => {
       if (gate()) return gate()!;
-      const data = await must<Record<string, unknown>>(module.path);
-      payloads.set(module.name, data);
+      const data = await must<Record<string, unknown>>(section.path);
+      payloads.set(section.name, data);
 
       const keys = Object.keys(data);
       if (!keys.length) throw new Error("answered with an empty object — the screen has nothing to render");
 
-      if (module.expect) {
-        const value = (data as Record<string, unknown>)[module.expect];
-        if (value === undefined) throw new Error(`no "${module.expect}" in the payload — keys were ${keys.join(", ")}`);
+      if (section.expect) {
+        const value = (data as Record<string, unknown>)[section.expect];
+        if (value === undefined) throw new Error(`no "${section.expect}" in the payload — keys were ${keys.join(", ")}`);
         const n = countOf(value);
-        if (!n) return `WARN: "${module.expect}" is empty on this installation`;
-        return `${n} × ${module.expect}`;
+        if (!n) return `WARN: "${section.expect}" is empty on this installation`;
+        return `${n} × ${section.expect}`;
       }
       return `${keys.length} sections: ${keys.slice(0, 5).join(", ")}`;
     });
@@ -237,10 +237,10 @@ async function main(): Promise<void> {
      * and a support screen is exactly where one gets pasted into an email.
      */
     const dirty: string[] = [];
-    for (const module of MODULES) {
-      const res = await api(module.path);
+    for (const section of MODULES) {
+      const res = await api(section.path);
       const found = leaks(res.raw);
-      if (found.length) dirty.push(`${module.name}: ${found.join("/")}`);
+      if (found.length) dirty.push(`${section.name}: ${found.join("/")}`);
     }
     if (dirty.length) throw new Error(dirty.join("; "));
     return `${MODULES.length} payloads clean`;

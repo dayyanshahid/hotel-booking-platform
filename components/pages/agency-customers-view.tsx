@@ -4,13 +4,12 @@ import { useEffect, useState } from "react";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { DataTable, Nothing, PageBody, PageHeader, TableSkeleton } from "@/components/agency/ui";
-import { Alert, Badge, Button, Card, Field, Input, Modal } from "@/components/ui";
+import { Alert, Badge, Button, Field, Input, Modal } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/format";
 import type { CustomerHistory } from "@/lib/agency/customers";
 import type { CurrencyCode } from "@/lib/types";
 import type { AgencyCustomer } from "@/lib/agency/types";
 import type { Locale } from "@/lib/types";
-import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
 
 /**
