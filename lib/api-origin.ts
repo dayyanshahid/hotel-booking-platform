@@ -1,11 +1,17 @@
 /**
  * Where the API lives.
  *
- * The portals are being split into their own front ends against one backend, so
- * a request can no longer assume the API is on the origin serving the page. It
- * usually still is — the consumer site ships with its own routes — and that
- * stays the default, because a relative path is the one URL that is correct in
- * every environment without configuration.
+ * The portals are separate front ends against one backend now, so a request
+ * cannot assume the API is *implemented* on the origin serving the page. It is
+ * still reached there: every front end rewrites `/api` to the backend in its
+ * `next.config.ts`, which keeps the browser talking to one host and the session
+ * cookie first-party. So relative stays the default, and is the answer in every
+ * deployment that carries that rewrite.
+ *
+ * `NEXT_PUBLIC_API_URL` remains for a front end served without one — a static
+ * host, a preview with no proxy. It is public by necessity: the browser has to
+ * know the address it is calling, and there is nothing secret about it. What is
+ * secret stays behind the API.
  *
  * Set `NEXT_PUBLIC_API_URL` and every call goes there instead. It is public by
  * necessity: the browser has to know the address it is calling, and there is

@@ -1,6 +1,45 @@
 import type { NextConfig } from "next";
 
+/**
+ * Where the backend actually lives.
+ *
+ * Not `NEXT_PUBLIC_API_URL`: that one is inlined into the browser bundle, and
+ * having the browser call the backend directly is what this exists to avoid.
+ * Read here, at build time, on the server.
+ */
+const API_ORIGIN = (process.env.API_ORIGIN ?? "http://localhost:5080").replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
+  /**
+   * The API is served from this origin and proxied on to the backend.
+   *
+   * Both portals have done this since they were separated; the consumer site
+   * was left behind when its API routes moved out, and nothing replaced them.
+   * The result was a front end whose seventy-seven calls all went to a path on
+   * its own origin that answered 404 — a site with no hotels, no search, no
+   * error worth reading, on a repository where everything builds and every test
+   * passes.
+   *
+   * A rewrite rather than a public origin, for the reason the portals give at
+   * length: the browser only ever talks to the host it loaded the page from, so
+   * there is no preflight to fail, no CORS allow-list to keep in step with the
+   * domains, and the session cookie stays first-party. Third-party cookies are
+   * already blocked in Safari and going in Chrome, and a session resting on one
+   * stops working on mobile first.
+   *
+   * Deployments set `API_ORIGIN`; the default is the local backend, because a
+   * default that reaches across the internet quietly works against somebody
+   * else's data.
+   */
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: `${API_ORIGIN}/api/:path*`,
+      },
+    ];
+  },
+
   /**
    * Ship the supplier catalogues with the functions that read them.
    *
