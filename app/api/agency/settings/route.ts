@@ -2,7 +2,7 @@ import { fail, localeFrom, ok, readJson, sanitize } from "@/lib/server/api";
 import { activeAgent } from "@/lib/agency/session";
 import { getAgency, saveAgency } from "@/lib/agency/store";
 import type { AgencyProfile, MarkupOverride, MarkupPolicy, MarkupRule } from "@/lib/agency/types";
-import { normalizeHex } from "@/lib/agency/branding";
+import { normalizeHex } from "@/lib/agency/hex";
 import { MAX_OVERRIDES, ruleIsValid } from "@/lib/agency/markup-policy";
 
 /**

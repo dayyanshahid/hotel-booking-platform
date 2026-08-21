@@ -1,4 +1,5 @@
 import { apiUrl } from "../api-origin";
+import { normalizeHex } from "./hex";
 import type { Agency, AgencyProfile } from "./types";
 
 /**
@@ -44,23 +45,6 @@ export interface Branding {
  * it came from us.
  */
 export const DEFAULT_BRAND_COLOR = "#334155";
-
-/**
- * A hex colour in canonical `#rrggbb`, or null if it is not one.
- *
- * Accepts what people actually paste — with or without the hash, three digits
- * or six, any case — because rejecting `abc123` on a technicality is a support
- * ticket, not a validation. Anything else is refused rather than coerced: a
- * colour we guessed at would end up printed on a customer's paperwork.
- */
-export function normalizeHex(input: unknown): string | null {
-  if (typeof input !== "string") return null;
-  const raw = input.trim().replace(/^#/, "").toLowerCase();
-  if (/^[0-9a-f]{3}$/.test(raw)) {
-    return `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`;
-  }
-  return /^[0-9a-f]{6}$/.test(raw) ? `#${raw}` : null;
-}
 
 /** One sRGB channel, linearised for the luminance formula (WCAG 2.1). */
 function linearize(channel: number): number {
@@ -196,3 +180,7 @@ export function brandingOf(
 export function contactLine(branding: Branding): string {
   return [branding.phone, branding.email, branding.website].filter(Boolean).join(" · ");
 }
+
+// Re-exported so the screens that already import it from here keep working;
+// the API imports it from `./hex` directly, without the origin helper.
+export { normalizeHex };

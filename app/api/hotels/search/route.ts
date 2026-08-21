@@ -2,7 +2,7 @@ import { fail, localeFrom, ok, readJson } from "@/lib/server/api";
 import { runSearch, type SearchProgress } from "@/lib/server/search";
 import { scenarioFromRequest } from "@/lib/server/scenarios";
 import { validateIntent } from "@/lib/server/validate";
-import type { SearchFilters, SearchIntent, SearchResponse, SortKey } from "@/lib/types";
+import type { SearchFilters, SearchIntent, SearchResponse, SortKey, ApiError } from "@/lib/types";
 
 interface Body {
   intent: Partial<SearchIntent>;
@@ -76,6 +76,17 @@ export async function POST(req: Request) {
       action: "retry",
     });
 
+  /*
+   * The same refusal, as the object a stream frame carries.
+   *
+   * Reading it back out of the `Response` with `.json()` typed as `any` worked
+   * and told the reader nothing; it also only typechecked because the DOM
+   * library says `any` where the standard says `unknown`. Stated once, so both
+   * frames below get the real shape.
+   */
+  const failureBody = async (): Promise<ApiError> =>
+    ((await everythingFailed().json()) as { error: ApiError }).error;
+
   if (!body.stream) {
     const response = await runSearch(intent, options);
     if (response.completeness === "empty") return everythingFailed();
@@ -119,12 +130,12 @@ export async function POST(req: Request) {
           onPartial: (data, progress) => write({ type: "partial", data, progress }),
         });
         if (response.completeness === "empty") {
-          write({ type: "error", error: (await everythingFailed().json()).error });
+          write({ type: "error", error: await failureBody() });
         } else {
           write({ type: "final", data: response });
         }
       } catch {
-        write({ type: "error", error: (await everythingFailed().json()).error });
+        write({ type: "error", error: await failureBody() });
       } finally {
         open = false;
         controller.close();
