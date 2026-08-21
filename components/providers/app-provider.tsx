@@ -222,6 +222,20 @@ export function AppProvider({ locale, children }: { locale: Locale; children: Re
         setAccount(null);
         write("nz_account", null);
         setNotifications([]);
+        /*
+         * End the session on the server, not only in this tab.
+         *
+         * Signing in now mints a session cookie, and this cleared the local
+         * copy of "who is signed in" while leaving that cookie alive for its
+         * full thirty days. On a shared or borrowed machine the next person to
+         * open the site was signed out on screen and still able to read the
+         * previous person's trips, saved travellers and support cases.
+         *
+         * Deliberately not awaited: the screen must sign out at once whether or
+         * not the network answers, and a failed request here leaves a cookie
+         * that expires on its own rather than a user stuck on a spinner.
+         */
+        void fetch(apiUrl("/api/auth/otp"), { method: "DELETE", credentials: apiCredentials() }).catch(() => {});
       },
 
       saved,

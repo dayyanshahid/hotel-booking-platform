@@ -1317,6 +1317,7 @@ const en: Dict = {
   "agency.useCode": "Use it",
   "agency.subAgents": "Sub-agents & team",
   "support.desk": "Support",
+  "support.fromYouCustomer": "You",
   "support.signInToSee": "Sign in to see your cases",
   "support.signInToSeeBody":
     "Cases are tied to the address they were raised with, so we can only show yours once you have signed in. You can still raise a new one below.",
@@ -2893,6 +2894,7 @@ const ar: Dict = {
   "agency.useCode": "استخدمه",
   "agency.subAgents": "الوكلاء الفرعيون والفريق",
   "support.desk": "الدعم",
+  "support.fromYouCustomer": "أنت",
   "support.signInToSee": "سجّل الدخول لعرض حالاتك",
   "support.signInToSeeBody":
     "ترتبط الحالات بالعنوان الذي رُفعت منه، فلا يمكننا عرض حالاتك إلا بعد تسجيل الدخول. ويمكنك رفع حالة جديدة أدناه.",

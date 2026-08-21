@@ -23,7 +23,8 @@
     "qa:discovery": "tsx scripts/discovery-qa.ts",
     "qa:portal": "tsx scripts/portal-qa.ts",
     "airports:build": "tsx scripts/build-airports.ts",
-    "landmarks:build": "tsx scripts/build-landmarks.ts"
+    "landmarks:build": "tsx scripts/build-landmarks.ts",
+    "qa:coverage": "tsx scripts/api-coverage.ts"
   },
   "dependencies": {
     "next": "16.2.12",

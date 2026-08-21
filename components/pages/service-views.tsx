@@ -55,6 +55,12 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [casesFailed, setCasesFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** The case whose thread is open, and the reply being written into it. */
+  const [openCase, setOpenCase] = useState<string | null>(null);
+  const [caseReply, setCaseReply] = useState("");
+  const [replying, setReplying] = useState(false);
+  const [caseError, setCaseError] = useState<string | null>(null);
+  const [caseNotice, setCaseNotice] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -73,7 +79,9 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
         setCasesFailed(false);
         return;
       }
-      const res = await api<{ cases: SupportCase[] }>("/api/support/cases");
+      // `as=customer`: this browser may also hold an agency session, and
+      // without saying so the endpoint answered with that agency's tickets.
+      const res = await api<{ cases: SupportCase[] }>("/api/support/cases?as=customer");
       // A failed read used to leave the list at its initial empty array, so
       // the section simply vanished and somebody who had raised a case saw no
       // trace of it. Silence is the one answer this screen must not give.
@@ -81,6 +89,34 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
       if (res.ok) setCases(res.data.cases);
     })();
   }, [api, created, account]);
+
+  /**
+   * Answering a case, or deciding it is finished.
+   *
+   * Raising one already worked and nothing after it did: the list showed a case
+   * number and a date, so the conversation continued over email and the record
+   * of it here stopped at the first message.
+   */
+  async function replyToCase(caseId: string, payload: { reply?: string; close?: boolean }): Promise<void> {
+    setReplying(true);
+    setCaseError(null);
+    setCaseNotice(null);
+    const res = await api<{ case: SupportCase; reopened: boolean }>(
+      `/api/support/cases/${encodeURIComponent(caseId)}?as=customer`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    );
+    setReplying(false);
+    if (!res.ok) {
+      setCaseError(res.error?.message ?? t("error.temporaryService"));
+      return;
+    }
+    setCaseReply("");
+    if (res.data.reopened) setCaseNotice(t("support.reopened"));
+    else if (payload.close) setCaseNotice(t("support.closed"));
+    // Replace in place rather than refetching: the answer already carries the
+    // updated case, and a reload would collapse the thread they are reading.
+    setCases((prev) => prev.map((item) => (item.caseId === caseId ? res.data.case : item)));
+  }
 
   const channels: { id: SupportCase["channel"]; label: string; sla: number }[] = [
     { id: "chat", label: t("support.chat"), sla: 1 },
@@ -239,20 +275,94 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
         </Alert>
       )}
 
+      {caseNotice && <Alert tone="success">{caseNotice}</Alert>}
+      {caseError && <Alert tone="critical">{caseError}</Alert>}
+
       {cases.length > 0 && (
         <section>
           <SectionHeading title={t("support.openCases")} />
           <ul className="space-y-2">
             {cases.map((item) => (
               <li key={item.caseId}>
-                <Card className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-                  <span>
-                    <span className="font-mono font-semibold">{item.caseId}</span>{" "}
-                    <Badge tone="neutral">{item.category}</Badge>
-                  </span>
-                  <span className="text-muted text-xs">
-                    {item.channel} · {formatRelative(item.createdAt, locale)}
-                  </span>
+                <Card className="space-y-2 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="font-mono font-semibold">{item.caseId}</span>{" "}
+                      <Badge tone="neutral">{item.category}</Badge>{" "}
+                      {/* What is happening to it, which the row never said. A
+                          list of case numbers answers "did it go through" and
+                          nothing else — and "did anyone reply" is the question
+                          somebody actually opens this page to ask. */}
+                      <Badge
+                        tone={
+                          item.status === "resolved" ? "positive" : item.status === "inProgress" ? "brand" : "caution"
+                        }
+                      >
+                        {t(`support.status.${item.status}`)}
+                      </Badge>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-muted text-xs">
+                        {item.channel} · {formatRelative(item.createdAt, locale)}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setOpenCase(openCase === item.caseId ? null : item.caseId)}
+                      >
+                        {openCase === item.caseId ? t("support.hide") : t("support.openCase")}
+                      </Button>
+                    </span>
+                  </div>
+
+                  {openCase === item.caseId && (
+                    <div className="border-line space-y-3 rounded-lg border p-3">
+                      <ol className="space-y-2">
+                        {item.messages.map((entry, index) => (
+                          <li key={`${entry.at}-${index}`} className={entry.from === "agent" ? "" : "opacity-80"}>
+                            <p className="text-muted text-xs">
+                              {entry.from === "agent" ? t("support.fromPlatform") : t("support.fromYouCustomer")} ·{" "}
+                              {formatRelative(entry.at, locale)}
+                            </p>
+                            <p className="wrap-anywhere">{entry.body}</p>
+                          </li>
+                        ))}
+                      </ol>
+
+                      <Field label={t("support.reply")} htmlFor={`cr-${item.caseId}`}>
+                        <Input
+                          id={`cr-${item.caseId}`}
+                          value={caseReply}
+                          onChange={(e) => setCaseReply(e.target.value)}
+                          placeholder={t("support.replyPlaceholder")}
+                        />
+                      </Field>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          loading={replying}
+                          disabled={!caseReply.trim()}
+                          onClick={() => void replyToCase(item.caseId, { reply: caseReply })}
+                        >
+                          {t("support.send")}
+                        </Button>
+                        {item.status !== "resolved" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            loading={replying}
+                            onClick={() => void replyToCase(item.caseId, { close: true })}
+                          >
+                            {t("support.close")}
+                          </Button>
+                        )}
+                      </div>
+                      {/* Said before they close it, not after they wonder. */}
+                      {item.status === "resolved" && (
+                        <p className="text-muted text-xs">{t("support.replyReopens")}</p>
+                      )}
+                    </div>
+                  )}
                 </Card>
               </li>
             ))}
