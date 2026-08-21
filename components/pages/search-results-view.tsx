@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApi, useApp } from "@/components/providers/app-provider";
 import { SearchBar } from "@/components/search/search-bar";
+import { NationalitySelect } from "@/components/search/nationality-select";
 import { HotelCard, HotelCardSkeleton } from "@/components/commerce/hotel-card";
 import { ResultsMap } from "@/components/commerce/results-map";
 import { ActiveFilterChips, FiltersPanel, SortControl } from "@/components/commerce/filters-panel";
@@ -186,6 +187,22 @@ export function SearchResultsView({
             {nightLabel(t, nights, locale)} · {intent.rooms.length} {roomLabel(t, intent.rooms.length, locale)} ·{" "}
             {guestCount(intent.rooms)} {guestLabel(t, guestCount(intent.rooms), locale)}
           </p>
+          {/*
+            Under the stay it describes, because it is the same kind of fact:
+            what this page is priced for. Both wholesalers filter and price on
+            nationality — TourMind reads it as `Nationality`, Hotelbeds as
+            `sourceMarket` — and nothing here ever sent one, so every search
+            fell back to the home market. Correcting it here, before a room is
+            chosen, is much better than a traveller finding at checkout that
+            the rate was priced for somebody else.
+          */}
+          <div className="mt-1">
+            <NationalitySelect
+              locale={locale}
+              value={intent.nationality}
+              onChange={(nationality) => setIntent({ ...intent, nationality })}
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" className="@min-[900px]:hidden" onClick={() => setFiltersOpen(true)}>

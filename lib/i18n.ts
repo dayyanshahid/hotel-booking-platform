@@ -284,6 +284,7 @@ const en: Dict = {
   "search.accessibleHint": "We will filter for accessible rooms. Confirm exact features with the hotel before arrival.",
   "search.nationality": "Nationality",
   "search.nationalityWhy": "Some rates are priced by nationality or residency. We only ask when it changes what you can book.",
+  "search.nationalityAny": "Not stated",
   "search.tooManyRooms": "You can search up to 8 rooms at once. For larger groups, contact support.",
   "search.timeout": "Search is taking longer than usual.",
 
@@ -1817,6 +1818,7 @@ const ar: Dict = {
   "search.accessibleHint": "سنفلتر الغرف المهيأة. تأكد من التفاصيل مع الفندق قبل الوصول.",
   "search.nationality": "الجنسية",
   "search.nationalityWhy": "بعض الأسعار تُحدَّد حسب الجنسية أو الإقامة. نسأل فقط عندما يؤثر ذلك على ما يمكنك حجزه.",
+  "search.nationalityAny": "غير محددة",
   "search.tooManyRooms": "يمكنك البحث عن 8 غرف كحد أقصى. للمجموعات الأكبر تواصل مع الدعم.",
   "search.timeout": "البحث يستغرق وقتًا أطول من المعتاد.",
 

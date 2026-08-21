@@ -123,6 +123,16 @@ export function SearchBar({
       accessibleRoom: occupancy.accessibleRoom,
       locale,
       currency,
+      /*
+       * Carried, not rebuilt.
+       *
+       * This bar owns the destination, the dates and the occupancy, and builds
+       * a fresh intent from its own controls each time — which silently drops
+       * anything else the intent was carrying. Nationality decides which rates
+       * a supplier will even return, and the URL round-trips it, so a shared
+       * link that stated one lost it the moment anyone pressed Search.
+       */
+      nationality: initial?.nationality,
     };
 
     const result = validateIntent(intent, locale);
