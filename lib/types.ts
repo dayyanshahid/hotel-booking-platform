@@ -819,6 +819,26 @@ export interface SupportCase {
    * because every case written before this existed is still valid.
    */
   assignee?: string;
+  /**
+   * Who raised it, and therefore who may read it back.
+   *
+   * Absent on every case written before this existed. Those stay operator-only,
+   * which is the safe reading of "we do not know whose this is" — the
+   * alternative is guessing an owner for a ticket that may carry somebody
+   * else's booking reference and whatever they typed into a complaint.
+   *
+   * An agency's ticket names the agency as well as the person, because a
+   * counter agent who raised a case and then left should not take their
+   * agency's support history with them.
+   */
+  raisedBy?: {
+    kind: "agency" | "customer";
+    agencyId?: string;
+    agencyName?: string;
+    agentId?: string;
+    email: string;
+    displayName?: string;
+  };
   messages: { at: string; from: "customer" | "agent"; body: string }[];
 }
 
