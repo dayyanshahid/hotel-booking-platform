@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
 import { useApp } from "@/components/providers/app-provider";
 import { PortalShell } from "@/components/agency/portal-shell";
 import { may, type AgencyContext } from "@/components/agency/use-agency";
@@ -195,6 +196,32 @@ function FilterRailSkeleton() {
 }
 
 function TradeSearch({ locale, context }: { locale: Locale; context: AgencyContext }) {
+  /*
+   * How results are ordered, from whatever does the ordering.
+   *
+   * The shop has always disclosed this and the trade screen never did, which
+   * is the wrong way round: an agent sorting by Recommended is choosing what
+   * to put in front of a paying customer, and is the one person who has to be
+   * able to say why that property came first.
+   *
+   * Fetched here rather than passed down from the page, because this portal
+   * ships without `lib/server` on purpose — the boundary that keeps supplier
+   * code out of a front end — and every other thing this screen needs it asks
+   * the API for. An empty list simply renders no disclosure, which is the
+   * right degradation for a note beside a badge.
+   */
+  const [recommendationCriteria, setRecommendationCriteria] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const body = await apiFetch<{ criteria: string[] }>(`/api/search/criteria?locale=${locale}`);
+      if (alive && body.ok && body.data) setRecommendationCriteria(body.data.criteria);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [locale]);
+
   const { t, announce, compare, toggleCompare, clearCompare, toast } = useApp();
   // The comparison can put a rate straight into the selection, so this screen
   // needs the basket the rate sheet already had.
@@ -1082,6 +1109,7 @@ function TradeSearch({ locale, context }: { locale: Locale; context: AgencyConte
                       rank={index + 1}
                       href={property}
                       density="compact"
+                      recommendationCriteria={recommendationCriteria}
                       priceRail={
                         quote ? (
                           <TradePrices

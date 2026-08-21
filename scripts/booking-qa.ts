@@ -1275,19 +1275,31 @@ async function main(): Promise<void> {
     return `${res.status} from ${PORTAL}`;
   });
 
-  await check("the portal never calls itself for the API", async () => {
+  await check("the portal proxies the API rather than implementing it", async () => {
     if (!PORTAL) return "SKIP: no portal origin given";
-    const res = await fetch(`${PORTAL}/api/bookings`, { method: "POST" }).catch(() => null);
-    if (!res) return "SKIP: portal not reachable";
     /*
-     * The recurring bug in this codebase, four times over: a relative `/api/…`
-     * in client code, which on a separated front end resolves to the portal
-     * rather than the backend. The portal must not answer API paths at all.
+     * This used to assert the opposite — that the portal 404s every `/api/…`
+     * path — because a relative URL in client code resolving to the front end
+     * was a bug that recurred four times.
+     *
+     * The design deliberately reversed it. The portal rewrites `/api/*` onto
+     * the backend so the session cookie stays first-party: as a genuinely
+     * cross-site request it needed `SameSite=None`, which needs `Secure`,
+     * which needs HTTPS — and it failed on mobile browsers that refuse
+     * third-party cookies outright. A relative URL working is now the point.
+     *
+     * So what is worth asserting is that the answer comes from the backend and
+     * not from a stub the portal grew. A path the front end has no code for at
+     * all, answering correctly, can only have been forwarded.
      */
-    if (res.status !== 404) {
-      throw new Error(`the portal answered /api/bookings with ${res.status} — a relative URL would silently work here`);
+    const res = await fetch(`${PORTAL}/api/search/criteria?locale=en`).catch(() => null);
+    if (!res) return "SKIP: portal not reachable";
+    if (!res.ok) throw new Error(`the portal did not forward /api/search/criteria: ${res.status}`);
+    const body = (await res.json()) as { ok?: boolean; data?: { criteria?: string[] } };
+    if (!body.ok || !body.data?.criteria?.length) {
+      throw new Error("the portal answered the API path with something the backend did not produce");
     }
-    return "404 — API paths belong to the backend only";
+    return `forwarded · ${body.data.criteria.length} ranking criteria`;
   });
 
   /* ---------------------------------------------------------------------- */
