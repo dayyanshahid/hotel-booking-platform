@@ -2,12 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Button, Card, Photo, SectionHeading, Stars } from "@/components/ui";
-import { bookableCountryList, destinationsInCountry } from "@/lib/data/destinations";
-import { localized } from "@/lib/data/catalog";
-import { getCountry } from "@/lib/data/geo/countries";
-import { buildHotel, hotelsInDestination } from "@/lib/data/hotels";
-import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
-import { destinationFromPrice, FROM_PRICE_BASIS } from "@/lib/server/from-price";
+import { fetchCountries, fetchCountry } from "@/lib/server/catalogue";
 import { formatMoney } from "@/lib/format";
 import { sceneUrl } from "@/lib/illustration/scenes";
 import { cityLabel, countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
@@ -17,9 +12,10 @@ import type { CurrencyCode, Locale } from "@/lib/types";
 /** Indicative browse prices render server-side, before any client preference. */
 const BROWSE_CURRENCY: CurrencyCode = "USD";
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const { countries } = await fetchCountries("en");
   return LOCALES.flatMap((locale) =>
-    bookableCountryList().map((c) => ({ locale, code: c.code.toLowerCase() })),
+    countries.map((c) => ({ locale, code: c.code.toLowerCase() })),
   );
 }
 
@@ -30,8 +26,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, code } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const country = getCountry(code);
-  if (!country) return { title: "Not found" };
+  const found = await fetchCountry(code, locale);
+  if (!found) return { title: "Not found" };
+  const country = found.country;
   const t = createTranslator(locale);
   const name = locale === "ar" ? (country.nameAr ?? country.name) : country.name;
   return {
@@ -60,27 +57,36 @@ export default async function CountryPage({
 }) {
   const { locale: raw, code } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const country = getCountry(code);
-  if (!country) notFound();
+  /*
+   * The country in full, and the index of the rest, in parallel. The strip of
+   * neighbouring countries at the foot is a different question from this page's
+   * own contents.
+   */
+  const [found, { countries }] = await Promise.all([
+    fetchCountry(code, locale, BROWSE_CURRENCY),
+    fetchCountries(locale),
+  ]);
+  if (!found) notFound();
+  const country = found.country;
 
   const t = createTranslator(locale);
   const name = locale === "ar" ? (country.nameAr ?? country.name) : country.name;
-  const cities = destinationsInCountry(country.code).sort((a, b) => a.tier - b.tier);
+  const cities = [...found.destinations].sort((a, b) => a.tier - b.tier);
   if (!cities.length) notFound();
 
-  const totalProperties = cities.reduce((sum, c) => sum + hotelsInDestination(c.id).length, 0);
+  const totalProperties = cities.reduce((sum, c) => sum + c.propertyCount, 0);
 
   // One representative stay per headline city, so the page shows inventory
-  // rather than only a list of place names.
+  // rather than only a list of place names. Chosen by the API, which has the
+  // properties to hand.
   const highlights = cities.slice(0, 6).flatMap((city) => {
-    const seed = hotelsInDestination(city.id)[0];
-    if (!seed) return [];
-    const hotel = buildHotel(seed, locale);
+    const hotel = city.highlight;
+    if (!hotel) return [];
     const hero = hotel.images.find((i) => i.category === "exterior") ?? hotel.images[0];
     return [
       {
         citySlug: city.slug,
-        cityName: localized(city.name, locale),
+        cityName: city.name,
         slug: hotel.slug,
         name: hotel.name,
         category: hotel.category,
@@ -99,7 +105,7 @@ export default async function CountryPage({
     about: { "@type": "Country", name: country.name },
     hasPart: cities.map((city) => ({
       "@type": "WebPage",
-      name: localized(city.name, locale),
+      name: city.name,
       url: `/${locale}/destinations/${city.slug}`,
     })),
   };
@@ -140,15 +146,15 @@ export default async function CountryPage({
         <SectionHeading id="cities-heading" title={t("browse.cities")} />
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {cities.map((city) => {
-            const count = hotelsInDestination(city.id).length;
-            const from = destinationFromPrice(city.id, BROWSE_CURRENCY, locale);
+            const count = city.propertyCount;
+            const from = city.fromPrice;
             return (
               <li key={city.slug}>
                 <Link href={href(locale, `/destinations/${city.slug}`)} className="block h-full">
                   <Card className="card-interactive h-full overflow-hidden">
                     <Photo
-                      src={destinationPhoto(city.slug, 0, { shape: PHOTO_SHAPE.card }).src}
-                      srcSet={destinationPhoto(city.slug, 0, { shape: PHOTO_SHAPE.card }).srcSet}
+                      src={city.photo.src}
+                      srcSet={city.photo.srcSet}
                       sizes="(min-width: 1024px) 33vw, 100vw"
                       fallbackSrc={sceneUrl(city.slug, "landmark", city.slug)}
                       alt=""
@@ -156,7 +162,7 @@ export default async function CountryPage({
                       fallbackLabel={t("hotel.imageFallback")}
                     />
                     <div className="p-4">
-                      <p className="font-semibold tracking-[-0.01em]">{localized(city.name, locale)}</p>
+                      <p className="font-semibold tracking-[-0.01em]">{city.name}</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge tone="neutral">
                           {count} {countLabel(t, count)}
@@ -164,7 +170,7 @@ export default async function CountryPage({
                         {from && (
                           <span className="tabular text-xs font-semibold">
                             {t("home.fromPerNight", {
-                              amount: formatMoney(from.amount, from.currency, locale),
+                              amount: formatMoney(from.amount, from.currency as CurrencyCode, locale),
                             })}
                           </span>
                         )}
@@ -176,7 +182,7 @@ export default async function CountryPage({
             );
           })}
         </ul>
-        <p className="text-muted mt-3 text-xs">{FROM_PRICE_BASIS[locale]}</p>
+        <p className="text-muted mt-3 text-xs">{found.fromPriceBasis}</p>
       </section>
 
       {highlights.length > 0 && (
@@ -217,7 +223,7 @@ export default async function CountryPage({
       <section aria-labelledby="elsewhere-heading">
         <SectionHeading id="elsewhere-heading" title={t("browse.elsewhere")} />
         <ul className="flex flex-wrap gap-2">
-          {bookableCountryList()
+          {countries
             .filter((c) => c.region === country.region && c.code !== country.code)
             .slice(0, 12)
             .map((other) => (

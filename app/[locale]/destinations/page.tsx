@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge, Card, SectionHeading } from "@/components/ui";
-import { bookableCountryList, DESTINATIONS } from "@/lib/data/destinations";
-import { localized } from "@/lib/data/catalog";
-import { REGIONS, type Region } from "@/lib/data/geo/countries";
-import { HOTEL_SEEDS } from "@/lib/data/hotels";
+import { fetchCountries, fetchDestinations } from "@/lib/server/catalogue";
 import { cityLabel, countLabel, countryLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
@@ -21,13 +18,17 @@ export async function generateMetadata({
   const { locale: raw } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   const t = createTranslator(locale);
+  const [destinations, { countries }] = await Promise.all([
+    fetchDestinations(locale),
+    fetchCountries(locale),
+  ]);
   return {
     title: t("browse.allTitle"),
     description: t("browse.allDescription", {
-      cities: DESTINATIONS.length,
-      countries: bookableCountryList().length,
-      cityUnit: cityLabel(t, DESTINATIONS.length, locale),
-      countryUnit: countryLabel(t, bookableCountryList().length, locale),
+      cities: destinations.length,
+      countries: countries.length,
+      cityUnit: cityLabel(t, destinations.length, locale),
+      countryUnit: countryLabel(t, countries.length, locale),
     }),
     alternates: {
       canonical: `/${locale}/destinations`,
@@ -52,17 +53,25 @@ export default async function DestinationsIndexPage({
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   const t = createTranslator(locale);
 
-  const countries = bookableCountryList();
-  const propertyCount = new Map<string, number>();
-  for (const seed of HOTEL_SEEDS) {
-    propertyCount.set(seed.destinationId, (propertyCount.get(seed.destinationId) ?? 0) + 1);
-  }
+  /*
+   * Two reads, in parallel. The counts used to be tallied here from the whole
+   * seed table; the API sends them with each destination, which is the only
+   * reason this page no longer needs the table.
+   */
+  const [{ regions, countries }, destinations] = await Promise.all([
+    fetchCountries(locale),
+    fetchDestinations(locale),
+  ]);
 
-  const byRegion = REGIONS.map((region: Region) => ({
-    region,
-    label: t(`region.${region}` as never),
-    countries: countries.filter((c) => c.region === region),
-  })).filter((group) => group.countries.length > 0);
+  const propertyCount = new Map(destinations.map((d) => [d.id, d.propertyCount]));
+
+  const byRegion = regions
+    .map((region) => ({
+      region,
+      label: t(`region.${region}` as never),
+      countries: countries.filter((c) => c.region === region),
+    }))
+    .filter((group) => group.countries.length > 0);
 
   return (
     <div className="space-y-10">
@@ -70,9 +79,9 @@ export default async function DestinationsIndexPage({
         <h1 className="text-2xl font-bold tracking-[-0.025em] sm:text-[32px]">{t("browse.allTitle")}</h1>
         <p className="text-muted mt-3 max-w-2xl leading-relaxed">
           {t("browse.allDescription", {
-            cities: DESTINATIONS.length,
+            cities: destinations.length,
             countries: countries.length,
-            cityUnit: cityLabel(t, DESTINATIONS.length, locale),
+            cityUnit: cityLabel(t, destinations.length, locale),
             countryUnit: countryLabel(t, countries.length, locale),
           })}
         </p>
@@ -96,7 +105,7 @@ export default async function DestinationsIndexPage({
           <SectionHeading id={`h-${group.region}`} title={group.label} />
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {group.countries.map((country) => {
-              const cities = DESTINATIONS.filter((d) => d.countryCode === country.code);
+              const cities = destinations.filter((d) => d.countryCode === country.code);
               const total = cities.reduce((sum, c) => sum + (propertyCount.get(c.id) ?? 0), 0);
               return (
                 <li key={country.code}>
@@ -119,7 +128,7 @@ export default async function DestinationsIndexPage({
                             href={href(locale, `/destinations/${city.slug}`)}
                             className="text-muted hover:text-brand-700 transition-colors duration-150"
                           >
-                            {localized(city.name, locale)}
+                            {city.name}
                           </Link>
                         </li>
                       ))}

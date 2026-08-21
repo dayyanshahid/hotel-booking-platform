@@ -1,6 +1,7 @@
 import { localeFrom, ok } from "@/lib/server/api";
 import { COLLECTIONS, PROPERTY_TYPES, PROPERTY_TYPE_KEYS, localized } from "@/lib/data/catalog";
 import { collectionPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
+import { HOTEL_SEEDS } from "@/lib/data/hotels";
 
 /**
  * GET /api/collections — the editorial groupings and the property vocabulary.
@@ -20,7 +21,10 @@ export async function GET(req: Request) {
       body: localized(c.body, locale),
       tag: c.tag,
       accent: c.accent,
-      photo: collectionPhoto(c.slug, c.tag, { shape: PHOTO_SHAPE.card }),
+      // How many properties are actually in it. Every index that lists a
+      // collection shows this, and deriving it needs the whole seed table.
+      count: HOTEL_SEEDS.filter((h) => h.tags.includes(c.tag)).length,
+      photo: collectionPhoto(c.slug, c.tag, { shape: PHOTO_SHAPE.strip }),
     })),
     propertyTypes: PROPERTY_TYPE_KEYS.map((key) => ({
       key,

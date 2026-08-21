@@ -2,16 +2,19 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Badge, Card, Photo, SectionHeading, Stars } from "@/components/ui";
-import { collectionPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
 import { sceneKindForTag, sceneUrl } from "@/lib/illustration/scenes";
-import { COLLECTIONS, localized } from "@/lib/data/catalog";
-import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
+import { fetchCollection, fetchCollections } from "@/lib/server/catalogue";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
-export function generateStaticParams() {
-  return LOCALES.flatMap((locale) => COLLECTIONS.map((c) => ({ locale, slug: c.slug })));
+/**
+ * Pre-rendered from what the API lists at build time; an empty list means every
+ * collection renders on demand rather than the build failing.
+ */
+export async function generateStaticParams() {
+  const { collections } = await fetchCollections("en");
+  return LOCALES.flatMap((locale) => collections.map((c) => ({ locale, slug: c.slug })));
 }
 
 export async function generateMetadata({
@@ -21,11 +24,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const collection = COLLECTIONS.find((c) => c.slug === slug);
-  if (!collection) return { title: "Not found" };
+  const found = await fetchCollection(slug, locale);
+  if (!found) return { title: "Not found" };
+  const { collection } = found;
   return {
-    title: localized(collection.title, locale),
-    description: localized(collection.body, locale),
+    title: collection.title,
+    description: collection.body,
     alternates: { canonical: `/${locale}/deals/${slug}` },
   };
 }
@@ -38,12 +42,13 @@ export default async function CollectionPage({
 }) {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const collection = COLLECTIONS.find((c) => c.slug === slug);
-  if (!collection) notFound();
+  const found = await fetchCollection(slug, locale);
+  if (!found) notFound();
+  const { collection } = found;
   const t = createTranslator(locale);
 
-  const hotels = HOTEL_SEEDS.filter((h) => h.tags.includes(collection.tag)).map((seed) => {
-    const hotel = buildHotel(seed, locale);
+  // Already built by the API, so nothing here re-implements `buildHotel`.
+  const hotels = found.hotels.map((hotel) => {
     return {
       slug: hotel.slug,
       name: hotel.name,
@@ -60,8 +65,8 @@ export default async function CollectionPage({
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-[var(--radius-card)] border">
         <Photo
-          src={collectionPhoto(collection.slug, collection.tag, { width: 1920, shape: PHOTO_SHAPE.banner }).src}
-          srcSet={collectionPhoto(collection.slug, collection.tag, { width: 1920, shape: PHOTO_SHAPE.banner }).srcSet}
+          src={collection.photo.src}
+          srcSet={collection.photo.srcSet}
           sizes="100vw"
           fallbackSrc={sceneUrl(`collection-${collection.slug}`, sceneKindForTag(collection.tag))}
           alt=""
@@ -71,8 +76,8 @@ export default async function CollectionPage({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" aria-hidden />
         <div className="absolute inset-x-0 bottom-0 p-5">
-          <h1 className="text-2xl font-bold text-white sm:text-3xl">{localized(collection.title, locale)}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-white/85">{localized(collection.body, locale)}</p>
+          <h1 className="text-2xl font-bold text-white sm:text-3xl">{collection.title}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-white/85">{collection.body}</p>
         </div>
       </header>
 

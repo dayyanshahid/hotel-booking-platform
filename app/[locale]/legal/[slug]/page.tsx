@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Card, SectionHeading } from "@/components/ui";
-import { LEGAL_PAGES, getLegalPage } from "@/lib/data/content";
-import { localized } from "@/lib/data/catalog";
+import { fetchLegalIndex, fetchLegalPage } from "@/lib/server/catalogue";
 import { LOCALES, isLocale } from "@/lib/i18n";
 import { formatDate } from "@/lib/format";
 import type { Locale } from "@/lib/types";
 
-export function generateStaticParams() {
-  return LOCALES.flatMap((locale) => LEGAL_PAGES.map((page) => ({ locale, slug: page.slug })));
+/**
+ * Pre-rendered from whatever the API can list at build time.
+ *
+ * If it cannot be reached the list comes back empty and every page renders on
+ * demand instead — slower for the first visitor and correct for all of them.
+ * The alternative, importing the pages so the build always succeeds, is what
+ * tied this front end to the content in the first place; a build that fails
+ * because a backend blinked cannot be released independently either.
+ */
+export async function generateStaticParams() {
+  const pages = await fetchLegalIndex("en");
+  return LOCALES.flatMap((locale) => pages.map((page) => ({ locale, slug: page.slug })));
 }
 
 export async function generateMetadata({
@@ -18,11 +27,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const page = getLegalPage(slug);
+  const page = await fetchLegalPage(slug, locale);
   if (!page) return { title: "Not found" };
   return {
-    title: localized(page.title, locale),
-    description: localized(page.intro, locale),
+    title: page.title,
+    description: page.intro,
     alternates: {
       canonical: `/${locale}/legal/${slug}`,
       languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}/legal/${slug}`])),
@@ -38,24 +47,24 @@ export default async function LegalPage({
 }) {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const page = getLegalPage(slug);
+  const page = await fetchLegalPage(slug, locale);
   if (!page) notFound();
 
   return (
     <article className="mx-auto max-w-3xl py-4">
-      <h1 className="text-2xl font-bold sm:text-3xl">{localized(page.title, locale)}</h1>
-      <p className="text-muted mt-2 text-sm">{localized(page.intro, locale)}</p>
+      <h1 className="text-2xl font-bold sm:text-3xl">{page.title}</h1>
+      <p className="text-muted mt-2 text-sm">{page.intro}</p>
       <p className="text-muted mt-1 text-xs">
         {locale === "ar" ? "آخر تحديث" : "Last updated"}: {formatDate(page.updated, locale)}
       </p>
       <div className="mt-6 space-y-4">
         {page.sections.map((section) => (
-          <Card key={section.heading.en} className="p-5">
-            <SectionHeading title={localized(section.heading, locale)} />
+          <Card key={section.heading} className="p-5">
+            <SectionHeading title={section.heading} />
             <div className="space-y-3">
-              {section.body.map((paragraph, i) => (
+              {section.paragraphs.map((paragraph, i) => (
                 <p key={i} className="text-sm wrap-anywhere">
-                  {localized(paragraph, locale)}
+                  {paragraph}
                 </p>
               ))}
             </div>

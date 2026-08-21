@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { HotelDetailView } from "@/components/pages/hotel-detail-view";
-import { buildHotel, getHotelSeed, HOTEL_SEEDS } from "@/lib/data/hotels";
-import { getDestination } from "@/lib/data/destinations";
+import { fetchHotel, fetchHotelSlugs } from "@/lib/server/catalogue";
 import { createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { intentFromSearchParams } from "@/lib/nav";
-import { liveHotelBySlug } from "@/lib/server/live-hotel";
 import type { Locale } from "@/lib/types";
 
-export function generateStaticParams() {
-  return LOCALES.flatMap((locale) => HOTEL_SEEDS.map((h) => ({ locale, slug: h.slug })));
+/**
+ * Pre-rendered from the seeded catalogue the API knows about. Live properties
+ * were never in this list and still are not — they render on demand, which is
+ * the only way to serve inventory that did not exist at build time.
+ */
+export async function generateStaticParams() {
+  const slugs = await fetchHotelSlugs("en");
+  return LOCALES.flatMap((locale) => slugs.map((slug) => ({ locale, slug })));
 }
 
 export async function generateMetadata({
@@ -19,11 +23,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const seed = getHotelSeed(slug);
   // A live property gets its real title and description too; leaving it as
-  // "Not found" was telling crawlers a page that renders does not exist.
-  const hotel = seed ? buildHotel(seed, locale) : await liveHotelBySlug(slug, locale);
-  if (!hotel) return { title: "Not found" };
+  // "Not found" was telling crawlers a page that renders does not exist. The
+  // API resolves seeded and live supply in that order, so this asks once.
+  const found = await fetchHotel(slug, locale);
+  if (!found) return { title: "Not found" };
+  const hotel = found.hotel;
   return {
     title: hotel.seo.metaTitle,
     description: hotel.seo.metaDescription,
@@ -51,38 +56,22 @@ export default async function HotelPage({
   const query = await searchParams;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   /*
-   * Demo inventory first, then live supply.
+   * Demo inventory first, then live supply — resolved by the API, in that
+   * order, so a page and an endpoint can never disagree about a property.
    *
    * Search has always returned Hotelbeds and TourMind properties, and every one
-   * of them landed here on a "page not found" — the route only knew the seeded
-   * catalogue. A result a traveller cannot open is worse than one they never
-   * saw, because they have already chosen it.
+   * of them once landed here on a "page not found". A result a traveller cannot
+   * open is worse than one they never saw, because they have already chosen it.
+   *
+   * `similar` comes back with it: working it out needs the seeded catalogue,
+   * which this front end no longer carries.
    */
-  const seed = getHotelSeed(slug);
-  const hotel = seed ? buildHotel(seed, locale) : await liveHotelBySlug(slug, locale);
-  if (!hotel) notFound();
+  const found = await fetchHotel(slug, locale);
+  if (!found) notFound();
+  const { hotel, similar, destination } = found;
 
-  const destination = getDestination(hotel.destinationId);
   const t = createTranslator(locale);
   const intent = intentFromSearchParams(query, locale);
-
-  // "Similar" only means anything within a destination we hold. A live property
-  // in a city with no seeded inventory simply gets no suggestions rather than
-  // suggestions from somewhere else.
-  const similar = (destination ? HOTEL_SEEDS.filter((h) => h.destinationId === destination.id && h.slug !== slug) : [])
-    .slice(0, 3)
-    .map((h) => {
-      const other = buildHotel(h, locale);
-      return {
-        slug: other.slug,
-        name: other.name,
-        neighborhood: other.address.neighborhood,
-        category: other.category,
-        image: other.images[0]?.url ?? "",
-        imageSrcSet: other.images[0]?.srcSet,
-        imageFallback: other.images[0]?.fallbackUrl,
-      };
-    });
 
   // Structured data uses only values that are visible and accurately sourced (§12.4).
   const jsonLd = {

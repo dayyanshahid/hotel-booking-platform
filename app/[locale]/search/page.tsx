@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SearchResultsView } from "@/components/pages/search-results-view";
 import { createTranslator, isLocale } from "@/lib/i18n";
 import { filtersFromSearchParams, intentFromSearchParams, propertyTypeFromSearchParams } from "@/lib/nav";
-import { RECOMMENDATION_CRITERIA } from "@/lib/server/search";
+import { fetchSearchCriteria } from "@/lib/server/catalogue";
 import type { Locale } from "@/lib/types";
 
 /** Volatile search URLs are not indexed, but must stay shareable (§12.4). */
@@ -18,6 +18,9 @@ export default async function SearchPage({
   const { locale: raw } = await params;
   const query = await searchParams;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
+  // The ranking disclosure comes from whatever does the ranking, so the two
+  // cannot drift into disagreeing about how results are ordered.
+  const criteria = await fetchSearchCriteria(locale);
   const t = createTranslator(locale);
   const intent = intentFromSearchParams(query, locale);
 
@@ -36,7 +39,7 @@ export default async function SearchPage({
       initialFilters={filtersFromSearchParams(query)}
       locale={locale}
       initialIntent={intent}
-      recommendationCriteria={RECOMMENDATION_CRITERIA[locale]}
+      recommendationCriteria={criteria}
     />
   );
 }

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Accordion, Card, SectionHeading } from "@/components/ui";
-import { HELP_ARTICLES } from "@/lib/data/content";
-import { localized } from "@/lib/data/catalog";
+import { fetchHelp } from "@/lib/server/catalogue";
 import { createTranslator, isLocale } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
@@ -19,7 +18,13 @@ export default async function HelpPage({ params }: { params: Promise<{ locale: s
   const locale = (isLocale(raw) ? raw : "en") as Locale;
   const t = createTranslator(locale);
 
-  const topics = [...new Set(HELP_ARTICLES.map((a) => localized(a.topic, locale)))];
+  /*
+   * Read from the API rather than imported, so this page can be deployed
+   * somewhere the content is not. Already localised on the way out, which is
+   * why nothing here calls `localized` any more.
+   */
+  const articles = await fetchHelp(locale);
+  const topics = [...new Set(articles.map((a) => a.topic))];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 py-4">
@@ -32,11 +37,13 @@ export default async function HelpPage({ params }: { params: Promise<{ locale: s
         <section key={topic}>
           <SectionHeading title={topic} />
           <Accordion
-            items={HELP_ARTICLES.filter((a) => localized(a.topic, locale) === topic).map((article) => ({
-              id: article.slug,
-              title: localized(article.question, locale),
-              content: <p className="wrap-anywhere">{localized(article.answer, locale)}</p>,
-            }))}
+            items={articles
+              .filter((a) => a.topic === topic)
+              .map((article) => ({
+                id: article.slug,
+                title: article.question,
+                content: <p className="wrap-anywhere">{article.answer}</p>,
+              }))}
           />
         </section>
       ))}

@@ -7,9 +7,11 @@ import {
   destinationsInRegion,
 } from "@/lib/data/destinations";
 import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
+import { HOTEL_SEEDS } from "@/lib/data/hotels";
+import { destinationFromPrice } from "@/lib/server/from-price";
 import type { Region } from "@/lib/data/geo/countries";
 import type { DestinationSeed } from "@/lib/data/destinations";
-import type { Locale } from "@/lib/types";
+import type { CurrencyCode, Locale } from "@/lib/types";
 
 /**
  * The places this platform sells, as data rather than as an import.
@@ -26,8 +28,16 @@ import type { Locale } from "@/lib/types";
  * payload so the client can throw one away.
  */
 
-/** The shape a card needs, and nothing a page would have to assemble itself. */
-function summarise(seed: DestinationSeed, locale: Locale) {
+/**
+ * The shape a card needs, and nothing a page would have to assemble itself.
+ *
+ * `propertyCount` and the from-price are included because every index that
+ * renders these cards wants them, and a client deriving them would need the
+ * whole seed table — which is the thing this endpoint exists to stop shipping.
+ * The price is optional and costs a scan per destination, so it is asked for
+ * rather than assumed.
+ */
+function summarise(seed: DestinationSeed, locale: Locale, currency?: CurrencyCode) {
   return {
     id: seed.id,
     slug: seed.slug,
@@ -41,6 +51,8 @@ function summarise(seed: DestinationSeed, locale: Locale) {
     curated: seed.curated,
     coordinates: seed.coordinates,
     photo: destinationPhoto(seed.slug, 0, { shape: PHOTO_SHAPE.card }),
+    propertyCount: HOTEL_SEEDS.filter((h) => h.destinationId === seed.id).length,
+    fromPrice: currency ? destinationFromPrice(seed.id, currency, locale) : null,
   };
 }
 
@@ -50,7 +62,7 @@ function summarise(seed: DestinationSeed, locale: Locale) {
  * `?country=SA` or `?region=middle-east` narrow it; `?countries=1` answers the
  * different question of which countries can be booked at all, which is what a
  * country index renders and would otherwise be derived by scanning every
- * destination on the client.
+ * destination on the client. `?currency=SAR` adds a from-price to each.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -69,5 +81,8 @@ export async function GET(req: Request) {
       ? destinationsInRegion(region as Region)
       : DESTINATIONS;
 
-  return ok({ destinations: seeds.map((seed) => summarise(seed, locale)) });
+  const currency = sanitize(url.searchParams.get("currency"), 3).toUpperCase();
+  return ok({
+    destinations: seeds.map((seed) => summarise(seed, locale, (currency || undefined) as CurrencyCode | undefined)),
+  });
 }

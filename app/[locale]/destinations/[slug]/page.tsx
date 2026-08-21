@@ -3,17 +3,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Accordion, Badge, Button, Card, Photo, SectionHeading, Stars } from "@/components/ui";
 import { DestinationSearchCta } from "@/components/pages/destination-cta";
-import { DESTINATIONS, getDestination } from "@/lib/data/destinations";
-import { HOTEL_SEEDS, buildHotel } from "@/lib/data/hotels";
-import { localized } from "@/lib/data/catalog";
-import { destinationPhoto, PHOTO_SHAPE } from "@/lib/data/photos";
+import { fetchDestination, fetchDestinations } from "@/lib/server/catalogue";
 import { sceneUrl } from "@/lib/illustration/scenes";
 import { countLabel, createTranslator, isLocale, LOCALES } from "@/lib/i18n";
 import { href } from "@/lib/nav";
 import type { Locale } from "@/lib/types";
 
-export function generateStaticParams() {
-  return LOCALES.flatMap((locale) => DESTINATIONS.map((d) => ({ locale, slug: d.slug })));
+export async function generateStaticParams() {
+  const destinations = await fetchDestinations("en");
+  return LOCALES.flatMap((locale) => destinations.map((d) => ({ locale, slug: d.slug })));
 }
 
 export async function generateMetadata({
@@ -23,12 +21,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const destination = getDestination(slug);
-  if (!destination) return { title: "Not found" };
+  const found = await fetchDestination(slug, locale);
+  if (!found) return { title: "Not found" };
+  const destination = found.destination;
   const t = createTranslator(locale);
   return {
-    title: t("cms.destinationTitle", { destination: localized(destination.name, locale) }),
-    description: localized(destination.blurb, locale),
+    title: t("cms.destinationTitle", { destination: destination.name }),
+    description: destination.blurb,
     alternates: {
       canonical: `/${locale}/destinations/${slug}`,
       languages: Object.fromEntries(LOCALES.map((l) => [l, `/${l}/destinations/${slug}`])),
@@ -49,32 +48,39 @@ export default async function DestinationPage({
 }) {
   const { locale: raw, slug } = await params;
   const locale = (isLocale(raw) ? raw : "en") as Locale;
-  const destination = getDestination(slug);
-  if (!destination) notFound();
+  /*
+   * The place and the index of the others, in parallel. Two reads rather than
+   * one because the "other destinations" strip is genuinely a different
+   * question, and folding it into the detail payload would send every page a
+   * list it mostly does not use.
+   */
+  const [found, everywhere] = await Promise.all([
+    fetchDestination(slug, locale),
+    fetchDestinations(locale),
+  ]);
+  if (!found) notFound();
+  const destination = found.destination;
   const t = createTranslator(locale);
 
-  const hotels = HOTEL_SEEDS.filter((h) => h.destinationId === destination.id).map((seed) => {
-    const hotel = buildHotel(seed, locale);
-    return {
-      slug: hotel.slug,
-      name: hotel.name,
-      category: hotel.category,
-      neighborhood: hotel.address.neighborhood,
-      image: hotel.images[0]?.url ?? "",
-      imageSrcSet: hotel.images[0]?.srcSet,
-      imageFallback: hotel.images[0]?.fallbackUrl,
-      score: hotel.review?.score,
-      tags: seed.tags,
-    };
-  });
+  // Built by the API, so this only picks out what the cards render.
+  const hotels = found.hotels.map((hotel) => ({
+    slug: hotel.slug,
+    name: hotel.name,
+    category: hotel.category,
+    neighborhood: hotel.address.neighborhood,
+    image: hotel.images[0]?.url ?? "",
+    imageSrcSet: hotel.images[0]?.srcSet,
+    imageFallback: hotel.images[0]?.fallbackUrl,
+    score: hotel.review?.score,
+  }));
 
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
     mainEntity: destination.faqs.map((faq) => ({
       "@type": "Question",
-      name: localized(faq.q, locale),
-      acceptedAnswer: { "@type": "Answer", text: localized(faq.a, locale) },
+      name: faq.q,
+      acceptedAnswer: { "@type": "Answer", text: faq.a },
     })),
   };
 
@@ -90,17 +96,17 @@ export default async function DestinationPage({
             </Link>
           </li>
           <li aria-hidden className="rtl-flip">›</li>
-          <li>{localized(destination.country, locale)}</li>
+          <li>{destination.country}</li>
           <li aria-hidden className="rtl-flip">›</li>
-          <li>{localized(destination.name, locale)}</li>
+          <li>{destination.name}</li>
         </ol>
       </nav>
 
       <header>
         <div className="relative overflow-hidden rounded-[var(--radius-card)] border">
           <Photo
-            src={destinationPhoto(destination.slug, 0, { shape: PHOTO_SHAPE.banner }).src}
-            srcSet={destinationPhoto(destination.slug, 0, { shape: PHOTO_SHAPE.banner }).srcSet}
+            src={destination.photo.src}
+            srcSet={destination.photo.srcSet}
             sizes="100vw"
             fallbackSrc={sceneUrl(destination.slug, "landmark", destination.slug)}
             alt=""
@@ -110,12 +116,12 @@ export default async function DestinationPage({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" aria-hidden />
           <h1 className="absolute inset-x-0 bottom-0 p-5 text-2xl font-bold text-white sm:text-3xl">
-            {t("cms.destinationTitle", { destination: localized(destination.name, locale) })}
+            {t("cms.destinationTitle", { destination: destination.name })}
           </h1>
         </div>
-        <p className="text-muted mt-3 max-w-3xl text-sm">{localized(destination.blurb, locale)}</p>
+        <p className="text-muted mt-3 max-w-3xl text-sm">{destination.blurb}</p>
         <div className="mt-4">
-          <DestinationSearchCta locale={locale} destinationId={destination.id} label={localized(destination.name, locale)} />
+          <DestinationSearchCta locale={locale} destinationId={destination.id} label={destination.name} />
         </div>
       </header>
 
@@ -126,12 +132,12 @@ export default async function DestinationPage({
             <li key={hood.key}>
               {(() => {
                 const hoodCount = hotels.filter(
-                  (h) => h.neighborhood === localized(hood.name, locale),
+                  (h) => h.neighborhood === hood.name,
                 ).length;
                 return (
               <Card className="h-full p-4">
-                <p className="font-semibold">{localized(hood.name, locale)}</p>
-                <p className="text-muted mt-1 text-sm">{localized(hood.blurb, locale)}</p>
+                <p className="font-semibold">{hood.name}</p>
+                <p className="text-muted mt-1 text-sm">{hood.blurb}</p>
                 <p className="text-brand-700 mt-2 text-xs">
                   {hoodCount} {countLabel(t, hoodCount)}
                 </p>
@@ -181,8 +187,8 @@ export default async function DestinationPage({
         <Accordion
           items={destination.faqs.map((faq, i) => ({
             id: `faq-${i}`,
-            title: localized(faq.q, locale),
-            content: <p className="wrap-anywhere">{localized(faq.a, locale)}</p>,
+            title: faq.q,
+            content: <p className="wrap-anywhere">{faq.a}</p>,
             defaultOpen: i === 0,
           }))}
         />
@@ -191,11 +197,14 @@ export default async function DestinationPage({
       <section aria-labelledby="other-heading">
         <SectionHeading id="other-heading" title={t("home.destinations")} />
         <ul className="flex flex-wrap gap-2">
-          {DESTINATIONS.filter((d) => d.id !== destination.id).map((other) => (
+          {everywhere
+            .filter((d) => d.id !== destination.id)
+            .slice(0, 24)
+            .map((other) => (
             <li key={other.id}>
               <Link href={href(locale, `/destinations/${other.slug}`)}>
                 <Button variant="secondary" size="sm">
-                  {localized(other.name, locale)}
+                  {other.name}
                 </Button>
               </Link>
             </li>
