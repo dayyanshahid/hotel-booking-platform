@@ -798,6 +798,22 @@ const en: Dict = {
   "admin.testEnv": "Test",
   "admin.mappedProperties": "Mapped properties",
   "admin.catalogueEmpty": "empty, so live search returns nothing from this supplier",
+  "admin.envUnknown": "Environment not declared",
+  "admin.catalogueFreshness": "Catalogue freshness",
+  "admin.refreshLastRun": "Last refresh",
+  "admin.refreshPosition": "Position in the rotation",
+  "admin.refreshNext": "Next up",
+  "admin.refreshCycle": "Last full cycle",
+  "admin.refreshCycleNever": "Not yet completed one",
+  "admin.refreshNeverRun": "Never run",
+  "admin.refreshHealthy": "Refreshing",
+  "admin.refreshStale": "Behind schedule",
+  "admin.refreshExplain":
+    "The scheduled job takes three countries a night, so a full pass through the rotation takes about a month. A gap of more than a day means a run was missed.",
+  "admin.supplierHealth": "Recent trouble",
+  "admin.inTheLastHour": "in the last hour",
+  "admin.inTheLastDay": "in the last day",
+  "admin.healthSampled": "Counted since this instance started, so a zero means nothing seen rather than nothing happened.",
   "hotelbeds.missingCredentials": "No API key configured. Live inventory from this supplier is unavailable.",
   "tourmind.missingCredentials": "No credentials configured. Live inventory from this supplier is unavailable.",
   "admin.supply": "Supply",
@@ -1330,6 +1346,14 @@ const en: Dict = {
   "agency.code": "One-time code",
   "agency.verify": "Sign in",
   "agency.codeSent": "If that address is on an agency account, a code is on its way.",
+  /*
+   * The operator console's own wording. It was reusing the agency line, so the
+   * screen for platform staff told them a code was on its way "if that address
+   * is on an agency account" — which is the wrong product, and on a sign-in
+   * page is exactly the sort of thing that makes someone think they are in the
+   * wrong place. Both stay deliberately vague about whether the address exists.
+   */
+  "admin.codeSent": "If that address is on the operator list, a code is on its way.",
   "agency.signOut": "Sign out",
   "agency.notAgent": "Not an agency? Book as a guest instead.",
   "agency.suspended": "This agency account is not active. Contact your account manager.",
@@ -2327,6 +2351,22 @@ const ar: Dict = {
   "admin.testEnv": "اختبار",
   "admin.mappedProperties": "العقارات المرتبطة",
   "admin.catalogueEmpty": "فارغة، لذا لا يعيد البحث الحي شيئًا من هذا المورد",
+  "admin.envUnknown": "البيئة غير محددة",
+  "admin.catalogueFreshness": "حداثة الكتالوج",
+  "admin.refreshLastRun": "آخر تحديث",
+  "admin.refreshPosition": "الموضع في الدورة",
+  "admin.refreshNext": "التالي",
+  "admin.refreshCycle": "آخر دورة كاملة",
+  "admin.refreshCycleNever": "لم تكتمل بعد",
+  "admin.refreshNeverRun": "لم يُشغّل بعد",
+  "admin.refreshHealthy": "قيد التحديث",
+  "admin.refreshStale": "متأخر عن الجدول",
+  "admin.refreshExplain":
+    "تعالج المهمة المجدولة ثلاث دول كل ليلة، لذا تستغرق الدورة الكاملة نحو شهر. أي فجوة تتجاوز يومًا تعني تفويت تشغيلة.",
+  "admin.supplierHealth": "أعطال حديثة",
+  "admin.inTheLastHour": "خلال الساعة الماضية",
+  "admin.inTheLastDay": "خلال اليوم الماضي",
+  "admin.healthSampled": "تُحتسب منذ بدء هذه النسخة، لذا الصفر يعني عدم رصد شيء وليس عدم حدوث شيء.",
   "hotelbeds.missingCredentials": "لا يوجد مفتاح API مهيأ. المخزون الحي من هذا المورد غير متاح.",
   "tourmind.missingCredentials": "لا توجد بيانات اعتماد مهيأة. المخزون الحي من هذا المورد غير متاح.",
   "admin.supply": "التوريد",
@@ -2840,6 +2880,7 @@ const ar: Dict = {
   "agency.code": "رمز الدخول",
   "agency.verify": "تسجيل الدخول",
   "agency.codeSent": "إن كان هذا العنوان مسجلًا لدى وكالة، فالرمز في طريقه إليه.",
+  "admin.codeSent": "إن كان هذا العنوان ضمن قائمة المشغّلين، فالرمز في طريقه إليه.",
   "agency.signOut": "تسجيل الخروج",
   "agency.notAgent": "لست وكيلًا؟ احجز كضيف.",
   "agency.suspended": "حساب الوكالة غير نشط. تواصل مع مدير الحساب.",
