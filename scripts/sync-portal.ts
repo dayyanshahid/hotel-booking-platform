@@ -28,33 +28,42 @@ import path from "node:path";
  */
 
 /**
- * Which portal is being synced.
+ * What still flows outward, now that the portals own their own screens.
  *
- * There are two now — the agency portal and the operator console — and they
- * differ in exactly one way that matters here: the section of `app/[locale]`
- * that belongs to them. Everything else is identical, so this is one script
- * with a section rather than two scripts that would agree until the day
- * somebody fixed a bug in one of them.
+ * This repository is the shop. The agency portal and the operator console are
+ * their own codebases and hold their own pages, components and domain — none
+ * of that lives here any more, so none of it is copied.
+ *
+ * What is still shared is the design system and the client-side library: the
+ * `ui` kit, the providers, the translations, the formatters, the URL helpers.
+ * Three front ends rendering the same product should not disagree about what a
+ * button looks like or how a price is written, and there is no package to
+ * publish between them, so the files are copied — which works right up until
+ * somebody does it by hand, misses one, and spends an afternoon on a bug that
+ * was fixed a week ago in another repository.
  */
-const SECTIONS = {
-  agency: {
-    /** Files the portal deliberately does its own way. */
-    owned: ["app/[locale]/agency/hotel/[slug]/page.tsx"],
-  },
-  admin: { owned: [] as string[] },
-} as const;
-
-type SectionName = keyof typeof SECTIONS;
-
-/** Owned by every portal, whichever section it serves. */
-const ALWAYS_OWNED = [
-  "app/[locale]/layout.tsx",
-  "proxy.ts",
-  "next.config.ts",
-  "package.json",
-  "package-lock.json",
-  "tsconfig.json",
-  "README.md",
+/**
+ * The shared surface, and only it.
+ *
+ * Deliberately a list of roots rather than "everything": a portal that received
+ * `app/` would be handed the shop's pages, and one that received all of `lib/`
+ * would be handed a catalogue client it has no use for. Each portal's own
+ * screens are its own business.
+ */
+const SHARED = [
+  "components/ui",
+  "components/providers",
+  "lib/i18n.ts",
+  "lib/types.ts",
+  "lib/format.ts",
+  "lib/nav.ts",
+  "lib/text.ts",
+  "lib/hash.ts",
+  "lib/currencies.ts",
+  "lib/api-client.ts",
+  "lib/api-origin.ts",
+  "lib/cookies.ts",
+  "app/globals.css",
 ];
 
 const SHARED_ROOTS = ["app", "components", "lib", "tests"];
@@ -75,17 +84,7 @@ async function walk(dir: string, base: string): Promise<string[]> {
 async function main(): Promise<void> {
   const target = path.resolve(process.argv[2] ?? "../travel-agent-portal");
 
-  /*
-   * Inferred from the target rather than passed as a flag.
-   *
-   * A flag can disagree with the directory, and the failure would be silent
-   * and destructive: syncing the agency section into the console overwrites
-   * one portal with another's screens. The directory name is the one thing
-   * that cannot be wrong about which portal this is.
-   */
-  const section: SectionName = path.basename(target).includes("admin") ? "admin" : "agency";
-  const owned = new Set([...ALWAYS_OWNED, ...SECTIONS[section].owned]);
-  const sectionRoot = path.join("app", "[locale]", section);
+
   if (!(await fs.stat(path.join(target, "package.json")).catch(() => null))) {
     console.error(`No portal at ${target}. Pass its path as the first argument.`);
     process.exit(1);
@@ -96,36 +95,36 @@ async function main(): Promise<void> {
   const added: string[] = [];
   const skipped: string[] = [];
 
-  for (const root of SHARED_ROOTS) {
-    for (const rel of await walk(path.join(here, root), here)) {
-      if (owned.has(rel)) {
-        skipped.push(rel);
-        continue;
-      }
+  for (const entry of SHARED) {
+    const stat = await fs.stat(path.join(here, entry)).catch(() => null);
+    if (!stat) {
+      skipped.push(`${entry} (not in this repository)`);
+      continue;
+    }
+    const files = stat.isDirectory() ? await walk(path.join(here, entry), here) : [entry];
+
+    for (const rel of files) {
       const to = path.join(target, rel);
       const present = Boolean(await fs.stat(to).catch(() => null));
+      const source = await fs.readFile(rel);
 
       if (!present) {
         /*
-         * Only what the portal already carries — except a new route in its own
-         * section, which is the portal's whole reason to exist.
+         * Shared code is added rather than skipped when it is missing.
          *
-         * Copying every route turns the portal into a broken copy of the
-         * consumer app, a hundred files of it, which is what happened when
-         * that was tried. But the opposite rule was silently wrong too: a page
-         * added under the portal's section was never copied, so it kept building
-         * happily with a sidebar link to a route it did not have. Found when
-         * the dashboard was split onto its own page and the portal's copy
-         * 404ed while the platform's worked.
+         * The old rule — only update what the portal already has — was right
+         * when this repository held the portals' screens and copying a page
+         * they had no route for would break them. These are the design system
+         * and the client library: a portal that is missing a button has a
+         * build error waiting, not a file it chose not to have.
          */
-        if (!rel.startsWith(sectionRoot + path.sep)) continue;
         await fs.mkdir(path.dirname(to), { recursive: true });
-        await fs.writeFile(to, await fs.readFile(rel));
+        await fs.writeFile(to, source);
         added.push(rel);
         continue;
       }
 
-      const [source, existing] = await Promise.all([fs.readFile(rel), fs.readFile(to)]);
+      const existing = await fs.readFile(to);
       if (source.equals(existing)) continue;
       await fs.writeFile(to, source);
       updated.push(rel);

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteUrl } from "@/lib/server/runtime";
+import { siteUrl } from "@/lib/site-url";
 import { bookableCountryList, DESTINATIONS } from "@/lib/data/destinations";
 import { HOTEL_SEEDS } from "@/lib/data/hotels";
 import { LEGAL_PAGES } from "@/lib/data/content";

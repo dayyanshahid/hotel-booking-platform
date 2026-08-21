@@ -910,3 +910,23 @@ export interface Interpretation {
   /** What it could not work out at all. */
   missing: string[];
 }
+
+/**
+ * What an agency is charged, and what its customer pays.
+ *
+ * Lives here rather than with the rest of the trade domain because
+ * `rate-card` renders it, and `rate-card` is a shared commerce component: the
+ * shop uses it without a price rail and the agency portal uses it with one. A
+ * shared component reaching into `lib/agency` was the one edge stopping the
+ * shop's codebase from being free of the portals entirely.
+ */
+export interface AgencyOfferView {
+  offerId: string;
+  /** What the agency is charged. */
+  cost: number;
+  /** What the agency's customer pays, after the agency's own markup. */
+  sell: number;
+  /** sell − cost, because an agent needs it to quote. */
+  margin: number;
+  currency: string;
+}

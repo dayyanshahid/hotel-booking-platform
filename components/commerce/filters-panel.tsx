@@ -5,6 +5,11 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Checkbox, Input, Select, cx } from "@/components/ui";
 import { Icon } from "@/components/ui/icons";
 import { formatMoney } from "@/lib/format";
+import { LIVE_SUPPLY_FILTERS, type FilterKey } from "@/lib/search/live-filters";
+
+export { LIVE_SUPPLY_FILTERS };
+export type { FilterKey };
+
 import type { CurrencyCode, SearchFacets, SearchFilters, SortKey } from "@/lib/types";
 import { BOARD_CATALOG, localized } from "@/lib/data/catalog";
 import { fold, foldedIncludes } from "@/lib/text";
@@ -19,22 +24,6 @@ import { fold, foldedIncludes } from "@/lib/text";
  * screen would be offering a filter that silently matches nothing — worse than
  * omitting it, because an agent reads an empty result as "no availability".
  */
-export type FilterKey =
-  | "price"
-  | "stars"
-  | "rating"
-  | "neighborhood"
-  | "propertyType"
-  | "amenities"
-  | "refundable"
-  | "payLater"
-  | "accessible"
-  | "deals"
-  | "board"
-  | "hotelName"
-  | "roomCategory"
-  | "rateConditions"
-  | "distance";
 
 /*
  * `refundable` is not here, and that is not an oversight: "rate conditions"
@@ -60,33 +49,6 @@ const ALL_FILTERS: FilterKey[] = [
   "distance",
 ];
 
-/**
- * What Hotelbeds and TourMind between them can actually answer.
- *
- * Star rating, board, price and cancellation come from both. Zone, property
- * type, facilities and promotions come from Hotelbeds, and amenities now come
- * from TourMind's static list too. Guest rating, accessible rooms and payment
- * timing are not in either contract as data we hold, so they are not offered.
- *
- * Room category and rate conditions are read out of what the suppliers do send
- * — the room's own name and its cancellation policy — so both are answerable
- * here. `refundable` is deliberately absent: "rate conditions" asks the same
- * question with three answers instead of one, and shipping both would be two
- * controls competing over one field.
- */
-export const LIVE_SUPPLY_FILTERS: FilterKey[] = [
-  "hotelName",
-  "price",
-  "stars",
-  "board",
-  "roomCategory",
-  "rateConditions",
-  "distance",
-  "amenities",
-  "neighborhood",
-  "propertyType",
-  "deals",
-];
 
 /**
  * The type-ahead, which types faster than it searches.

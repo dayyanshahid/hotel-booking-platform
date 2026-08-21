@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Card, Drawer, Input, ToastStack, LiveRegion, cx }
 import { Icon, type IconName } from "@/components/ui/icons";
 import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
+import { agentPortalUrl } from "@/lib/agent-portal";
 import { SCENARIOS } from "@/lib/server/scenarios";
 import type { ScenarioId } from "@/lib/server/scenarios";
 import { localized } from "@/lib/data/catalog";
@@ -63,9 +64,16 @@ export function SiteFooter() {
       title: t("footer.company"),
       links: [
         { href: "/legal/about", label: t("footer.about") },
-        // The way an agency finds the portal. Nothing else links to it, and an
-        // agent who cannot find their own sign-in calls the office instead.
-        { href: "/agency/signin", label: t("agency.portal") },
+        /*
+         * The way an agency finds the portal. Nothing else links to it, and an
+         * agent who cannot find their own sign-in calls the office instead.
+         *
+         * An absolute origin now, because the portal is a separate deployment
+         * and this path stopped existing here the day it moved out — the link
+         * sat in the footer of every page answering 404. Configured rather than
+         * hard-coded so a preview build points at a preview portal.
+         */
+        { href: agentPortalUrl(locale), label: t("agency.portal"), external: true },
         { href: "/legal/price-promise", label: t("footer.priceProm") },
         { href: "/legal/guarantee", label: t("footer.guarantee") },
       ],
@@ -106,7 +114,12 @@ export function SiteFooter() {
               {column.links.map((link) => (
                 <li key={link.href}>
                   <Link
-                    href={href(locale, link.href)}
+                    /*
+                     * An external link is already absolute; running it through
+                     * `href` would prefix it with a locale and produce
+                     * `/en/https://…`.
+                     */
+                    href={"external" in link && link.external ? link.href : href(locale, link.href)}
                     className="hover:text-brand-700 text-sm transition-colors duration-150"
                   >
                     {link.label}

@@ -36,10 +36,15 @@ function functionBody(source: string, name: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-const shells = [
-  { name: "operator console", file: "components/admin/console-shell.tsx" },
-  { name: "agency portal", file: "components/agency/ui.tsx" },
-];
+/*
+ * The shells this repository still contains.
+ *
+ * The operator console and the agency portal live in their own repositories
+ * now and carry this assertion with them — a test that scans a file by path
+ * can only run where the file is, and leaving it here would have read as those
+ * shells having lost their heading rather than having moved house.
+ */
+const shells: { name: string; file: string }[] = [];
 
 describe("document outlines", () => {
   for (const shell of shells) {
@@ -49,17 +54,6 @@ describe("document outlines", () => {
     });
   }
 
-  it("the console takes its heading from the navigation, not a hardcoded string", () => {
-    /*
-     * The heading and the highlighted nav entry have to agree, so both are
-     * derived the same way. A literal here would drift the first time a page
-     * is renamed, and nothing would notice — the visible title comes from a
-     * different place.
-     */
-    const source = readFileSync("components/admin/console-shell.tsx", "utf8");
-    expect(source).toMatch(/const pageTitle\s*=/);
-    expect(source).toMatch(/<h1 className="sr-only">\{pageTitle\}<\/h1>/);
-  });
 
   it("does not let SectionHeading start claiming the top level", () => {
     /*

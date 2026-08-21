@@ -19,7 +19,6 @@ import { describe, expect, it } from "vitest";
  */
 const CONTAINER_QUERIED = [
   "components/search/search-bar.tsx",
-  "components/pages/agency-search-view.tsx",
   "components/pages/search-results-view.tsx",
 ];
 

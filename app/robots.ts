@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteUrl } from "@/lib/server/runtime";
+import { siteUrl } from "@/lib/site-url";
 
 const BASE = siteUrl();
 
