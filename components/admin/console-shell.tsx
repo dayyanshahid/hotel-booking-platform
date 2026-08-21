@@ -7,7 +7,7 @@ import { useApp } from "@/components/providers/app-provider";
 import { Badge, Button, Input, Spinner, cx } from "@/components/ui";
 import { Wordmark } from "@/components/ui/wordmark";
 import { href } from "@/lib/nav";
-import type { AdminSession } from "@/lib/admin/session";
+import type { AdminSession } from "@/lib/admin/types";
 import type { Locale } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";

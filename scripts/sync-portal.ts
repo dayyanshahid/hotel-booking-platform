@@ -27,17 +27,35 @@ import path from "node:path";
  * drag server imports across and break the build.
  */
 
-/** Files the portal deliberately does its own way. */
-const PORTAL_OWNED = new Set([
+/**
+ * Which portal is being synced.
+ *
+ * There are two now — the agency portal and the operator console — and they
+ * differ in exactly one way that matters here: the section of `app/[locale]`
+ * that belongs to them. Everything else is identical, so this is one script
+ * with a section rather than two scripts that would agree until the day
+ * somebody fixed a bug in one of them.
+ */
+const SECTIONS = {
+  agency: {
+    /** Files the portal deliberately does its own way. */
+    owned: ["app/[locale]/agency/hotel/[slug]/page.tsx"],
+  },
+  admin: { owned: [] as string[] },
+} as const;
+
+type SectionName = keyof typeof SECTIONS;
+
+/** Owned by every portal, whichever section it serves. */
+const ALWAYS_OWNED = [
   "app/[locale]/layout.tsx",
-  "app/[locale]/agency/hotel/[slug]/page.tsx",
   "proxy.ts",
   "next.config.ts",
   "package.json",
   "package-lock.json",
   "tsconfig.json",
   "README.md",
-]);
+];
 
 const SHARED_ROOTS = ["app", "components", "lib", "tests"];
 const EXTENSIONS = /\.(ts|tsx|css)$/;
@@ -56,6 +74,18 @@ async function walk(dir: string, base: string): Promise<string[]> {
 
 async function main(): Promise<void> {
   const target = path.resolve(process.argv[2] ?? "../travel-agent-portal");
+
+  /*
+   * Inferred from the target rather than passed as a flag.
+   *
+   * A flag can disagree with the directory, and the failure would be silent
+   * and destructive: syncing the agency section into the console overwrites
+   * one portal with another's screens. The directory name is the one thing
+   * that cannot be wrong about which portal this is.
+   */
+  const section: SectionName = path.basename(target).includes("admin") ? "admin" : "agency";
+  const owned = new Set([...ALWAYS_OWNED, ...SECTIONS[section].owned]);
+  const sectionRoot = path.join("app", "[locale]", section);
   if (!(await fs.stat(path.join(target, "package.json")).catch(() => null))) {
     console.error(`No portal at ${target}. Pass its path as the first argument.`);
     process.exit(1);
@@ -68,7 +98,7 @@ async function main(): Promise<void> {
 
   for (const root of SHARED_ROOTS) {
     for (const rel of await walk(path.join(here, root), here)) {
-      if (PORTAL_OWNED.has(rel)) {
+      if (owned.has(rel)) {
         skipped.push(rel);
         continue;
       }
@@ -77,18 +107,18 @@ async function main(): Promise<void> {
 
       if (!present) {
         /*
-         * Only what the portal already carries — except a new agency route,
-         * which is the portal's whole reason to exist.
+         * Only what the portal already carries — except a new route in its own
+         * section, which is the portal's whole reason to exist.
          *
          * Copying every route turns the portal into a broken copy of the
          * consumer app, a hundred files of it, which is what happened when
          * that was tried. But the opposite rule was silently wrong too: a page
-         * added under /agency was never copied, so the portal kept building
+         * added under the portal's section was never copied, so it kept building
          * happily with a sidebar link to a route it did not have. Found when
          * the dashboard was split onto its own page and the portal's copy
          * 404ed while the platform's worked.
          */
-        if (!rel.startsWith(path.join("app", "[locale]", "agency") + path.sep)) continue;
+        if (!rel.startsWith(sectionRoot + path.sep)) continue;
         await fs.mkdir(path.dirname(to), { recursive: true });
         await fs.writeFile(to, await fs.readFile(rel));
         added.push(rel);

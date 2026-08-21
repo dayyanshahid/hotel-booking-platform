@@ -1,5 +1,8 @@
 import "server-only";
 import { driver } from "../server/persistence";
+import type { AuditEntry } from "./types";
+
+export type { AuditEntry };
 
 /**
  * Platform state the console owns: what we charge, and what operators did.
@@ -19,30 +22,6 @@ const KEY = "platform";
  * agency asks why their commission changed in March, the answer exists and
  * names a person. An audit trail that is written selectively is not one.
  */
-export interface AuditEntry {
-  id: string;
-  at: string;
-  /**
-   * Monotonic within this store, so entries written inside the same
-   * millisecond still have an order.
-   *
-   * Sorting on the timestamp alone was not enough: two actions a few
-   * microseconds apart share an ISO string to the millisecond, and the sort
-   * then returned them in whichever order the array happened to hold. An audit
-   * log that cannot say which change came last fails at the one question it
-   * exists to answer.
-   */
-  seq: number;
-  actor: string;
-  action: string;
-  /** What was acted on: an agency id, a booking reference, a setting key. */
-  subject: string;
-  /** Human-readable summary, already localised to English for the log. */
-  detail: string;
-  /** Before/after for value changes, so a reversal does not need a guess. */
-  before?: string;
-  after?: string;
-}
 
 /**
  * Commercial policy that used to live only in environment variables.

@@ -24,10 +24,9 @@ const COOKIE = "sp_admin";
 /** Shorter than the agency portal's. An idle console is a standing risk. */
 const MAX_AGE = 60 * 60 * 4;
 
-export interface AdminSession {
-  email: string;
-  name: string;
-}
+import type { AdminSession } from "./types";
+
+export type { AdminSession };
 
 export function adminEmails(): string[] {
   return (process.env.PLATFORM_ADMIN_EMAILS ?? "")

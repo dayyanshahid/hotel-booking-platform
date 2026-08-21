@@ -15,7 +15,7 @@ import {
   isPerRoomTotal,
   todayIso,
 } from "@/lib/format";
-import type { AuditEntry } from "@/lib/admin/store";
+import type { AuditEntry } from "@/lib/admin/types";
 import type { CurrencyCode, HotelResultCard, Locale, SearchFilters, SearchIntent, SearchResponse } from "@/lib/types";
 import { apiCredentials, apiUrl } from "@/lib/api-origin";
 import { apiFetch } from "@/lib/api-client";
