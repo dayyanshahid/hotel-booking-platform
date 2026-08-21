@@ -45,7 +45,7 @@ const CATEGORIES: Record<Locale, { id: string; label: string }[]> = {
 
 /** F-080 — contextual support with consented booking hand-off (§5.11). */
 export function SupportView({ locale, bookingReference }: { locale: Locale; bookingReference?: string }) {
-  const { t, track } = useApp();
+  const { t, track, account } = useApp();
   const api = useApi();
   const [category, setCategory] = useState("booking");
   const [channel, setChannel] = useState<SupportCase["channel"]>("chat");
@@ -58,6 +58,21 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
 
   useEffect(() => {
     void (async () => {
+      /*
+       * Nothing to ask for until somebody is signed in.
+       *
+       * This list used to be everybody's — the endpoint returned every case on
+       * the platform to anyone — and now it is the caller's own, so a visitor
+       * who is not signed in gets a refusal. That is not a failure and must not
+       * be reported as one: "we could not load your cases" in front of someone
+       * who simply has not signed in sends them looking for a fault that is not
+       * there.
+       */
+      if (!account) {
+        setCases([]);
+        setCasesFailed(false);
+        return;
+      }
       const res = await api<{ cases: SupportCase[] }>("/api/support/cases");
       // A failed read used to leave the list at its initial empty array, so
       // the section simply vanished and somebody who had raised a case saw no
@@ -65,7 +80,7 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
       setCasesFailed(!res.ok);
       if (res.ok) setCases(res.data.cases);
     })();
-  }, [api, created]);
+  }, [api, created, account]);
 
   const channels: { id: SupportCase["channel"]; label: string; sla: number }[] = [
     { id: "chat", label: t("support.chat"), sla: 1 },
@@ -210,6 +225,17 @@ export function SupportView({ locale, bookingReference }: { locale: Locale; book
       {casesFailed && (
         <Alert tone="warning" title={t("support.casesUnavailable")}>
           {t("support.casesUnavailableBody")}
+        </Alert>
+      )}
+
+      {/*
+        Said rather than left blank. Somebody who raised a case on this device
+        last week and is now signed out would otherwise find an empty screen
+        and conclude their case had been lost.
+      */}
+      {!account && (
+        <Alert tone="info" title={t("support.signInToSee")}>
+          {t("support.signInToSeeBody")}
         </Alert>
       )}
 

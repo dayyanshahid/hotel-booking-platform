@@ -1317,6 +1317,9 @@ const en: Dict = {
   "agency.useCode": "Use it",
   "agency.subAgents": "Sub-agents & team",
   "support.desk": "Support",
+  "support.signInToSee": "Sign in to see your cases",
+  "support.signInToSeeBody":
+    "Cases are tied to the address they were raised with, so we can only show yours once you have signed in. You can still raise a new one below.",
   "support.deskBody":
     "Cases you have raised with our operations team, and everything said about them since. Raise one from the booking it concerns and the reference comes with it.",
   "support.unavailable": "We could not load your cases. This is a problem at our end, not with your account.",
@@ -2890,6 +2893,9 @@ const ar: Dict = {
   "agency.useCode": "استخدمه",
   "agency.subAgents": "الوكلاء الفرعيون والفريق",
   "support.desk": "الدعم",
+  "support.signInToSee": "سجّل الدخول لعرض حالاتك",
+  "support.signInToSeeBody":
+    "ترتبط الحالات بالعنوان الذي رُفعت منه، فلا يمكننا عرض حالاتك إلا بعد تسجيل الدخول. ويمكنك رفع حالة جديدة أدناه.",
   "support.deskBody":
     "الحالات التي رفعتها إلى فريق العمليات وكل ما قيل بشأنها. ارفع الحالة من الحجز المعني لترافقها المرجعية تلقائيًا.",
   "support.unavailable": "تعذّر تحميل حالاتك. المشكلة لدينا وليست في حسابك.",
