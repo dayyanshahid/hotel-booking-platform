@@ -933,6 +933,22 @@ const en: Dict = {
   "admin.addAgentBody": "They sign in at the agent portal with this address. Adding someone grants sight of this agency's cost prices and the ability to spend its credit.",
   "admin.noAgencyAdmin": "This agency has no active administrator, so it cannot manage its own team. Promote someone here.",
   "admin.makeAdmin": "Make admin",
+  "admin.editAccess": "Edit access",
+  "admin.saveAccess": "Save access",
+  "admin.reportsTo": "Reports to {name}",
+  "admin.reportsToLabel": "Reports to",
+  "admin.topLevel": "Top level",
+  "admin.manages": "manages {count}",
+  "admin.creditUncapped": "Uncapped",
+  "admin.creditUncappedBody":
+    "Leave blank for no separate cap — the account is then bounded only by the agency line. Zero is a real limit and means this account may commit nothing.",
+  /*
+   * The whole answer to "why can't my agent issue this?". An account's own
+   * record is not the last word: everyone above it in the branch can restrict
+   * it further, and the stored value on its own would have support telling an
+   * agency the opposite of what their staff are seeing.
+   */
+  "admin.clampedBy": "Set to {stored}, but limited to {effective} by {name} above them",
   "admin.makeAgent": "Make agent",
   "admin.agentAdded": "Agent added.",
   "admin.agentUpdated": "Agent updated.",
@@ -2486,6 +2502,16 @@ const ar: Dict = {
   "admin.addAgentBody": "يسجّل الدخول عبر بوابة الوكلاء بهذا البريد. وإضافته تمنحه الاطلاع على تكاليف هذه الوكالة وصلاحية الصرف من ائتمانها.",
   "admin.noAgencyAdmin": "لا يوجد مدير نشط لهذه الوكالة، لذا لا تستطيع إدارة فريقها. رقِّ أحدهم من هنا.",
   "admin.makeAdmin": "تعيين مديرًا",
+  "admin.editAccess": "تعديل الصلاحيات",
+  "admin.saveAccess": "حفظ الصلاحيات",
+  "admin.reportsTo": "يتبع {name}",
+  "admin.reportsToLabel": "يتبع",
+  "admin.topLevel": "المستوى الأعلى",
+  "admin.manages": "يدير {count}",
+  "admin.creditUncapped": "بدون سقف",
+  "admin.creditUncappedBody":
+    "اتركه فارغًا لعدم وضع سقف منفصل، فيكون الحساب محكومًا بحد الوكالة وحده. الصفر قيمة حقيقية وتعني أن هذا الحساب لا يستطيع ارتباط أي مبلغ.",
+  "admin.clampedBy": "مضبوط على {stored}، لكنه محدود بـ {effective} بسبب {name} فوقه",
   "admin.makeAgent": "تعيين وكيلًا",
   "admin.agentAdded": "أُضيف الوكيل.",
   "admin.agentUpdated": "حُدّث الوكيل.",
